@@ -1,0 +1,19 @@
+packages:
+  - "apps/*"
+  - "packages/*"
+
+settings:
+  onlyBuiltDependencies:
+    - sharp
+    - "@prisma/client"
+    - "@prisma/engines"
+    - prisma
+    - esbuild
+    - msw
+
+allowBuilds:
+  sharp: true
+  msw: true
+  "@prisma/engines": true
+  prisma: true
+  esbuild: true

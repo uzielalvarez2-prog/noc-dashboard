@@ -1,0 +1,105 @@
+@import "tailwindcss";
+
+/* ── NOC Dashboard — Design System Tokens ── */
+:root {
+  /* Backgrounds */
+  --background: #060d1a;
+  --surface: #0d1526;
+  --surface-elevated: #152032;
+  --border: #1e3048;
+
+  /* Text */
+  --text-primary: #e2e8f0;
+  --text-muted: #64748b;
+  --text-disabled: #334155;
+
+  /* Semantic */
+  --accent: #3b82f6;
+  --critical: #ef4444;
+  --critical-dim: #1f1315;
+  --warning: #f59e0b;
+  --warning-dim: #1c1609;
+  --success: #22c55e;
+  --success-dim: #0b1a0f;
+  --info: #38bdf8;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-surface: var(--surface);
+  --color-surface-elevated: var(--surface-elevated);
+  --color-border: var(--border);
+  --color-text-primary: var(--text-primary);
+  --color-text-muted: var(--text-muted);
+  --color-text-disabled: var(--text-disabled);
+  --color-accent: var(--accent);
+  --color-critical: var(--critical);
+  --color-critical-dim: var(--critical-dim);
+  --color-warning: var(--warning);
+  --color-warning-dim: var(--warning-dim);
+  --color-success: var(--success);
+  --color-success-dim: var(--success-dim);
+  --color-info: var(--info);
+
+  --font-sans: var(--font-inter, "Inter", ui-sans-serif, system-ui, sans-serif);
+  --font-mono: var(--font-jetbrains, "JetBrains Mono", ui-monospace, monospace);
+
+  --radius-sm: 4px;
+  --radius-md: 6px;
+  --radius-lg: 8px;
+
+  --spacing: 4px;
+}
+
+/* ── Base styles ── */
+* {
+  border-color: var(--border);
+}
+
+html {
+  color-scheme: dark;
+}
+
+body {
+  background-color: var(--background);
+  color: var(--text-primary);
+  font-family: var(--font-sans);
+  font-size: 14px;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* ── Scrollbar (dark theme) ── */
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: var(--surface); }
+::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: var(--text-muted); }
+
+/* ── shadcn/ui variable bridge (NOC dark theme) ── */
+:root {
+  --foreground: var(--text-primary);
+  --card: var(--surface);
+  --card-foreground: var(--text-primary);
+  --popover: var(--surface-elevated);
+  --popover-foreground: var(--text-primary);
+  --primary: var(--accent);
+  --primary-foreground: #ffffff;
+  --secondary: var(--surface-elevated);
+  --secondary-foreground: var(--text-primary);
+  --muted: var(--surface);
+  --muted-foreground: var(--text-muted);
+  --accent-shadcn: var(--surface-elevated);
+  --accent-foreground: var(--text-primary);
+  --destructive: var(--critical);
+  --destructive-foreground: #ffffff;
+  --input: var(--border);
+  --ring: var(--accent);
+  --radius: 6px;
+}
+
+/* ── Severity badge utilities ── */
+.badge-critical { background-color: var(--critical-dim); color: var(--critical); border: 1px solid var(--critical); }
+.badge-warning   { background-color: var(--warning-dim);  color: var(--warning);  border: 1px solid var(--warning);  }
+.badge-success   { background-color: var(--success-dim);  color: var(--success);  border: 1px solid var(--success);  }
+.badge-info      { background-color: #0c1f33; color: var(--info); border: 1px solid var(--info); }
+.badge-low       { background-color: #0f172a; color: var(--text-muted); border: 1px solid var(--border); }

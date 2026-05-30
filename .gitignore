@@ -1,0 +1,16 @@
+node_modules
+.next
+dist
+.env
+.env.local
+.env.*.local
+*.log
+.turbo
+.vercel
+.railway
+pnpm-debug.log
+prisma/migrations
+
+# OS
+.DS_Store
+Thumbs.db

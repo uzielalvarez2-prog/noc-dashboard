@@ -1,0 +1,96 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum Severity {
+  CRITICAL
+  HIGH
+  MEDIUM
+  LOW
+}
+
+enum IncidentStatus {
+  OPEN
+  IN_PROGRESS
+  RESOLVED
+  CLOSED
+}
+
+enum UserRole {
+  NOC_OPERATOR
+  NOC_ADMIN
+  ENGINEER
+}
+
+enum AlertTrigger {
+  SLA_RISK
+  SLA_BREACHED
+  CRITICAL_OPEN
+  CRITICAL_UNASSIGNED
+}
+
+model Incident {
+  id          String         @id
+  title       String
+  severity    Severity
+  status      IncidentStatus
+  assignedTo  String?
+  slaDeadline DateTime
+  slaBreached Boolean        @default(false)
+  slaRiskAt   DateTime?
+  source      String         @default("HPSM")
+  rawData     Json
+  createdAt   DateTime
+  updatedAt   DateTime
+  syncedAt    DateTime       @default(now())
+
+  @@index([severity, status])
+  @@index([slaDeadline])
+  @@index([syncedAt])
+}
+
+model Operator {
+  id        String  @id
+  name      String
+  email     String
+  team      String
+  isOnShift Boolean @default(false)
+}
+
+model User {
+  id           String     @id @default(cuid())
+  email        String     @unique
+  passwordHash String
+  name         String
+  role         UserRole   @default(NOC_OPERATOR)
+  createdAt    DateTime   @default(now())
+  auditLogs    AuditLog[]
+}
+
+model AlertRule {
+  id         String       @id @default(cuid())
+  name       String
+  trigger    AlertTrigger
+  channels   String[]
+  recipients String[]
+  isActive   Boolean      @default(true)
+  createdBy  String
+  createdAt  DateTime     @default(now())
+}
+
+model AuditLog {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id])
+  action    String
+  targetId  String?
+  metadata  Json?
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+  @@index([createdAt])
+}

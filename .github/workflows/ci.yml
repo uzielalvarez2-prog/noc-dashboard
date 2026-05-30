@@ -1,0 +1,38 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+
+      - name: Instalar dependencias
+        run: pnpm install
+
+      - name: TypeScript check (web)
+        run: cd apps/web && pnpm exec tsc --noEmit
+
+      - name: TypeScript check (worker)
+        run: cd apps/worker && pnpm exec tsc --noEmit
+
+      - name: Build web
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          AUTH_SECRET: ${{ secrets.AUTH_SECRET }}
+          NEXTAUTH_URL: https://placeholder.vercel.app
+        run: cd apps/web && pnpm build
