@@ -1,6 +1,5 @@
 import type { Metadata } from "next";
 import { Inter, JetBrains_Mono } from "next/font/google";
-import { SessionProvider } from "@/components/layout/SessionProvider";
 import "./globals.css";
 
 const inter = Inter({
@@ -20,8 +19,6 @@ export const metadata: Metadata = {
   description: "Centro de operaciones de red — monitoreo en tiempo real",
 };
 
-// La sesión se detecta del lado del cliente via SessionProvider
-// No llamamos auth() aquí para evitar errores en prerendering y cold-starts
 export default function RootLayout({
   children,
 }: Readonly<{
@@ -33,7 +30,7 @@ export default function RootLayout({
       className={`${inter.variable} ${jetbrainsMono.variable} h-full`}
     >
       <body className="min-h-full bg-background text-text-primary antialiased">
-        <SessionProvider session={null}>{children}</SessionProvider>
+        {children}
       </body>
     </html>
   );
