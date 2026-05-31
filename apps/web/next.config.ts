@@ -1,9 +1,19 @@
 import type { NextConfig } from "next";
-import path from "path";
 
 const nextConfig: NextConfig = {
   turbopack: {
-    root: path.resolve(__dirname, "../.."),
+    root: require("path").resolve(__dirname, "../.."),
+  },
+  // Garantizar que NextAuth siempre tenga una URL válida durante el build
+  env: {
+    NEXTAUTH_URL:
+      process.env.NEXTAUTH_URL ||
+      process.env.AUTH_URL ||
+      "https://noc-dashboard-iota.vercel.app",
+    AUTH_URL:
+      process.env.AUTH_URL ||
+      process.env.NEXTAUTH_URL ||
+      "https://noc-dashboard-iota.vercel.app",
   },
 };
 
