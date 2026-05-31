@@ -1,9 +1,10 @@
+import { NextRequest } from "next/server";
 import { NextResponse } from "next/server";
-import { auth } from "@/lib/auth";
+import { getSessionFromRequest } from "@/lib/auth-session";
 import { getKPIs, getIncidentTrend } from "@/lib/queries/incidents";
 
-export async function GET() {
-  const session = await auth();
+export async function GET(req: NextRequest) {
+  const session = getSessionFromRequest(req);
   if (!session) {
     return NextResponse.json({ error: "No autorizado" }, { status: 401 });
   }

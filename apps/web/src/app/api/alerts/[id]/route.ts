@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { auth } from "@/lib/auth";
+import { getSessionFromRequest } from "@/lib/auth-session";
 import { db } from "@/lib/db";
 import { z } from "zod";
 
@@ -12,9 +12,9 @@ const PatchSchema = z.object({
 type Params = { params: Promise<{ id: string }> };
 
 export async function PATCH(req: NextRequest, { params }: Params) {
-  const session = await auth();
+  const session = getSessionFromRequest(req);
   if (!session) return NextResponse.json({ error: "No autorizado" }, { status: 401 });
-  if (session.user.role !== "NOC_ADMIN") {
+  if (session.role !== "NOC_ADMIN") {
     return NextResponse.json({ error: "Sin permiso" }, { status: 403 });
   }
 
@@ -34,7 +34,7 @@ export async function PATCH(req: NextRequest, { params }: Params) {
 
   await db.auditLog.create({
     data: {
-      userId: session.user.id,
+      userId: session.id,
       action: "UPDATE_ALERT_RULE",
       targetId: id,
       metadata: parsed.data as import("@prisma/client").Prisma.InputJsonValue,
@@ -44,10 +44,10 @@ export async function PATCH(req: NextRequest, { params }: Params) {
   return NextResponse.json(rule);
 }
 
-export async function DELETE(_req: NextRequest, { params }: Params) {
-  const session = await auth();
+export async function DELETE(req: NextRequest, { params }: Params) {
+  const session = getSessionFromRequest(req);
   if (!session) return NextResponse.json({ error: "No autorizado" }, { status: 401 });
-  if (session.user.role !== "NOC_ADMIN") {
+  if (session.role !== "NOC_ADMIN") {
     return NextResponse.json({ error: "Sin permiso" }, { status: 403 });
   }
 
@@ -56,7 +56,7 @@ export async function DELETE(_req: NextRequest, { params }: Params) {
 
   await db.auditLog.create({
     data: {
-      userId: session.user.id,
+      userId: session.id,
       action: "DELETE_ALERT_RULE",
       targetId: id,
     },

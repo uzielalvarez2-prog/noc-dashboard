@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { auth } from "@/lib/auth";
+import { getSessionFromRequest } from "@/lib/auth-session";
 import { db } from "@/lib/db";
 import { z } from "zod";
 
@@ -11,10 +11,10 @@ const CreateAlertRuleSchema = z.object({
   isActive: z.boolean().default(true),
 });
 
-export async function GET() {
-  const session = await auth();
+export async function GET(req: NextRequest) {
+  const session = getSessionFromRequest(req);
   if (!session) return NextResponse.json({ error: "No autorizado" }, { status: 401 });
-  if (session.user.role !== "NOC_ADMIN") {
+  if (session.role !== "NOC_ADMIN") {
     return NextResponse.json({ error: "Sin permiso" }, { status: 403 });
   }
 
@@ -26,9 +26,9 @@ export async function GET() {
 }
 
 export async function POST(req: NextRequest) {
-  const session = await auth();
+  const session = getSessionFromRequest(req);
   if (!session) return NextResponse.json({ error: "No autorizado" }, { status: 401 });
-  if (session.user.role !== "NOC_ADMIN") {
+  if (session.role !== "NOC_ADMIN") {
     return NextResponse.json({ error: "Sin permiso" }, { status: 403 });
   }
 
@@ -39,12 +39,12 @@ export async function POST(req: NextRequest) {
   }
 
   const rule = await db.alertRule.create({
-    data: { ...parsed.data, createdBy: session.user.id },
+    data: { ...parsed.data, createdBy: session.id },
   });
 
   await db.auditLog.create({
     data: {
-      userId: session.user.id,
+      userId: session.id,
       action: "CREATE_ALERT_RULE",
       targetId: rule.id,
       metadata: { ruleName: rule.name },

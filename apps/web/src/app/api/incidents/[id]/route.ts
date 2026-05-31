@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { auth } from "@/lib/auth";
+import { getSessionFromRequest } from "@/lib/auth-session";
 import { getIncidentById } from "@/lib/queries/incidents";
 import { db } from "@/lib/db";
 
@@ -7,7 +7,7 @@ export async function GET(
   _req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const session = await auth();
+  const session = getSessionFromRequest(_req);
   if (!session) {
     return NextResponse.json({ error: "No autorizado" }, { status: 401 });
   }
@@ -22,7 +22,7 @@ export async function GET(
   // Audit log
   await db.auditLog.create({
     data: {
-      userId: session.user.id,
+      userId: session.id,
       action: "VIEW_INCIDENT",
       targetId: id,
       metadata: { incidentId: id },

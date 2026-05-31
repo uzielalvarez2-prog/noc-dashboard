@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { auth } from "@/lib/auth";
+import { getSessionFromRequest } from "@/lib/auth-session";
 import { db } from "@/lib/db";
 
 // Parsea fecha formato HPSM: "YY/MM/DD HH:MM:SS"
@@ -73,7 +73,7 @@ function parseCSV(text: string): Record<string, string>[] {
 }
 
 export async function POST(req: NextRequest) {
-  const session = await auth();
+  const session = getSessionFromRequest(req);
   if (!session) return NextResponse.json({ error: "No autorizado" }, { status: 401 });
 
   try {
@@ -168,7 +168,7 @@ export async function POST(req: NextRequest) {
     // Audit log
     await db.auditLog.create({
       data: {
-        userId: session.user.id,
+        userId: session.id,
         action: "IMPORT_CSV",
         metadata: { filename: file.name, total: filtered.length, upserted, errors, group: assignmentGroup },
       },

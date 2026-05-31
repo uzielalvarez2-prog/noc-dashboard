@@ -1,9 +1,10 @@
 "use client";
 
-import { usePathname, useRouter } from "next/navigation";
+import { usePathname } from "next/navigation";
 import { LogOut } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { LiveIndicator } from "@/components/dashboard/LiveIndicator";
+import { useEffect, useState } from "react";
 
 const BREADCRUMBS: Record<string, string> = {
   "/": "Overview",
@@ -13,22 +14,20 @@ const BREADCRUMBS: Record<string, string> = {
   "/settings": "Configuración",
 };
 
-interface HeaderProps {
-  session: { user?: { name?: string | null; email?: string | null } } | null;
-  lastSync?: string;
-}
-
-export function Header({ session, lastSync }: HeaderProps) {
+export function Header({ lastSync }: { lastSync?: string }) {
   const pathname = usePathname();
-  const router = useRouter();
   const segment = "/" + pathname.split("/")[1];
-  const breadcrumb = BREADCRUMBS[segment] ?? BREADCRUMBS[pathname] ?? "NOC";
+  const breadcrumb = BREADCRUMBS[segment] ?? "NOC";
+
+  // Leer nombre/role de la cookie de sesión vía API
+  const [userName, setUserName] = useState("");
+  useEffect(() => {
+    fetch("/api/auth/me").then(r => r.json()).then(d => setUserName(d.name ?? "")).catch(() => {});
+  }, []);
 
   async function handleSignOut() {
-    // Redirect a NextAuth signout endpoint sin importar next-auth/react
-    await fetch("/api/auth/signout", { method: "POST" });
-    router.push("/login");
-    router.refresh();
+    await fetch("/api/auth/logout", { method: "POST" });
+    window.location.href = "/login";
   }
 
   return (
@@ -40,17 +39,10 @@ export function Header({ session, lastSync }: HeaderProps) {
 
       <div className="flex items-center gap-4">
         <LiveIndicator lastSync={lastSync} />
-
         <div className="flex items-center gap-2">
-          <div className="text-right">
-            <p className="text-xs font-medium text-text-primary">
-              {session?.user?.name ?? "Operador"}
-            </p>
-            <p className="font-mono text-xs text-text-muted">
-              {session?.user?.email ?? ""}
-            </p>
-          </div>
-
+          {userName && (
+            <p className="text-xs font-medium text-text-primary">{userName}</p>
+          )}
           <Button
             variant="ghost"
             size="icon"
