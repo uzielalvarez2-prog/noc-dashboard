@@ -1,26 +1,45 @@
 "use client";
 
-import { useActionState, useEffect } from "react";
-import { useFormStatus } from "react-dom";
-import { loginAction } from "@/lib/actions";
+import { useState } from "react";
+import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 
-function SubmitButton() {
-  const { pending } = useFormStatus();
-  return (
-    <Button
-      type="submit"
-      disabled={pending}
-      className="w-full bg-accent text-white hover:bg-accent/90 disabled:opacity-50"
-    >
-      {pending ? "Iniciando sesión..." : "Iniciar sesión"}
-    </Button>
-  );
-}
-
 export default function LoginPage() {
-  const [state, action] = useActionState(loginAction, null);
+  const router = useRouter();
+  const [email, setEmail] = useState("admin@noc.local");
+  const [password, setPassword] = useState("");
+  const [error, setError] = useState("");
+  const [loading, setLoading] = useState(false);
+
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    setError("");
+    setLoading(true);
+
+    try {
+      const res = await fetch("/api/auth/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: email.trim(), password }),
+      });
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        setError(data.error ?? "Error al iniciar sesión.");
+        setLoading(false);
+        return;
+      }
+
+      // Login exitoso — navegar al dashboard
+      router.push("/");
+      router.refresh();
+    } catch {
+      setError("Error de conexión. Intenta de nuevo.");
+      setLoading(false);
+    }
+  }
 
   return (
     <div className="flex min-h-screen items-center justify-center bg-background">
@@ -33,7 +52,7 @@ export default function LoginPage() {
         </div>
 
         <div className="rounded-lg border border-border bg-surface p-6">
-          <form action={action} className="space-y-4">
+          <form onSubmit={handleSubmit} className="space-y-4">
             <div className="space-y-1">
               <label
                 htmlFor="email"
@@ -43,11 +62,11 @@ export default function LoginPage() {
               </label>
               <Input
                 id="email"
-                name="email"
                 type="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
                 placeholder="operador@empresa.com"
                 required
-                defaultValue="admin@noc.local"
                 className="border-border bg-surface-elevated text-text-primary placeholder:text-text-disabled focus:border-accent"
               />
             </div>
@@ -61,21 +80,28 @@ export default function LoginPage() {
               </label>
               <Input
                 id="password"
-                name="password"
                 type="password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
                 placeholder="••••••••"
                 required
                 className="border-border bg-surface-elevated text-text-primary placeholder:text-text-disabled focus:border-accent"
               />
             </div>
 
-            {state?.error && (
+            {error && (
               <p className="rounded border border-critical bg-critical-dim px-3 py-2 text-xs text-critical">
-                {state.error}
+                {error}
               </p>
             )}
 
-            <SubmitButton />
+            <Button
+              type="submit"
+              disabled={loading}
+              className="w-full bg-accent text-white hover:bg-accent/90 disabled:opacity-50"
+            >
+              {loading ? "Iniciando sesión..." : "Iniciar sesión"}
+            </Button>
           </form>
         </div>
 
