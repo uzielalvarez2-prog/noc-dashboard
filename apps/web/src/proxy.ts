@@ -9,12 +9,17 @@ export async function proxy(request: NextRequest) {
   const isPublic = PUBLIC_PATHS.some((p) => pathname.startsWith(p));
   if (isPublic) return NextResponse.next();
 
-  const token = await getToken({
-    req: request,
-    secret: process.env.AUTH_SECRET,
-  });
+  // NextAuth v5 usa "authjs.session-token" en producción (HTTPS)
+  // NextAuth v4 usaba "next-auth.session-token"
+  // Probamos ambos para compatibilidad
+  const secret = process.env.AUTH_SECRET;
 
-  // API routes retornan 401 (no redirect) cuando no hay sesión
+  const token =
+    (await getToken({ req: request, secret, cookieName: "authjs.session-token" })) ??
+    (await getToken({ req: request, secret, cookieName: "__Secure-authjs.session-token" })) ??
+    (await getToken({ req: request, secret, cookieName: "next-auth.session-token" })) ??
+    (await getToken({ req: request, secret }));
+
   if (!token) {
     if (pathname.startsWith("/api/")) {
       return NextResponse.json({ error: "No autorizado" }, { status: 401 });
