@@ -2,6 +2,9 @@ import { redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
 import { AlertRulesPanel } from "@/components/settings/AlertRulesPanel";
 import { WorkerStatusCard } from "@/components/settings/WorkerStatusCard";
+import { CSVUpload } from "@/components/settings/CSVUpload";
+
+export const dynamic = "force-dynamic";
 
 export default async function SettingsPage() {
   const session = await auth();
@@ -14,11 +17,12 @@ export default async function SettingsPage() {
       <div>
         <h1 className="text-2xl font-bold text-text-primary">Configuración</h1>
         <p className="mt-1 text-sm text-text-muted">
-          Gestión de alertas y estado del sistema
+          Gestión de datos, alertas y estado del sistema
         </p>
       </div>
 
       <WorkerStatusCard />
+      <CSVUpload />
       <AlertRulesPanel />
     </div>
   );
