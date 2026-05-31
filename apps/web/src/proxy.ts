@@ -3,22 +3,32 @@ import { getToken } from "next-auth/jwt";
 
 const PUBLIC_PATHS = ["/login", "/design", "/api/auth", "/api/health", "/_next", "/favicon.ico"];
 
+// Mismo salt que usa encode() en la ruta de login
+const COOKIE_NAME_BASE = "authjs.session-token";
+
 export async function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
   const isPublic = PUBLIC_PATHS.some((p) => pathname.startsWith(p));
   if (isPublic) return NextResponse.next();
 
-  // NextAuth v5 usa "authjs.session-token" en producción (HTTPS)
-  // NextAuth v4 usaba "next-auth.session-token"
-  // Probamos ambos para compatibilidad
-  const secret = process.env.AUTH_SECRET;
+  const secret = process.env.AUTH_SECRET ?? "";
 
+  // Probar cookie de producción (__Secure-) y desarrollo sin prefijo
+  // Ambas se decodifican con salt = COOKIE_NAME_BASE
   const token =
-    (await getToken({ req: request, secret, cookieName: "authjs.session-token" })) ??
-    (await getToken({ req: request, secret, cookieName: "__Secure-authjs.session-token" })) ??
-    (await getToken({ req: request, secret, cookieName: "next-auth.session-token" })) ??
-    (await getToken({ req: request, secret }));
+    (await getToken({
+      req: request,
+      secret,
+      cookieName: `__Secure-${COOKIE_NAME_BASE}`,
+      salt: COOKIE_NAME_BASE,
+    }).catch(() => null)) ??
+    (await getToken({
+      req: request,
+      secret,
+      cookieName: COOKIE_NAME_BASE,
+      salt: COOKIE_NAME_BASE,
+    }).catch(() => null));
 
   if (!token) {
     if (pathname.startsWith("/api/")) {
