@@ -1,10 +1,16 @@
 "use client";
 
+import dynamic from "next/dynamic";
 import { useState } from "react";
-import { SessionProvider } from "next-auth/react";
 import { Sidebar } from "@/components/layout/Sidebar";
 import { Header } from "@/components/layout/Header";
 import { PollingProvider } from "@/components/layout/PollingProvider";
+
+// SessionProvider con ssr: false para evitar errores de URL en prerender de Vercel
+const SessionProvider = dynamic(
+  () => import("next-auth/react").then((m) => m.SessionProvider),
+  { ssr: false }
+);
 
 export default function DashboardLayout({
   children,
