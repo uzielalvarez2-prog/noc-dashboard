@@ -1,12 +1,10 @@
 "use client";
 
 import { useState } from "react";
-import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 
 export default function LoginPage() {
-  const router = useRouter();
   const [email, setEmail] = useState("admin@noc.local");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
@@ -27,14 +25,13 @@ export default function LoginPage() {
       const data = await res.json();
 
       if (!res.ok) {
-        setError(data.error ?? "Error al iniciar sesión.");
+        setError(data.error ?? "Credenciales incorrectas.");
         setLoading(false);
         return;
       }
 
-      // Login exitoso — navegar al dashboard
-      router.push("/");
-      router.refresh();
+      // Login exitoso — redirigir con window.location (más confiable que router.push)
+      window.location.href = "/";
     } catch {
       setError("Error de conexión. Intenta de nuevo.");
       setLoading(false);
@@ -54,10 +51,7 @@ export default function LoginPage() {
         <div className="rounded-lg border border-border bg-surface p-6">
           <form onSubmit={handleSubmit} className="space-y-4">
             <div className="space-y-1">
-              <label
-                htmlFor="email"
-                className="text-xs font-medium uppercase tracking-wider text-text-muted"
-              >
+              <label htmlFor="email" className="text-xs font-medium uppercase tracking-wider text-text-muted">
                 Email
               </label>
               <Input
@@ -72,10 +66,7 @@ export default function LoginPage() {
             </div>
 
             <div className="space-y-1">
-              <label
-                htmlFor="password"
-                className="text-xs font-medium uppercase tracking-wider text-text-muted"
-              >
+              <label htmlFor="password" className="text-xs font-medium uppercase tracking-wider text-text-muted">
                 Contraseña
               </label>
               <Input
@@ -100,7 +91,7 @@ export default function LoginPage() {
               disabled={loading}
               className="w-full bg-accent text-white hover:bg-accent/90 disabled:opacity-50"
             >
-              {loading ? "Iniciando sesión..." : "Iniciar sesión"}
+              {loading ? "Redirigiendo al dashboard..." : "Iniciar sesión"}
             </Button>
           </form>
         </div>
