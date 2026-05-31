@@ -1,7 +1,7 @@
 import { notFound } from "next/navigation";
 import Link from "next/link";
 import { ChevronLeft } from "lucide-react";
-import { auth } from "@/lib/auth";
+import { getServerSession } from "@/lib/auth-session";
 import { getIncidentById } from "@/lib/queries/incidents";
 import { db } from "@/lib/db";
 import { IncidentDetail } from "@/components/incidents/IncidentDetail";
@@ -13,7 +13,7 @@ interface Props {
 
 export default async function IncidentDetailPage({ params }: Props) {
   const { id } = await params;
-  const session = await auth();
+  const session = await getServerSession();
 
   const raw = await getIncidentById(id);
   if (!raw) notFound();
@@ -21,11 +21,11 @@ export default async function IncidentDetailPage({ params }: Props) {
   const incident = raw as unknown as Incident;
 
   // Audit log
-  if (session?.user?.id) {
+  if (session?.id) {
     await db.auditLog
       .create({
         data: {
-          userId: session.user.id,
+          userId: session.id,
           action: "VIEW_INCIDENT",
           targetId: id,
           metadata: { incidentId: id, severity: incident.severity },

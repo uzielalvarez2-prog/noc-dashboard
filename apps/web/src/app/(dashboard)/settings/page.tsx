@@ -1,5 +1,5 @@
 import { redirect } from "next/navigation";
-import { auth } from "@/lib/auth";
+import { getServerSession } from "@/lib/auth-session";
 import { AlertRulesPanel } from "@/components/settings/AlertRulesPanel";
 import { WorkerStatusCard } from "@/components/settings/WorkerStatusCard";
 import { CSVUpload } from "@/components/settings/CSVUpload";
@@ -7,8 +7,8 @@ import { CSVUpload } from "@/components/settings/CSVUpload";
 export const dynamic = "force-dynamic";
 
 export default async function SettingsPage() {
-  const session = await auth();
-  if (!session || session.user.role !== "NOC_ADMIN") {
+  const session = await getServerSession();
+  if (!session || session.role !== "NOC_ADMIN") {
     redirect("/");
   }
 
