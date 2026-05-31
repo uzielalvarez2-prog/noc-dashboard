@@ -1,6 +1,5 @@
 import type { Metadata } from "next";
 import { Inter, JetBrains_Mono } from "next/font/google";
-import { auth } from "@/lib/auth";
 import { SessionProvider } from "@/components/layout/SessionProvider";
 import "./globals.css";
 
@@ -26,7 +25,14 @@ export default async function RootLayout({
 }: Readonly<{
   children: React.ReactNode;
 }>) {
-  const session = await auth();
+  // Auth tolerante a fallos en producción
+  let session = null;
+  try {
+    const { auth } = await import("@/lib/auth");
+    session = await auth();
+  } catch {
+    // Si auth falla (ej. primer cold-start sin cookie), continuar sin sesión
+  }
 
   return (
     <html

@@ -1,5 +1,8 @@
 import { NextResponse } from "next/server";
 
+// Ruta pública — no requiere auth
+export const dynamic = "force-dynamic";
+
 export async function GET() {
   return NextResponse.json({
     status: "ok",
