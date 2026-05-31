@@ -20,27 +20,20 @@ export const metadata: Metadata = {
   description: "Centro de operaciones de red — monitoreo en tiempo real",
 };
 
-export default async function RootLayout({
+// La sesión se detecta del lado del cliente via SessionProvider
+// No llamamos auth() aquí para evitar errores en prerendering y cold-starts
+export default function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
 }>) {
-  // Auth tolerante a fallos en producción
-  let session = null;
-  try {
-    const { auth } = await import("@/lib/auth");
-    session = await auth();
-  } catch {
-    // Si auth falla (ej. primer cold-start sin cookie), continuar sin sesión
-  }
-
   return (
     <html
       lang="es"
       className={`${inter.variable} ${jetbrainsMono.variable} h-full`}
     >
       <body className="min-h-full bg-background text-text-primary antialiased">
-        <SessionProvider session={session}>{children}</SessionProvider>
+        <SessionProvider session={null}>{children}</SessionProvider>
       </body>
     </html>
   );
