@@ -3,6 +3,8 @@ import { getServerSession } from "@/lib/auth-session";
 import { AlertRulesPanel } from "@/components/settings/AlertRulesPanel";
 import { WorkerStatusCard } from "@/components/settings/WorkerStatusCard";
 import { CSVUpload } from "@/components/settings/CSVUpload";
+import { UsersPanel } from "@/components/settings/UsersPanel";
+import { AuditLogPanel } from "@/components/settings/AuditLogPanel";
 
 export const dynamic = "force-dynamic";
 
@@ -24,6 +26,11 @@ export default async function SettingsPage() {
       <WorkerStatusCard />
       <CSVUpload />
       <AlertRulesPanel />
+
+      <div className="border-t border-border pt-8 space-y-8">
+        <UsersPanel />
+        <AuditLogPanel />
+      </div>
     </div>
   );
 }
