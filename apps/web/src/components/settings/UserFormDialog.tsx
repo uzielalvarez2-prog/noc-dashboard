@@ -112,7 +112,7 @@ export function UserFormDialog({ open, onClose, onSuccess, user }: UserFormDialo
 
           <div className="space-y-1">
             <label className="text-xs text-text-muted">Rol</label>
-            <Select value={role} onValueChange={setRole}>
+            <Select value={role} onValueChange={(v) => setRole(v ?? "NOC_OPERATOR")}>
               <SelectTrigger className="border-border bg-surface-elevated text-text-primary">
                 <SelectValue />
               </SelectTrigger>
