@@ -56,6 +56,7 @@ export function IncidentsChart({ initial }: IncidentsChartProps) {
   const { data } = useQuery<KPIData>({
     queryKey: ["kpis"],
     queryFn: fetchKPIs,
+    placeholderData: { trend: initial },
     refetchInterval: 10_000,
   });
 

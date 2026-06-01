@@ -30,7 +30,7 @@ export function SLAGauge({ initial }: SLAGaugeProps) {
   const { data = initial } = useQuery<SLAData>({
     queryKey: ["sla"],
     queryFn: fetchSLA,
-    initialData: initial,
+    placeholderData: initial,
     refetchInterval: 10_000,
   });
 

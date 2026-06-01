@@ -26,7 +26,7 @@ export function KPIGrid({ initial }: KPIGridProps) {
   const { data = initial } = useQuery<KPIData>({
     queryKey: ["kpis"],
     queryFn: fetchKPIs,
-    initialData: initial,
+    placeholderData: initial,
     refetchInterval: 10_000,
   });
 
