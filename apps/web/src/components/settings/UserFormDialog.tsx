@@ -1,10 +1,11 @@
 "use client";
 
-import { useState } from "react";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import {
+  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
+} from "@/components/ui/select";
 
 interface User {
   id: string;
@@ -29,34 +30,37 @@ const ROLES = [
 export function UserFormDialog({ open, onClose, onSuccess, user }: UserFormDialogProps) {
   const isEdit = !!user;
 
-  const [name,     setName]     = useState(user?.name     ?? "");
-  const [email,    setEmail]    = useState(user?.email    ?? "");
-  const [role,     setRole]     = useState(user?.role     ?? "NOC_OPERATOR");
+  const [name,     setName]     = useState(user?.name  ?? "");
+  const [email,    setEmail]    = useState(user?.email ?? "");
+  const [role,     setRole]     = useState(user?.role  ?? "NOC_OPERATOR");
   const [password, setPassword] = useState("");
   const [loading,  setLoading]  = useState(false);
   const [error,    setError]    = useState<string | null>(null);
 
+  // Sync fields when editing a different user
+  useEffect(() => {
+    setName(user?.name  ?? "");
+    setEmail(user?.email ?? "");
+    setRole(user?.role  ?? "NOC_OPERATOR");
+    setPassword("");
+    setError(null);
+  }, [user, open]);
+
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setError(null);
-
     if (!isEdit && !password.trim()) { setError("La contraseña es requerida"); return; }
-    if (password && password.length < 6) { setError("La contraseña debe tener al menos 6 caracteres"); return; }
-
+    if (password && password.length < 6) { setError("Mínimo 6 caracteres"); return; }
     setLoading(true);
     try {
-      const url  = isEdit ? `/api/users/${user!.id}` : "/api/users";
+      const url    = isEdit ? `/api/users/${user!.id}` : "/api/users";
       const method = isEdit ? "PATCH" : "POST";
       const body: Record<string, string> = { name, role };
       if (!isEdit) { body.email = email; body.password = password; }
       else if (password.trim()) body.password = password;
 
-      const res = await fetch(url, {
-        method,
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body),
-      });
-      const data = await res.json();
+      const res  = await fetch(url, { method, headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+      const data = await res.json() as { error?: string };
       if (!res.ok) { setError(data.error ?? "Error desconocido"); return; }
       onSuccess();
       onClose();
@@ -67,16 +71,20 @@ export function UserFormDialog({ open, onClose, onSuccess, user }: UserFormDialo
     }
   }
 
-  return (
-    <Dialog open={open} onOpenChange={(v) => { if (!v) onClose(); }}>
-      <DialogContent className="bg-surface border-border text-text-primary sm:max-w-md">
-        <DialogHeader>
-          <DialogTitle className="text-text-primary">
-            {isEdit ? "Editar usuario" : "Crear usuario"}
-          </DialogTitle>
-        </DialogHeader>
+  if (!open) return null;
 
-        <form onSubmit={handleSubmit} className="space-y-4 mt-2">
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+      {/* Overlay */}
+      <div className="fixed inset-0 bg-black/60" onClick={onClose} />
+
+      {/* Panel */}
+      <div className="relative z-10 w-full max-w-md rounded-lg border border-border bg-surface p-6 shadow-2xl">
+        <h2 className="mb-4 text-base font-semibold text-text-primary">
+          {isEdit ? "Editar usuario" : "Crear usuario"}
+        </h2>
+
+        <form onSubmit={handleSubmit} className="space-y-4">
           <div className="space-y-1">
             <label className="text-xs text-text-muted">Nombre</label>
             <Input
@@ -84,7 +92,7 @@ export function UserFormDialog({ open, onClose, onSuccess, user }: UserFormDialo
               onChange={(e) => setName(e.target.value)}
               placeholder="Juan Pérez"
               required
-              className="bg-surface-elevated border-border text-text-primary placeholder:text-text-disabled focus:border-accent"
+              className="border-border bg-surface-elevated text-text-primary placeholder:text-text-disabled"
             />
           </div>
 
@@ -97,7 +105,7 @@ export function UserFormDialog({ open, onClose, onSuccess, user }: UserFormDialo
                 onChange={(e) => setEmail(e.target.value)}
                 placeholder="juan@empresa.com"
                 required
-                className="bg-surface-elevated border-border text-text-primary placeholder:text-text-disabled focus:border-accent"
+                className="border-border bg-surface-elevated text-text-primary placeholder:text-text-disabled"
               />
             </div>
           )}
@@ -105,12 +113,12 @@ export function UserFormDialog({ open, onClose, onSuccess, user }: UserFormDialo
           <div className="space-y-1">
             <label className="text-xs text-text-muted">Rol</label>
             <Select value={role} onValueChange={setRole}>
-              <SelectTrigger className="bg-surface-elevated border-border text-text-primary">
+              <SelectTrigger className="border-border bg-surface-elevated text-text-primary">
                 <SelectValue />
               </SelectTrigger>
-              <SelectContent className="bg-surface-elevated border-border">
+              <SelectContent className="border-border bg-surface-elevated">
                 {ROLES.map((r) => (
-                  <SelectItem key={r.value} value={r.value} className="text-text-primary hover:bg-surface">
+                  <SelectItem key={r.value} value={r.value} className="text-text-primary">
                     {r.label}
                   </SelectItem>
                 ))}
@@ -120,7 +128,7 @@ export function UserFormDialog({ open, onClose, onSuccess, user }: UserFormDialo
 
           <div className="space-y-1">
             <label className="text-xs text-text-muted">
-              {isEdit ? "Nueva contraseña (dejar vacío para no cambiar)" : "Contraseña"}
+              {isEdit ? "Nueva contraseña (vacío = sin cambiar)" : "Contraseña"}
             </label>
             <Input
               type="password"
@@ -128,28 +136,28 @@ export function UserFormDialog({ open, onClose, onSuccess, user }: UserFormDialo
               onChange={(e) => setPassword(e.target.value)}
               placeholder={isEdit ? "••••••••" : "Mínimo 6 caracteres"}
               required={!isEdit}
-              className="bg-surface-elevated border-border text-text-primary placeholder:text-text-disabled focus:border-accent"
+              className="border-border bg-surface-elevated text-text-primary placeholder:text-text-disabled"
             />
           </div>
 
           {error && (
-            <p className="rounded-md border border-critical/40 bg-critical-dim px-3 py-2 text-xs text-critical">
+            <p className="rounded border border-critical/40 bg-critical-dim px-3 py-2 text-xs text-critical">
               {error}
             </p>
           )}
 
-          <div className="flex justify-end gap-2 pt-2">
+          <div className="flex justify-end gap-2 pt-1">
             <Button type="button" variant="outline" onClick={onClose} disabled={loading}
               className="border-border text-text-muted hover:bg-surface-elevated">
               Cancelar
             </Button>
             <Button type="submit" disabled={loading}
               className="bg-accent text-white hover:bg-accent/90">
-              {loading ? "Guardando..." : isEdit ? "Guardar cambios" : "Crear usuario"}
+              {loading ? "Guardando..." : isEdit ? "Guardar" : "Crear"}
             </Button>
           </div>
         </form>
-      </DialogContent>
-    </Dialog>
+      </div>
+    </div>
   );
 }
