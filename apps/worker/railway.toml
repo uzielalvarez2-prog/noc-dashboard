@@ -1,6 +1,6 @@
 ﻿[build]
-builder = "RAILPACK"
-buildCommand = "npm install -g pnpm && pnpm install && pnpm build"
+builder = "NIXPACKS"
+buildCommand = "pnpm build"
 
 [deploy]
 startCommand = "node dist/index.js"
