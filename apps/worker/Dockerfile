@@ -17,9 +17,8 @@ RUN pnpm install --no-frozen-lockfile
 # Copy worker source
 COPY apps/worker/src apps/worker/src/
 COPY apps/worker/tsconfig.json apps/worker/
-COPY apps/worker/prisma.config.ts apps/worker/
 
-# Generate Prisma client (schema vive en apps/web/prisma)
+# Generate Prisma client (schema en apps/web/prisma)
 RUN node_modules/.bin/prisma generate --schema apps/web/prisma/schema.prisma
 
 # Compile TypeScript
