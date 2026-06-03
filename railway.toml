@@ -1,0 +1,8 @@
+[build]
+builder = "DOCKERFILE"
+dockerfilePath = "apps/worker/Dockerfile"
+
+[deploy]
+startCommand = "node /app/apps/worker/dist/index.js"
+restartPolicyType = "ON_FAILURE"
+restartPolicyMaxRetries = 10
