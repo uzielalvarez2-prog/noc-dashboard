@@ -21,8 +21,8 @@ COPY apps/worker/tsconfig.json apps/worker/
 # Generate Prisma client (prisma binary esta en apps/web/node_modules/.bin)
 RUN cd apps/web && node_modules/.bin/prisma generate
 
-# Compile TypeScript
-RUN cd apps/worker && pnpm build
+# Compile TypeScript (forma canonica en pnpm workspaces)
+RUN pnpm --filter worker run build
 
 WORKDIR /app/apps/worker
 
