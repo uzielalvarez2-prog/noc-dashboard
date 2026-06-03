@@ -1,6 +1,6 @@
 import "dotenv/config";
 
-function require(name: string): string {
+function requireEnv(name: string): string {
   const val = process.env[name];
   if (!val) throw new Error(`Variable de entorno requerida: ${name}`);
   return val;
@@ -11,11 +11,8 @@ export const config = {
     baseUrl: process.env.HPSM_BASE_URL ?? "https://sm.cnoc.telmexit.com",
     user: process.env.HPSM_USER ?? "",
     password: process.env.HPSM_PASSWORD ?? "",
-    // HPSM REST API path estándar
     apiPath: process.env.HPSM_API_PATH ?? "/sm/9/rest",
-    // Grupo a sincronizar (puede ser lista separada por comas)
     assignmentGroups: (process.env.HPSM_GROUPS ?? "PEXA").split(",").map((g) => g.trim()),
-    // Límite de incidentes por request
     pageSize: Number(process.env.HPSM_PAGE_SIZE ?? "500"),
   },
   database: {
