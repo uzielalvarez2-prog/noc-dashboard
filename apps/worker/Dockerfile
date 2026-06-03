@@ -5,7 +5,7 @@ WORKDIR /app
 # Install pnpm
 RUN corepack enable && corepack prepare pnpm@10 --activate
 
-# Copy workspace manifests (desde la raíz del repo)
+# Copy workspace manifests (desde la raiz del repo)
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 COPY apps/worker/package.json apps/worker/
 COPY apps/web/package.json apps/web/
@@ -18,8 +18,8 @@ RUN pnpm install --no-frozen-lockfile
 COPY apps/worker/src apps/worker/src/
 COPY apps/worker/tsconfig.json apps/worker/
 
-# Generate Prisma client (schema en apps/web/prisma)
-RUN node_modules/.bin/prisma generate --schema apps/web/prisma/schema.prisma
+# Generate Prisma client (prisma binary esta en apps/web/node_modules/.bin)
+RUN cd apps/web && node_modules/.bin/prisma generate
 
 # Compile TypeScript
 RUN cd apps/worker && pnpm build
