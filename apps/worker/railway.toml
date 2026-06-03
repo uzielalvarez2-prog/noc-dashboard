@@ -1,6 +1,6 @@
-﻿[build]
-builder = "NIXPACKS"
-buildCommand = "pnpm build"
+[build]
+builder = "DOCKERFILE"
+dockerfilePath = "apps/worker/Dockerfile"
 
 [deploy]
 startCommand = "node dist/index.js"
