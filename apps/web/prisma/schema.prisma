@@ -6,33 +6,6 @@ datasource db {
   provider = "postgresql"
 }
 
-enum Severity {
-  CRITICAL
-  HIGH
-  MEDIUM
-  LOW
-}
-
-enum IncidentStatus {
-  OPEN
-  IN_PROGRESS
-  RESOLVED
-  CLOSED
-}
-
-enum UserRole {
-  NOC_OPERATOR
-  NOC_ADMIN
-  ENGINEER
-}
-
-enum AlertTrigger {
-  SLA_RISK
-  SLA_BREACHED
-  CRITICAL_OPEN
-  CRITICAL_UNASSIGNED
-}
-
 model Incident {
   id          String         @id
   title       String
@@ -68,6 +41,9 @@ model User {
   name         String
   role         UserRole   @default(NOC_OPERATOR)
   createdAt    DateTime   @default(now())
+  expediente   String     @default("")
+  lastName     String     @default("")
+  username     String     @default("")
   auditLogs    AuditLog[]
 }
 
@@ -85,12 +61,80 @@ model AlertRule {
 model AuditLog {
   id        String   @id @default(cuid())
   userId    String
-  user      User     @relation(fields: [userId], references: [id])
   action    String
   targetId  String?
   metadata  Json?
   createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id])
 
   @@index([userId])
   @@index([createdAt])
+}
+
+model ClosedIncident {
+  incidentId     String   @id
+  group          String
+  openTime       DateTime
+  closeTime      DateTime
+  status         String
+  closedBy       String
+  resAnalystCode String
+  resCause       String
+  resolutionMins Int
+  slaBreached    Boolean
+  uploadedAt     DateTime @default(now())
+
+  @@index([closeTime])
+  @@index([closedBy])
+  @@index([group])
+  @@index([resCause])
+  @@index([slaBreached])
+}
+
+model OpenIncident {
+  id         String   @id
+  incidentId String
+  openTime   DateTime
+  status     String
+  company    String
+  serviceId  String
+  state      String
+  district   String
+  assignee   String?
+  group      String
+  uploadedAt DateTime @default(now())
+
+  @@unique([incidentId, state, district])
+  @@index([assignee])
+  @@index([district])
+  @@index([group])
+  @@index([incidentId])
+  @@index([state])
+}
+
+enum Severity {
+  CRITICAL
+  HIGH
+  MEDIUM
+  LOW
+}
+
+enum IncidentStatus {
+  OPEN
+  IN_PROGRESS
+  RESOLVED
+  CLOSED
+}
+
+enum UserRole {
+  NOC_OPERATOR
+  NOC_ADMIN
+  ENGINEER
+}
+
+enum AlertTrigger {
+  SLA_RISK
+  SLA_BREACHED
+  CRITICAL_OPEN
+  CRITICAL_UNASSIGNED
 }
