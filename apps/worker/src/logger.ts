@@ -13,7 +13,10 @@ export const logger = createLogger({
         format.colorize(),
         format.printf(({ level, message, timestamp, ...meta }) => {
           const metaStr = Object.keys(meta).length
-            ? " " + JSON.stringify(meta)
+            ? " " +
+              JSON.stringify(meta, (_key, value) =>
+                value instanceof Error ? { message: value.message, stack: value.stack } : value
+              )
             : "";
           return `${timestamp} [${level}] ${message}${metaStr}`;
         })
