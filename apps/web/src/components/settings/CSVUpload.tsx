@@ -2,19 +2,20 @@
 
 import { useState, useRef } from "react";
 import { Upload, CheckCircle, AlertTriangle } from "lucide-react";
-import { Button } from "@/components/ui/button";
 import { useQueryClient } from "@tanstack/react-query";
 
+type Kind = "open" | "closed";
+type Group = "PEXA" | "CECOR";
+
 interface UploadResult {
-  ok: boolean;
-  total: number;
-  filtered: number;
-  upserted: number;
-  message: string;
+  ok?: boolean;
+  message?: string;
   error?: string;
 }
 
 export function CSVUpload() {
+  const [kind, setKind] = useState<Kind>("open");
+  const [group, setGroup] = useState<Group>("PEXA");
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<UploadResult | null>(null);
   const [dragging, setDragging] = useState(false);
@@ -27,21 +28,21 @@ export function CSVUpload() {
 
     const form = new FormData();
     form.append("file", file);
-    form.append("group", "PEXA");
+    const endpoint =
+      kind === "open" ? "/api/incidents/open/upload" : "/api/incidents/closed/upload";
+    if (kind === "closed") form.append("group", group);
 
     try {
-      const res = await fetch("/api/incidents/upload", { method: "POST", body: form });
+      const res = await fetch(endpoint, { method: "POST", body: form });
       const data: UploadResult = await res.json();
       setResult(data);
-
       if (data.ok) {
-        // Refrescar KPIs e incidentes en el dashboard
-        qc.invalidateQueries({ queryKey: ["kpis"] });
-        qc.invalidateQueries({ queryKey: ["incidents"] });
-        qc.invalidateQueries({ queryKey: ["sla"] });
+        qc.invalidateQueries({ queryKey: ["open-incidents"] });
+        qc.invalidateQueries({ queryKey: ["open-stats"] });
+        qc.invalidateQueries({ queryKey: ["closed-stats"] });
       }
     } catch {
-      setResult({ ok: false, total: 0, filtered: 0, upserted: 0, message: "", error: "Error de conexión" });
+      setResult({ ok: false, error: "Error de conexión" });
     } finally {
       setLoading(false);
     }
@@ -57,17 +58,53 @@ export function CSVUpload() {
     e.preventDefault();
     setDragging(false);
     const file = e.dataTransfer.files?.[0];
-    if (file?.name.endsWith(".csv")) uploadFile(file);
+    if (file?.name.toLowerCase().endsWith(".csv")) uploadFile(file);
   }
+
+  const tabBtn = (k: Kind, label: string) =>
+    `flex-1 rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${
+      kind === k
+        ? "bg-accent text-white"
+        : "text-text-muted hover:text-text-primary"
+    }`;
 
   return (
     <div className="space-y-4">
       <div className="flex items-center gap-2">
         <Upload className="h-4 w-4 text-text-muted" />
-        <h2 className="text-base font-semibold text-text-primary">
-          Importar incidentes HPSM
-        </h2>
+        <h2 className="text-base font-semibold text-text-primary">Importar CSV de HPSM</h2>
       </div>
+
+      {/* Selector tipo de carga */}
+      <div className="flex gap-1 rounded-lg border border-border bg-surface p-1">
+        <button type="button" className={tabBtn("open", "Abiertos")} onClick={() => { setKind("open"); setResult(null); }}>
+          Abiertos
+        </button>
+        <button type="button" className={tabBtn("closed", "Cerrados")} onClick={() => { setKind("closed"); setResult(null); }}>
+          Cerrados
+        </button>
+      </div>
+
+      {/* Selector de grupo (solo cerrados; los abiertos traen el grupo en el CSV) */}
+      {kind === "closed" && (
+        <div className="flex items-center gap-2">
+          <span className="text-xs text-text-muted">Grupo del archivo:</span>
+          {(["PEXA", "CECOR"] as Group[]).map((g) => (
+            <button
+              key={g}
+              type="button"
+              onClick={() => setGroup(g)}
+              className={`rounded-md border px-3 py-1 text-xs font-medium transition-colors ${
+                group === g
+                  ? "border-accent bg-accent/10 text-accent"
+                  : "border-border text-text-muted hover:text-text-primary"
+              }`}
+            >
+              {g}
+            </button>
+          ))}
+        </div>
+      )}
 
       {/* Drop zone */}
       <div
@@ -81,13 +118,12 @@ export function CSVUpload() {
       >
         <Upload className="mx-auto mb-3 h-8 w-8 text-text-muted" />
         <p className="text-sm font-medium text-text-primary">
-          Arrastra el CSV aquí o haz clic para seleccionar
+          Arrastra el CSV de {kind === "open" ? "abiertos" : `cerrados (${group})`} aquí o haz clic
         </p>
         <p className="mt-1 text-xs text-text-muted">
-          Exporta desde HPSM: <span className="text-accent">More → Export to text file → CSV</span>
-        </p>
-        <p className="mt-1 text-xs text-text-disabled">
-          Solo incidentes del grupo <span className="text-accent font-medium">PEXA</span> serán importados
+          {kind === "open"
+            ? "Se filtran PEXA + CECOR, se quitan duplicados y se reemplaza el tablero."
+            : "Calcula el SLA de 4 h con la hora de apertura y cierre."}
         </p>
         <input ref={fileRef} type="file" accept=".csv" className="hidden" onChange={handleFile} />
       </div>
@@ -101,30 +137,23 @@ export function CSVUpload() {
       )}
 
       {result && !loading && (
-        <div className={`rounded-lg border p-4 ${result.ok ? "border-success/40 bg-success-dim" : "border-critical/40 bg-critical-dim"}`}>
+        <div
+          className={`rounded-lg border p-4 ${
+            result.ok ? "border-success/40 bg-success-dim" : "border-critical/40 bg-critical-dim"
+          }`}
+        >
           <div className="flex items-start gap-2">
             {result.ok ? (
               <CheckCircle className="mt-0.5 h-4 w-4 shrink-0 text-success" />
             ) : (
               <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-critical" />
             )}
-            <div>
-              <p className={`text-sm font-medium ${result.ok ? "text-success" : "text-critical"}`}>
-                {result.ok ? result.message : result.error}
-              </p>
-              {result.ok && (
-                <p className="mt-1 text-xs text-text-muted">
-                  CSV total: {result.total} registros → PEXA únicos: {result.filtered} → Guardados: {result.upserted}
-                </p>
-              )}
-            </div>
+            <p className={`text-sm font-medium ${result.ok ? "text-success" : "text-critical"}`}>
+              {result.ok ? result.message : result.error}
+            </p>
           </div>
         </div>
       )}
-
-      <p className="text-xs text-text-muted">
-        Flujo: HPSM portal → lista de incidentes → More → Export to text file → CSV → subir aquí. El sistema deduplica por ID y solo importa PEXA.
-      </p>
     </div>
   );
 }

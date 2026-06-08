@@ -66,6 +66,9 @@ model User {
   email        String     @unique
   passwordHash String
   name         String
+  lastName     String     @default("")
+  username     String     @default("")
+  expediente   String     @default("")
   role         UserRole   @default(NOC_OPERATOR)
   createdAt    DateTime   @default(now())
   auditLogs    AuditLog[]
@@ -93,4 +96,58 @@ model AuditLog {
 
   @@index([userId])
   @@index([createdAt])
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// NOC v2 — modelo basado en los exports CSV reales de HPSM.
+//
+// ABIERTOS: grano incidente×sitio. Un mismo incidente puede afectar muchas
+// ubicaciones (falla masiva), y el CSV trae una fila por sitio. Guardamos cada
+// ubicación distinta para poder sacar "Top por Estado/Distrito". Cada carga
+// reemplaza el snapshot del grupo (los abiertos son una foto del momento).
+// ─────────────────────────────────────────────────────────────────────────────
+model OpenIncident {
+  id         String   @id @default(cuid())
+  incidentId String
+  openTime   DateTime
+  status     String // estado crudo de HPSM: WORK IN PROGRESS, PENDING CUSTOMER, ...
+  company    String
+  serviceId  String
+  state      String // Site Name State
+  district   String // Site Name District
+  assignee   String?
+  group      String // PEXA | CECOR
+  uploadedAt DateTime @default(now())
+
+  @@unique([incidentId, state, district])
+  @@index([group])
+  @@index([incidentId])
+  @@index([state])
+  @@index([district])
+  @@index([assignee])
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// CERRADOS: grano incidente (sin sitio). Se sube por grupo (PEXA/CECOR). Trae la
+// hora de apertura y cierre, con lo que calculamos el SLA (4 h) al momento de
+// subir. Upsert por incidentId: re-subir el mismo día actualiza, no duplica.
+// ─────────────────────────────────────────────────────────────────────────────
+model ClosedIncident {
+  incidentId     String   @id
+  group          String // PEXA | CECOR (elegido al subir)
+  openTime       DateTime
+  closeTime      DateTime
+  status         String // normalmente "Closed"
+  closedBy       String // nombre del analista (o bot, p.ej. rpa_integration)
+  resAnalystCode String // cadena completa, p.ej. "POWER FAILURE | NA | NA"
+  resCause       String // primer segmento para estadística, p.ej. "POWER FAILURE"
+  resolutionMins Int // (closeTime - openTime) en minutos
+  slaBreached    Boolean // resolutionMins > 240 (4 h)
+  uploadedAt     DateTime @default(now())
+
+  @@index([group])
+  @@index([closedBy])
+  @@index([resCause])
+  @@index([slaBreached])
+  @@index([closeTime])
 }

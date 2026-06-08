@@ -17,6 +17,23 @@ export function formatDate(date: Date | string): string {
   }).format(new Date(date));
 }
 
+/**
+ * Formatea las fechas de HPSM. Las guardamos como "reloj de pared" en UTC, así
+ * que SE FORMATEAN EN UTC para mostrar exactamente los números del CSV original
+ * (si usáramos zona de México se recorrerían 6 horas).
+ */
+export function formatHpsm(date: Date | string): string {
+  return new Intl.DateTimeFormat("es-MX", {
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+    timeZone: "UTC",
+  }).format(new Date(date));
+}
+
 export function formatRelativeTime(date: Date | string): string {
   const now = new Date();
   const target = new Date(date);
