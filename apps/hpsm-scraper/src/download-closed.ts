@@ -33,6 +33,94 @@ async function waitForFrame(
   return undefined;
 }
 
+const CLOSED_COLUMNS = [
+  "Incident ID",
+  "Open Time",
+  "Status",
+  "Closed By",
+  "Close Time",
+  "Res Analyst Code",
+  "Company",
+  "Assignment Group",
+];
+
+async function setColumns(
+  page: Page,
+  listDetailFrame: Frame,
+  columns: string[],
+): Promise<Frame> {
+  const framesToSearch = [listDetailFrame, page.mainFrame()];
+  let modifyDone = false;
+
+  for (let attempt = 0; attempt < 4 && !modifyDone; attempt++) {
+    if (attempt > 0) await page.waitForTimeout(1_500);
+    for (const frame of framesToSearch) {
+      try {
+        const moreText = frame.locator(':text-is("More")').first();
+        const moreBtn = moreText.locator(
+          'xpath=ancestor::*[contains(concat(" ", normalize-space(@class), " "), " x-btn ")][1]',
+        );
+        await moreBtn.waitFor({ state: "attached", timeout: 5_000 });
+        await moreBtn.evaluate((el) => (el as HTMLElement).click());
+        break;
+      } catch { /* next frame */ }
+    }
+    await page.waitForTimeout(1_500);
+    for (const frame of page.frames()) {
+      const opt = frame.locator("text=Modify Columns").first();
+      if (await opt.isVisible({ timeout: 2_000 }).catch(() => false)) {
+        await opt.evaluate((el) => (el as HTMLElement).click());
+        modifyDone = true;
+        logger.info(`Modify Columns click en frame: ${frame.url()}`);
+        break;
+      }
+    }
+  }
+  if (!modifyDone) throw new Error("Modify Columns menu item no encontrado tras 4 intentos");
+
+  await page.waitForTimeout(2_000);
+  let colFrame: Frame | undefined;
+  const deadline = Date.now() + 30_000;
+  while (!colFrame && Date.now() < deadline) {
+    for (const frame of page.frames()) {
+      const has = await frame.locator('[name="var/L.current/L.current[1]"]').count().catch(() => 0) > 0;
+      if (has) { colFrame = frame; break; }
+    }
+    if (!colFrame) await page.waitForTimeout(1_000);
+  }
+  if (!colFrame) throw new Error("choose.columns form no encontrado en 30s");
+  logger.info(`Columns form en: ${colFrame.url()}`);
+
+  for (let i = 0; i < 8; i++) {
+    await colFrame.locator(`[name="var/L.current/L.current[${i + 1}]"]`)
+      .fill(columns[i] ?? "", { force: true }).catch(() => {});
+    await page.waitForTimeout(200);
+  }
+  await page.waitForTimeout(1_000);
+
+  let proceedClicked = false;
+  for (let retry = 0; retry < 3 && !proceedClicked; retry++) {
+    await page.waitForTimeout(2_000);
+    for (const frame of page.frames()) {
+      const btn = frame.locator(':text-is("Proceed")').first();
+      if (await btn.isVisible({ timeout: 2_000 }).catch(() => false)) {
+        await btn.evaluate((el) => (el as HTMLElement).click());
+        proceedClicked = true;
+        logger.info(`Proceed click en frame: ${frame.url()}`);
+        break;
+      }
+    }
+  }
+  if (!proceedClicked) throw new Error("Proceed button no encontrado tras 3 intentos");
+
+  await page.waitForTimeout(3_000);
+  const newFrame = await waitForFrame(page, "cwc_listdetail", 60_000);
+  if (!newFrame) throw new Error("cwc_listdetail no aparecio tras Modify Columns");
+  logger.info(`Frame actualizado tras Modify Columns: ${newFrame.url()}`);
+  await page.waitForTimeout(2_000);
+  return newFrame;
+}
+
 async function main(): Promise<void> {
   mkdirSync(config.downloadDir, { recursive: true });
 
@@ -190,8 +278,12 @@ async function main(): Promise<void> {
 
     await page.screenshot({ path: "debug-closed-step3-results.png", fullPage: true });
 
+    // ── 5.5. Fijar columnas para closed incidents ─────────────────────────────
+    logger.info("Configurando columnas para closed incidents...");
+    const freshFrame = await setColumns(page, listDetailFrame, CLOSED_COLUMNS);
+
     // ── 6. More → Export en el frame de resultados ────────────────────────────
-    await exportCurrentViewToCsv(page, dest, listDetailFrame);
+    await exportCurrentViewToCsv(page, dest, freshFrame);
     logger.info("Descarga de incidentes cerrados completada");
   } finally {
     await session.close();

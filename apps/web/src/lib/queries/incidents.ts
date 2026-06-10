@@ -76,7 +76,7 @@ export async function getKPIs() {
       },
     }),
     db.incident.findMany({
-      where: { severity: "CRITICAL", status: { in: ["OPEN", "IN_PROGRESS"] } },
+      where: { slaBreached: true, status: { notIn: ["RESOLVED", "CLOSED"] } },
       orderBy: { slaDeadline: "asc" },
       take: 10,
       select: {
@@ -111,6 +111,30 @@ export interface TrendPoint {
   HIGH: number;
   MEDIUM: number;
   LOW: number;
+}
+
+/** Devuelve conteos de incidentes abiertos agrupados por dia (ultimos 7 dias). */
+export async function getOpenByDay(): Promise<{ day: string; total: number; breached: number }[]> {
+  const result = [];
+  for (let i = 6; i >= 0; i--) {
+    const start = new Date();
+    start.setDate(start.getDate() - i);
+    start.setHours(0, 0, 0, 0);
+    const end = new Date(start);
+    end.setHours(23, 59, 59, 999);
+
+    const [total, breached] = await Promise.all([
+      db.incident.count({ where: { createdAt: { gte: start, lte: end } } }),
+      db.incident.count({ where: { createdAt: { gte: start, lte: end }, slaBreached: true } }),
+    ]);
+
+    result.push({
+      day: start.toLocaleDateString("es-MX", { weekday: "short", day: "2-digit" }),
+      total,
+      breached,
+    });
+  }
+  return result;
 }
 
 /** Devuelve conteos por hora en las últimas 24h para el chart de tendencia. */

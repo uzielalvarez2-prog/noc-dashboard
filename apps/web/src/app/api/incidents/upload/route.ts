@@ -187,6 +187,32 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    // Auto-upsert operadores desde assignees del CSV (solo en snapshot completo)
+    if (clearOpen && filtered.length > 0) {
+      await db.operator.updateMany({ data: { isOnShift: false } });
+      const assigneeMap = new Map<string, string>();
+      for (const row of filtered) {
+        const a = row[colAssignee]?.trim();
+        const g = row[colGroup]?.trim() ?? groupParam;
+        if (a) assigneeMap.set(a, g);
+      }
+      await Promise.allSettled(
+        [...assigneeMap.entries()].map(([id, team]) =>
+          db.operator.upsert({
+            where: { id },
+            update: { isOnShift: true, team },
+            create: {
+              id,
+              name: id,
+              email: `${id.toLowerCase().replace(/\s+/g, ".")}@telmexit.com`,
+              team,
+              isOnShift: true,
+            },
+          })
+        )
+      );
+    }
+
     await db.auditLog.create({
       data: {
         userId: actorId,

@@ -5,18 +5,6 @@ import { config } from "./config.js";
 import { logger } from "./logger.js";
 import { openHpsmSession, exportCurrentViewToCsv } from "./session.js";
 
-/**
- * Flujo HPSM:
- *  1. Incident Management -> Search Incidents
- *  2. Llenar form: checkbox Open (sin filtro de grupo ni fechas = todos los grupos)
- *  3. Search -> cwc_listdetail.jsp -> More -> Export CSV
- *
- * Se usa Search Incidents (igual que download-closed) porque el boton More
- * del toolbar principal (index.do) siempre exporta thread=0 (To-Do Queue),
- * mientras que el More en cwc_listdetail.jsp exporta correctamente los
- * resultados de la busqueda activa.
- */
-
 async function waitForFrame(
   page: Page,
   urlPart: string,
@@ -31,6 +19,105 @@ async function waitForFrame(
   return undefined;
 }
 
+// Columnas para incidentes abiertos (deben ser captions validos en HPSM)
+const OPEN_COLUMNS = [
+  "Incident ID",
+  "Open Time",
+  "Status",
+  "Assignment Group",
+  "Assignee",
+  "Company",
+  "Region",
+  "Divisional",
+];
+
+async function setColumns(
+  page: Page,
+  listDetailFrame: Frame,
+  columns: string[],
+): Promise<Frame> {
+  const framesToSearch = [listDetailFrame, page.mainFrame()];
+  let modifyDone = false;
+
+  for (let attempt = 0; attempt < 4 && !modifyDone; attempt++) {
+    if (attempt > 0) await page.waitForTimeout(1_500);
+
+    for (const frame of framesToSearch) {
+      try {
+        const moreText = frame.locator(':text-is("More")').first();
+        const moreBtn = moreText.locator(
+          'xpath=ancestor::*[contains(concat(" ", normalize-space(@class), " "), " x-btn ")][1]',
+        );
+        await moreBtn.waitFor({ state: "attached", timeout: 5_000 });
+        await moreBtn.evaluate((el) => (el as HTMLElement).click());
+        break;
+      } catch { /* next frame */ }
+    }
+
+    await page.waitForTimeout(1_500);
+
+    for (const frame of page.frames()) {
+      const opt = frame.locator("text=Modify Columns").first();
+      if (await opt.isVisible({ timeout: 2_000 }).catch(() => false)) {
+        await opt.evaluate((el) => (el as HTMLElement).click());
+        modifyDone = true;
+        logger.info(`Modify Columns click en frame: ${frame.url()}`);
+        break;
+      }
+    }
+  }
+
+  if (!modifyDone) throw new Error("Modify Columns menu item no encontrado tras 4 intentos");
+
+  await page.waitForTimeout(2_000);
+
+  // Buscar el frame con los inputs de columnas
+  let colFrame: Frame | undefined;
+  const deadline = Date.now() + 30_000;
+  while (!colFrame && Date.now() < deadline) {
+    for (const frame of page.frames()) {
+      const has = await frame.locator('[name="var/L.current/L.current[1]"]')
+        .count().catch(() => 0) > 0;
+      if (has) { colFrame = frame; break; }
+    }
+    if (!colFrame) await page.waitForTimeout(1_000);
+  }
+  if (!colFrame) throw new Error("choose.columns form no encontrado en 30s");
+  logger.info(`Columns form en: ${colFrame.url()}`);
+
+  // Llenar los 8 inputs
+  for (let i = 0; i < 8; i++) {
+    const val = columns[i] ?? "";
+    await colFrame.locator(`[name="var/L.current/L.current[${i + 1}]"]`)
+      .fill(val, { force: true }).catch(() => {});
+    await page.waitForTimeout(200);
+  }
+  await page.waitForTimeout(1_000);
+
+  // Click Proceed (con reintentos — tarda en renderizar)
+  let proceedClicked = false;
+  for (let retry = 0; retry < 3 && !proceedClicked; retry++) {
+    await page.waitForTimeout(2_000);
+    for (const frame of page.frames()) {
+      const btn = frame.locator(':text-is("Proceed")').first();
+      if (await btn.isVisible({ timeout: 2_000 }).catch(() => false)) {
+        await btn.evaluate((el) => (el as HTMLElement).click());
+        proceedClicked = true;
+        logger.info(`Proceed click en frame: ${frame.url()}`);
+        break;
+      }
+    }
+  }
+  if (!proceedClicked) throw new Error("Proceed button no encontrado tras 3 intentos");
+
+  await page.waitForTimeout(3_000);
+  const newFrame = await waitForFrame(page, "cwc_listdetail", 60_000);
+  if (!newFrame) throw new Error("cwc_listdetail no aparecio tras Modify Columns");
+  logger.info(`Frame actualizado tras Modify Columns: ${newFrame.url()}`);
+  await page.waitForTimeout(2_000);
+  return newFrame;
+}
+
 async function main(): Promise<void> {
   mkdirSync(config.downloadDir, { recursive: true });
   const dest = join(config.downloadDir, "open-incidents.csv");
@@ -39,7 +126,7 @@ async function main(): Promise<void> {
   try {
     const { page } = session;
 
-    // ── 0. Cleanup estado HPSM (session restore puede tener modal/mask) ──────
+    // 0. Cleanup estado HPSM
     const sessionWarnVisible = await page.locator("text=Your inactive session")
       .isVisible({ timeout: 5_000 }).catch(() => false);
     if (sessionWarnVisible) {
@@ -57,7 +144,7 @@ async function main(): Promise<void> {
     await page.locator(".ext-el-mask").first()
       .waitFor({ state: "hidden", timeout: 15_000 }).catch(() => {});
 
-    // ── 1. Navegacion: Incident Management -> Search Incidents ────────────────
+    // 1. Incident Management -> Search Incidents
     try {
       const incMgmt = page.locator("text=Incident Management").first();
       await incMgmt.waitFor({ state: "visible", timeout: 15_000 });
@@ -77,8 +164,7 @@ async function main(): Promise<void> {
 
     logger.info(`Frames tras navegar: ${page.frames().map(f => f.url()).join(" | ")}`);
 
-    // ── 2. Encontrar el frame del formulario ──────────────────────────────────
-    // El form tiene AMBOS: instance/assignment Y var/choices/open
+    // 2. Encontrar el frame del formulario
     let formFrame: Frame | undefined;
     const formDeadline = Date.now() + 20_000;
     while (!formFrame && Date.now() < formDeadline) {
@@ -96,14 +182,12 @@ async function main(): Promise<void> {
     }
     logger.info(`Form en: ${formFrame.url()}`);
 
-    // ── 3. Llenar el formulario: solo checkbox Open, sin grupo ni fechas ──────
-    // Sin filtro de grupo = exporta todos los grupos (PEXA + CECOR + resto)
-    // El upload filtra por group=PEXA,CECOR
+    // 3. Checkbox Open (sin grupo ni fechas)
     await formFrame.locator('[id="var/choices/open"]')
       .evaluate((el) => (el as HTMLInputElement).click());
     logger.info("Form llenado: Open (todos los grupos, sin rango de fechas)");
 
-    // ── 4. Clic en Search ─────────────────────────────────────────────────────
+    // 4. Clic en Search
     {
       let searchClicked = false;
       const orderedFrames = [formFrame, ...page.frames().filter(f => f !== formFrame)];
@@ -127,8 +211,8 @@ async function main(): Promise<void> {
       }
     }
 
-    // ── 5. Esperar cwc_listdetail.jsp (resultados) ────────────────────────────
-    logger.info("Esperando cwc_listdetail.jsp (hasta 120s — puede ser grande)...");
+    // 5. Esperar cwc_listdetail.jsp
+    logger.info("Esperando cwc_listdetail.jsp (hasta 120s)...");
     const listDetailFrame = await waitForFrame(page, "cwc_listdetail", 120_000);
     if (!listDetailFrame) {
       await page.screenshot({ path: "debug-open-step3-nolist.png", fullPage: true });
@@ -137,8 +221,12 @@ async function main(): Promise<void> {
     logger.info(`Resultados en: ${listDetailFrame.url()}`);
     await page.waitForTimeout(2_000);
 
-    // ── 6. More -> Export en el frame de resultados ───────────────────────────
-    await exportCurrentViewToCsv(page, dest, listDetailFrame);
+    // 5.5. Fijar columnas para open incidents (evita heredar config de closed)
+    logger.info("Configurando columnas para open incidents...");
+    const freshFrame = await setColumns(page, listDetailFrame, OPEN_COLUMNS);
+
+    // 6. More -> Export
+    await exportCurrentViewToCsv(page, dest, freshFrame);
     logger.info("Descarga de incidentes abiertos completada");
   } finally {
     await session.close();
@@ -147,7 +235,6 @@ async function main(): Promise<void> {
 
 export { main as downloadOpen };
 
-// Ejecutar solo cuando se invoca directamente (no cuando se importa)
 if (process.argv[1]?.replace(/\\/g, "/").endsWith("download-open.ts") ||
     process.argv[1]?.replace(/\\/g, "/").endsWith("download-open.js")) {
   main().catch((err) => {
