@@ -28,10 +28,10 @@ function parseHpsmDate(s: string): Date {
 function mapStatus(s: string): "OPEN" | "IN_PROGRESS" | "RESOLVED" | "CLOSED" {
   const v = s.toLowerCase().replace(/\s+/g, "_");
   if (v === "open") return "OPEN";
-  if (v.includes("progress") || v.includes("work") || v.includes("pending")) return "IN_PROGRESS";
+  if (v.includes("progress") || v.includes("work") || v.includes("pending") || v === "categorize") return "IN_PROGRESS";
   if (v === "resolved") return "RESOLVED";
   if (v === "closed") return "CLOSED";
-  return "OPEN";
+  return "IN_PROGRESS";
 }
 
 // Parseador CSV/TSV robusto (auto-detecta delimitador, maneja comillas)
@@ -95,6 +95,7 @@ export async function POST(req: NextRequest) {
     const allowedGroups = groupParam
       ? groupParam.split(",").map((g) => g.trim()).filter(Boolean)
       : [];
+    const clearOpen = formData.get("clearOpen") === "true";
 
     if (!file) return NextResponse.json({ error: "No se recibió archivo" }, { status: 400 });
     if (!file.name.endsWith(".csv")) return NextResponse.json({ error: "Solo se aceptan archivos CSV" }, { status: 400 });
@@ -129,6 +130,12 @@ export async function POST(req: NextRequest) {
 
     // Fecha de referencia para calcular SLA (usando fecha actual)
     const now = new Date();
+
+    // Cuando se sube el snapshot completo de abiertos, borrar los stale antes de insertar
+    if (clearOpen) {
+      await db.incident.deleteMany({ where: { status: { in: ["OPEN", "IN_PROGRESS", "RESOLVED"] } } });
+    }
+
     let upserted = 0;
     let errors = 0;
 

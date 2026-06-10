@@ -9,7 +9,7 @@ import { logger } from "./logger.js";
  * @param csvPath   Ruta local al archivo CSV
  * @param groups    Grupo(s) a filtrar, separados por coma: "PEXA" o "PEXA,CECOR"
  */
-export async function uploadCsv(csvPath: string, groups: string): Promise<void> {
+export async function uploadCsv(csvPath: string, groups: string, clearOpen = false): Promise<void> {
   const content = readFileSync(csvPath);
   const formData = new FormData();
   formData.append(
@@ -18,6 +18,7 @@ export async function uploadCsv(csvPath: string, groups: string): Promise<void> 
     basename(csvPath),
   );
   formData.append("group", groups);
+  if (clearOpen) formData.append("clearOpen", "true");
 
   const url = `${config.dashboardUrl}/api/incidents/upload`;
   logger.info(`Subiendo CSV al dashboard`, { url, groups, file: basename(csvPath) });
