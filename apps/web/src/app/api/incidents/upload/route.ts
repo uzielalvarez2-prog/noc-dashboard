@@ -158,7 +158,7 @@ export async function POST(req: NextRequest) {
               },
               create: {
                 id,
-                title: `${id} — ${row[colGroup] ?? assignmentGroup}`,
+                title: `${id} — ${row[colGroup] ?? groupParam}`,
                 severity: "MEDIUM",
                 status,
                 assignedTo: row[colAssignee]?.trim() || null,
