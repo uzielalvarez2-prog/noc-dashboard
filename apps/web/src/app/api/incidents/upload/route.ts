@@ -34,13 +34,15 @@ function mapStatus(s: string): "OPEN" | "IN_PROGRESS" | "RESOLVED" | "CLOSED" {
   return "OPEN";
 }
 
-// Parseador CSV robusto (maneja comillas y comas dentro de campos)
+// Parseador CSV/TSV robusto (auto-detecta delimitador, maneja comillas)
 function parseCSV(text: string): Record<string, string>[] {
   const lines = text.replace(/\r\n/g, "\n").replace(/\r/g, "\n").split("\n");
   if (lines.length < 2) return [];
 
   const headerLine = lines[0];
-  const headers = headerLine.split(",").map((h) => h.replace(/^"|"$/g, "").trim());
+  // Auto-detectar delimitador: si el header tiene tabs, usar tab; si no, coma
+  const delimiter = headerLine.includes("\t") ? "\t" : ",";
+  const headers = headerLine.split(delimiter).map((h) => h.replace(/^"|"$/g, "").trim());
 
   const rows: Record<string, string>[] = [];
   for (let i = 1; i < lines.length; i++) {
@@ -54,7 +56,7 @@ function parseCSV(text: string): Record<string, string>[] {
       const ch = line[j];
       if (ch === '"') {
         inQuotes = !inQuotes;
-      } else if (ch === "," && !inQuotes) {
+      } else if (ch === delimiter && !inQuotes) {
         values.push(current.trim());
         current = "";
       } else {
@@ -73,13 +75,26 @@ function parseCSV(text: string): Record<string, string>[] {
 }
 
 export async function POST(req: NextRequest) {
-  const session = getSessionFromRequest(req);
-  if (!session) return NextResponse.json({ error: "No autorizado" }, { status: 401 });
+  // Acepta API key (scraper headless) o sesión de usuario (UI web)
+  const apiKey = req.headers.get("x-internal-key");
+  const validKey = process.env.INTERNAL_API_KEY;
+  const isApiKeyAuth = !!(validKey && apiKey === validKey);
+
+  let actorId = "scraper";
+  if (!isApiKeyAuth) {
+    const session = getSessionFromRequest(req);
+    if (!session) return NextResponse.json({ error: "No autorizado" }, { status: 401 });
+    actorId = session.id;
+  }
 
   try {
     const formData = await req.formData();
     const file = formData.get("file") as File | null;
-    const assignmentGroup = (formData.get("group") as string) || "PEXA";
+    // Soporta múltiples grupos separados por coma: "PEXA,CECOR"
+    const groupParam = ((formData.get("group") as string) ?? "").trim();
+    const allowedGroups = groupParam
+      ? groupParam.split(",").map((g) => g.trim()).filter(Boolean)
+      : [];
 
     if (!file) return NextResponse.json({ error: "No se recibió archivo" }, { status: 400 });
     if (!file.name.endsWith(".csv")) return NextResponse.json({ error: "Solo se aceptan archivos CSV" }, { status: 400 });
@@ -95,20 +110,20 @@ export async function POST(req: NextRequest) {
     const colGroup = Object.keys(sample).find((k) => k.toLowerCase().includes("assignment") && k.toLowerCase().includes("group")) ?? "Assignment Group";
     const colAssignee = Object.keys(sample).find((k) => k.toLowerCase() === "assignee") ?? "Assignee";
 
-    // Deduplicar por Incident ID y filtrar por grupo
+    // Deduplicar por Incident ID y filtrar por grupo(s)
     const seen = new Set<string>();
     const filtered = rows.filter((row) => {
       const id = row[colId]?.trim();
       const group = row[colGroup]?.trim();
       if (!id || seen.has(id)) return false;
-      if (assignmentGroup && group !== assignmentGroup) return false;
+      if (allowedGroups.length > 0 && !allowedGroups.includes(group ?? "")) return false;
       seen.add(id);
       return true;
     });
 
     if (filtered.length === 0) {
       return NextResponse.json({
-        error: `No se encontraron incidentes para el grupo "${assignmentGroup}". Total en CSV: ${rows.length}`,
+        error: `No se encontraron incidentes para grupos "${groupParam || "todos"}". Total en CSV: ${rows.length}`,
       }, { status: 400 });
     }
 
@@ -165,12 +180,11 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // Audit log
     await db.auditLog.create({
       data: {
-        userId: session.id,
+        userId: actorId,
         action: "IMPORT_CSV",
-        metadata: { filename: file.name, total: filtered.length, upserted, errors, group: assignmentGroup },
+        metadata: { filename: file.name, total: filtered.length, upserted, errors, groups: groupParam },
       },
     }).catch(() => {});
 
@@ -180,7 +194,7 @@ export async function POST(req: NextRequest) {
       filtered: filtered.length,
       upserted,
       errors,
-      message: `${upserted} incidentes de ${assignmentGroup} importados correctamente`,
+      message: `${upserted} incidentes de [${groupParam || "todos"}] importados correctamente`,
     });
   } catch (err) {
     console.error("[POST /api/incidents/upload]", err);

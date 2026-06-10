@@ -14,6 +14,7 @@ const nextConfig: NextConfig = {
       process.env.AUTH_URL ||
       process.env.NEXTAUTH_URL ||
       "https://noc-dashboard-iota.vercel.app",
+    INTERNAL_API_KEY: process.env.INTERNAL_API_KEY ?? "",
   },
 };
 

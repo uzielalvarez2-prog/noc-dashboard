@@ -1,0 +1,7 @@
+.env
+dist
+node_modules
+*.log
+debug-*.png
+diag-*.png
+hpsm-cookies.json

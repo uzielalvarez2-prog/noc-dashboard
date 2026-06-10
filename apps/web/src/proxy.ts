@@ -16,6 +16,11 @@ export function proxy(request: NextRequest) {
   const isPublic = PUBLIC_PATHS.some((p) => pathname.startsWith(p));
   if (isPublic) return NextResponse.next();
 
+  // Permitir el scraper headless con API key interna
+  const apiKey = request.headers.get("x-internal-key");
+  const validKey = process.env.INTERNAL_API_KEY;
+  if (validKey && apiKey === validKey) return NextResponse.next();
+
   const cookieValue = request.cookies.get(COOKIE_NAME)?.value;
   const session = getSessionFromCookie(cookieValue);
 
