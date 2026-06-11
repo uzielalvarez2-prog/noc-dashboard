@@ -3,6 +3,8 @@ import { NextResponse } from "next/server";
 import { getSessionFromRequest } from "@/lib/auth-session";
 import { getOperators } from "@/lib/queries/operators";
 
+export const dynamic = "force-dynamic";
+
 export async function GET(req: NextRequest) {
   const session = getSessionFromRequest(req);
   if (!session) {

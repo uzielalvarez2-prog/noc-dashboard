@@ -3,6 +3,8 @@ import { NextResponse } from "next/server";
 import { getSessionFromRequest } from "@/lib/auth-session";
 import { getKPIs, getIncidentTrend } from "@/lib/queries/incidents";
 
+export const dynamic = "force-dynamic";
+
 export async function GET(req: NextRequest) {
   const session = getSessionFromRequest(req);
   if (!session) {
