@@ -63,8 +63,9 @@ export async function openHpsmSession(): Promise<HpsmSession> {
     await page.locator("#LoginUsername").fill(config.hpsm.user);
     await page.locator("#LoginPassword").fill(config.hpsm.password);
     await page.locator("#loginBtn").click();
-    await page.waitForLoadState("domcontentloaded", { timeout: 30_000 });
-    await page.waitForTimeout(2_000); // dar tiempo a ExtJS para inicializar
+    // Esperar a que loginBtn desaparezca — señal de que HPSM aceptó el login y está redirigiendo
+    await page.locator("#loginBtn").waitFor({ state: "hidden", timeout: 30_000 }).catch(() => {});
+    await page.waitForTimeout(2_000);
 
     const limitError = await page.locator("text=Maximum active logins").first().isVisible().catch(() => false);
     if (limitError) {
