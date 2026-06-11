@@ -18,6 +18,20 @@ async function fetchKPIs(): Promise<KPIData> {
   return res.json();
 }
 
+function SyncBadge({ lastSync }: { lastSync: string }) {
+  const mins = Math.floor((Date.now() - new Date(lastSync).getTime()) / 60_000);
+  const label = mins < 1 ? "ahora" : mins === 1 ? "hace 1 min" : `hace ${mins} min`;
+  return (
+    <span className="flex items-center gap-1.5 font-mono text-xs text-text-muted">
+      <span className="relative flex h-2 w-2">
+        <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-success opacity-75" />
+        <span className="relative inline-flex h-2 w-2 rounded-full bg-success" />
+      </span>
+      Datos: {label}
+    </span>
+  );
+}
+
 interface KPIGridProps {
   initial: KPIData;
 }
@@ -31,6 +45,8 @@ export function KPIGrid({ initial }: KPIGridProps) {
   });
 
   return (
+    <div className="space-y-3">
+    <SyncBadge lastSync={data.lastSync} />
     <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
       <KPICard
         title="Total Abiertos"
@@ -60,6 +76,7 @@ export function KPIGrid({ initial }: KPIGridProps) {
         status="success"
         icon={<CheckCircle className="h-4 w-4" />}
       />
+    </div>
     </div>
   );
 }

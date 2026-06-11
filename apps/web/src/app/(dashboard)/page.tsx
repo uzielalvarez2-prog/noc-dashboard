@@ -5,7 +5,6 @@ import { SLAGauge } from "@/components/dashboard/SLAGauge";
 import { IncidentsChart } from "@/components/dashboard/IncidentsChart";
 import { OpenByDayChart } from "@/components/dashboard/OpenByDayChart";
 import { TopCriticalTable } from "@/components/dashboard/TopCriticalTable";
-import { LiveIndicator } from "@/components/dashboard/LiveIndicator";
 
 export const dynamic = "force-dynamic";
 
@@ -32,14 +31,11 @@ export default async function OverviewPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-start justify-between">
-        <div>
-          <h1 className="text-2xl font-bold text-text-primary">Overview</h1>
-          <p className="mt-1 text-sm text-text-muted">
-            Estado actual de operaciones
-          </p>
-        </div>
-        <LiveIndicator lastSync={kpis.lastSync} />
+      <div>
+        <h1 className="text-2xl font-bold text-text-primary">Overview</h1>
+        <p className="mt-1 text-sm text-text-muted">
+          Estado actual de operaciones
+        </p>
       </div>
 
       <KPIGrid
