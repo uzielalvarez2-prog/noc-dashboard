@@ -62,7 +62,9 @@ export async function openHpsmSession(): Promise<HpsmSession> {
     await page.locator("#LoginUsername").waitFor({ state: "visible", timeout: 30_000 });
     await page.locator("#LoginUsername").fill(config.hpsm.user);
     await page.locator("#LoginPassword").fill(config.hpsm.password);
-    await Promise.all([page.waitForLoadState("networkidle"), page.locator("#loginBtn").click()]);
+    await page.locator("#loginBtn").click();
+    await page.waitForLoadState("domcontentloaded", { timeout: 30_000 });
+    await page.waitForTimeout(2_000); // dar tiempo a ExtJS para inicializar
 
     const limitError = await page.locator("text=Maximum active logins").first().isVisible().catch(() => false);
     if (limitError) {

@@ -30,7 +30,7 @@
     <StopIfGoingOnBatteries>false</StopIfGoingOnBatteries>
     <ExecutionTimeLimit>PT20M</ExecutionTimeLimit>
     <Enabled>true</Enabled>
-    <Hidden>false</Hidden>
+    <Hidden>true</Hidden>
     <IdleSettings>
       <StopOnIdleEnd>false</StopOnIdleEnd>
       <RestartOnIdle>false</RestartOnIdle>
@@ -43,7 +43,7 @@
   <Actions Context="Author">
     <Exec>
       <Command>C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe</Command>
-      <Arguments>-NonInteractive -ExecutionPolicy Bypass -File C:\Users\Admin\noc-dashboard\apps\hpsm-scraper\scripts\run-open.ps1</Arguments>
+      <Arguments>-NonInteractive -WindowStyle Hidden -ExecutionPolicy Bypass -File C:\Users\Admin\noc-dashboard\apps\hpsm-scraper\scripts\run-open.ps1</Arguments>
     </Exec>
   </Actions>
 </Task>
