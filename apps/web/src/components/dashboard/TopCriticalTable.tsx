@@ -1,19 +1,18 @@
 "use client";
 
 import { useQuery } from "@tanstack/react-query";
-import Link from "next/link";
-import { SeverityBadge } from "@/components/incidents/SeverityBadge";
 import { cn } from "@/lib/utils";
-import type { Severity } from "@/types";
 
 interface CriticalIncident {
   id: string;
   title: string;
-  severity: Severity;
+  group: string;
+  severity: string;
   status: string;
   assignedTo: string | null;
   slaDeadline: string;
   slaBreached: boolean;
+  openTime: string;
 }
 
 interface KPIData {
@@ -26,12 +25,25 @@ async function fetchKPIs(): Promise<KPIData> {
   return res.json();
 }
 
-const STATUS_LABELS: Record<string, string> = {
-  OPEN: "Abierto",
-  IN_PROGRESS: "En progreso",
-  RESOLVED: "Resuelto",
-  CLOSED: "Cerrado",
-};
+function elapsedLabel(openTime: string): string {
+  const mins = Math.floor((Date.now() - new Date(openTime).getTime()) / 60_000);
+  const h = Math.floor(mins / 60);
+  const m = mins % 60;
+  return h > 0 ? `${h}h ${m}m` : `${m}m`;
+}
+
+function GroupBadge({ group }: { group: string }) {
+  return (
+    <span
+      className={cn(
+        "rounded px-1.5 py-0.5 text-[10px] font-semibold",
+        group === "PEXA" ? "bg-accent/15 text-accent" : "bg-warning/15 text-warning"
+      )}
+    >
+      {group}
+    </span>
+  );
+}
 
 export function TopCriticalTable() {
   const { data } = useQuery<KPIData>({
@@ -43,80 +55,73 @@ export function TopCriticalTable() {
   const incidents = data?.criticalIncidents ?? [];
 
   return (
-    <div className="rounded-lg border border-border bg-surface">
-      <div className="flex items-center justify-between border-b border-border px-5 py-3">
-        <h2 className="text-base font-semibold text-text-primary">
-          Incidentes con SLA Vencido
-        </h2>
-        <Link
+    <div className="rounded-lg border border-border bg-surface flex flex-col">
+      {/* Header */}
+      <div className="flex items-center justify-between border-b border-border px-4 py-3">
+        <div className="flex items-center gap-2">
+          <h2 className="text-sm font-semibold text-text-primary">
+            Incidentes con SLA Vencido
+          </h2>
+          {incidents.length > 0 && (
+            <span className="rounded-full bg-critical-dim px-2 py-0.5 font-mono text-xs text-critical">
+              {incidents.length}
+            </span>
+          )}
+        </div>
+        <a
           href="/sla"
-          className="text-xs text-accent hover:underline"
+          className="rounded-md border border-border bg-surface-elevated px-2.5 py-1 text-xs font-medium text-text-muted transition-colors hover:border-accent hover:text-accent"
         >
           Ver todos →
-        </Link>
+        </a>
       </div>
 
       {incidents.length === 0 ? (
-        <p className="px-5 py-8 text-center text-sm text-text-muted">
+        <p className="px-4 py-8 text-center text-sm text-text-muted">
           Sin incidentes con SLA vencido
         </p>
       ) : (
-        <div className="divide-y divide-border">
-          {incidents.map((inc) => {
-            const deadline = new Date(inc.slaDeadline);
-            const minsLeft = Math.floor(
-              (deadline.getTime() - Date.now()) / 60000
-            );
-            const isUrgent = minsLeft < 120;
-            const isBreached = inc.slaBreached || minsLeft < 0;
-
-            return (
-              <Link
-                key={inc.id}
-                href={`/incidents/${inc.id}`}
-                className="flex items-center gap-4 px-5 py-3 transition-colors hover:bg-surface-elevated"
-              >
-                <div className="min-w-0 flex-1">
-                  <div className="flex items-center gap-2">
-                    <span className="font-mono text-xs text-text-muted">
-                      {inc.id}
-                    </span>
-                    <SeverityBadge severity={inc.severity} />
-                    {isBreached && (
-                      <span className="rounded bg-critical px-1.5 py-0.5 text-xs font-bold text-white">
-                        BREACH
-                      </span>
-                    )}
-                  </div>
-                  <p className="mt-0.5 truncate text-sm text-text-primary">
-                    {inc.title}
-                  </p>
-                </div>
-
-                <div className="shrink-0 text-right">
-                  <p
-                    className={cn(
-                      "font-mono text-xs font-medium",
-                      isBreached
-                        ? "text-critical"
-                        : isUrgent
-                        ? "text-warning"
-                        : "text-text-muted"
-                    )}
+        <div className="overflow-x-auto">
+          {/* Tabla con scroll vertical fijo */}
+          <div className="max-h-[320px] overflow-y-auto">
+            <table className="w-full border-collapse text-xs">
+              <thead className="sticky top-0 z-10 bg-surface-elevated">
+                <tr className="border-b border-border">
+                  {["ID", "Grupo", "Asignado", "Tiempo abierto"].map((h) => (
+                    <th
+                      key={h}
+                      className="px-3 py-2 text-left font-medium uppercase tracking-wider text-text-muted"
+                    >
+                      {h}
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {incidents.map((inc) => (
+                  <tr
+                    key={inc.id}
+                    className="border-b border-border/50 bg-critical-dim/20 transition-colors hover:bg-critical-dim/40"
                   >
-                    {isBreached
-                      ? "SLA vencido"
-                      : minsLeft < 60
-                      ? `${minsLeft}m`
-                      : `${Math.floor(minsLeft / 60)}h ${minsLeft % 60}m`}
-                  </p>
-                  <p className="text-xs text-text-muted">
-                    {STATUS_LABELS[inc.status] ?? inc.status}
-                  </p>
-                </div>
-              </Link>
-            );
-          })}
+                    <td className="px-3 py-2 font-mono text-text-muted">
+                      {inc.id}
+                    </td>
+                    <td className="px-3 py-2">
+                      <GroupBadge group={inc.group} />
+                    </td>
+                    <td className="px-3 py-2 font-mono text-text-primary">
+                      {inc.assignedTo ?? (
+                        <span className="text-text-muted">—</span>
+                      )}
+                    </td>
+                    <td className="px-3 py-2 font-semibold text-critical">
+                      {elapsedLabel(inc.openTime)}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         </div>
       )}
     </div>

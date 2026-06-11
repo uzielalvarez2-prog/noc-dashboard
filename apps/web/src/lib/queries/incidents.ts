@@ -43,65 +43,59 @@ export async function getIncidentById(id: string) {
   return db.incident.findUnique({ where: { id } });
 }
 
+const SLA_MINS = 240; // 4 horas — mismo umbral que closedIncident.slaBreached
+
 export async function getKPIs() {
   const now = new Date();
+  const slaBreachThreshold = new Date(now.getTime() - SLA_MINS * 60_000);
+  const slaRiskThreshold = new Date(now.getTime() - SLA_MINS * 0.8 * 60_000); // 80% = 3.2h
   const todayStart = new Date(now);
   todayStart.setHours(0, 0, 0, 0);
 
-  const [
-    totalOpen,
-    criticalActive,
-    slaAtRisk,
-    closedToday,
-    criticalIncidents,
-    lastSync,
-  ] = await Promise.all([
-    db.incident.count({
-      where: { status: { in: ["OPEN", "IN_PROGRESS"] } },
+  const [openRows, closedToday, uploadedAtRow] = await Promise.all([
+    db.openIncident.findMany({
+      select: { incidentId: true, openTime: true, status: true, group: true, assignee: true },
+      orderBy: { openTime: "asc" },
     }),
-    db.incident.count({
-      where: { severity: "CRITICAL", status: { in: ["OPEN", "IN_PROGRESS"] } },
+    db.closedIncident.count({ where: { closeTime: { gte: todayStart } } }),
+    db.openIncident.findFirst({
+      orderBy: { uploadedAt: "desc" },
+      select: { uploadedAt: true },
     }),
-    db.incident.count({
-      where: {
-        slaRiskAt: { lte: now },
-        slaBreached: false,
-        status: { notIn: ["RESOLVED", "CLOSED"] },
-      },
-    }),
-    db.incident.count({
-      where: {
-        status: { in: ["RESOLVED", "CLOSED"] },
-        updatedAt: { gte: todayStart },
-      },
-    }),
-    db.incident.findMany({
-      where: { slaBreached: true, status: { notIn: ["RESOLVED", "CLOSED"] } },
-      orderBy: { slaDeadline: "asc" },
-      take: 10,
-      select: {
-        id: true,
-        title: true,
-        severity: true,
-        status: true,
-        assignedTo: true,
-        slaDeadline: true,
-        slaBreached: true,
-        createdAt: true,
-      },
-    }),
-    db.incident
-      .findFirst({ orderBy: { syncedAt: "desc" } })
-      .then((r) => r?.syncedAt?.toISOString() ?? new Date().toISOString()),
   ]);
 
+  // Deduplicar por incidentId conservando el openTime más antiguo
+  const incidentMap = new Map<string, (typeof openRows)[0]>();
+  for (const r of openRows) {
+    const prev = incidentMap.get(r.incidentId);
+    if (!prev || r.openTime < prev.openTime) incidentMap.set(r.incidentId, r);
+  }
+  const incidents = [...incidentMap.values()];
+
+  const breached = incidents.filter((r) => r.openTime <= slaBreachThreshold);
+  const atRisk = incidents.filter(
+    (r) => r.openTime > slaBreachThreshold && r.openTime <= slaRiskThreshold
+  );
+
+  const criticalIncidents = breached.slice(0, 10).map((r) => ({
+    id: r.incidentId,
+    title: `${r.incidentId} — ${r.group}`,
+    group: r.group,
+    severity: "HIGH" as const,
+    status: r.status,
+    assignedTo: r.assignee,
+    slaDeadline: new Date(r.openTime.getTime() + SLA_MINS * 60_000).toISOString(),
+    slaBreached: true,
+    openTime: r.openTime.toISOString(),
+  }));
+
   return {
-    totalOpen,
-    criticalActive,
-    slaAtRisk,
+    totalOpen: incidents.length,
+    criticalActive: breached.length,
+    slaAtRisk: atRisk.length,
     closedToday,
     criticalIncidents,
-    lastSync,
+    lastSync: uploadedAtRow?.uploadedAt?.toISOString() ?? new Date().toISOString(),
   };
 }
 
