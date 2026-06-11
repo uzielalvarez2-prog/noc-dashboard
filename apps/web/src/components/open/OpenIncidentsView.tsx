@@ -48,14 +48,18 @@ export function OpenIncidentsView() {
         <TopByDimension
           title="Top por Estado"
           dimensionLabel="Estado"
+          dimensionField="state"
           rows={stats?.topByState ?? []}
           fileBase={`top-estado-${group.toLowerCase()}`}
+          group={group}
         />
         <TopByDimension
           title="Top por Distrito"
           dimensionLabel="Distrito"
+          dimensionField="district"
           rows={stats?.topByDistrict ?? []}
           fileBase={`top-distrito-${group.toLowerCase()}`}
+          group={group}
         />
       </div>
 

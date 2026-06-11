@@ -1,34 +1,105 @@
 "use client";
 
 import { useState } from "react";
-import { Download, Copy, Check } from "lucide-react";
-import type { TopRow } from "@/types/open";
-import {
-  topToCSV,
-  downloadCSV,
-  topToHTMLTable,
-  copyHTMLTable,
-  topToPlain,
-} from "@/lib/openExport";
+import { Download, Copy, Check, Loader2 } from "lucide-react";
+import type { TopRow, OpenIncidentRow } from "@/types/open";
+import { downloadCSV, copyHTMLTable } from "@/lib/openExport";
 import { cn } from "@/lib/utils";
 
 type Metric = "sites" | "incidents";
 
+// Paleta de colores distinta por posición
+const PALETTE = [
+  "#38bdf8", "#f59e0b", "#a78bfa", "#34d399", "#fb7185",
+  "#fb923c", "#22d3ee", "#f472b6", "#a3e635", "#e879f9",
+  "#4ade80", "#94a3b8",
+];
+
+function csvCell(s: string): string {
+  return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+}
+
+function escapeHtml(s: string): string {
+  return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+}
+
+function detailToCSV(rows: OpenIncidentRow[], dimLabel: string, dimField: "state" | "district"): string {
+  const header = ["IM", "Empresa", "Referencia/Servicio", "Apertura", dimLabel, "Asignado", "Estatus", "Grupo"].join(",");
+  const lines = rows.map((r) =>
+    [
+      csvCell(r.incidentId),
+      csvCell(r.company),
+      csvCell(r.serviceId),
+      csvCell(new Date(r.openTime).toLocaleString("es-MX", { hour12: false })),
+      csvCell(dimField === "state" ? r.state : r.district),
+      csvCell(r.assignee ?? ""),
+      csvCell(r.status),
+      csvCell(r.group),
+    ].join(",")
+  );
+  return [header, ...lines].join("\r\n");
+}
+
+function detailToHTML(rows: OpenIncidentRow[], title: string, dimLabel: string, dimField: "state" | "district"): string {
+  const th = (s: string) => `<th style="background:#1e293b;color:#94a3b8;padding:6px 10px;text-align:left;white-space:nowrap">${escapeHtml(s)}</th>`;
+  const td = (s: string) => `<td style="padding:5px 10px;border-bottom:1px solid #334155;white-space:nowrap">${escapeHtml(s)}</td>`;
+  const head = [th("IM"), th("Empresa"), th("Ref/Servicio"), th("Apertura"), th(dimLabel), th("Asignado"), th("Estatus"), th("Grupo")].join("");
+  const body = rows
+    .map((r) =>
+      `<tr>${[
+        td(r.incidentId),
+        td(r.company),
+        td(r.serviceId),
+        td(new Date(r.openTime).toLocaleString("es-MX", { hour12: false })),
+        td(dimField === "state" ? r.state : r.district),
+        td(r.assignee ?? "—"),
+        td(r.status),
+        td(r.group),
+      ].join("")}</tr>`
+    )
+    .join("");
+  return `<table style="border-collapse:collapse;font-family:Arial,sans-serif;font-size:12px;color:#e2e8f0">
+<caption style="font-weight:bold;text-align:left;padding-bottom:8px;font-size:14px;color:#f8fafc">${escapeHtml(title)}</caption>
+<thead><tr>${head}</tr></thead>
+<tbody>${body}</tbody>
+</table>`;
+}
+
+async function fetchTopDetail(
+  topName: string,
+  dimensionField: "state" | "district",
+  group?: string
+): Promise<OpenIncidentRow[]> {
+  const params = new URLSearchParams();
+  if (group && group !== "ALL") params.set("group", group);
+  params.set(dimensionField, topName);
+  params.set("limit", "500");
+  const res = await fetch(`/api/incidents/open?${params}`);
+  if (!res.ok) throw new Error("Error al obtener detalle");
+  const json = await res.json();
+  return (json.data ?? []) as OpenIncidentRow[];
+}
+
 export function TopByDimension({
   title,
   dimensionLabel,
+  dimensionField = "state",
   rows,
   fileBase,
+  group,
   limit = 12,
 }: {
   title: string;
   dimensionLabel: string;
+  dimensionField?: "state" | "district";
   rows: TopRow[];
   fileBase: string;
+  group?: string;
   limit?: number;
 }) {
   const [metric, setMetric] = useState<Metric>("sites");
   const [copied, setCopied] = useState(false);
+  const [loadingExport, setLoadingExport] = useState(false);
 
   const sorted = [...rows].sort((a, b) =>
     metric === "sites" ? b.sites - a.sites : b.incidents - a.incidents
@@ -38,21 +109,41 @@ export function TopByDimension({
   const totalInc = rows.reduce((s, r) => s + r.incidents, 0);
   const max = Math.max(1, ...top.map((r) => (metric === "sites" ? r.sites : r.incidents)));
 
+  const topEntry = sorted[0]; // el que más tiene
+
   async function onCopy() {
-    const html = topToHTMLTable(
-      top,
-      `${title} — ${metric === "sites" ? "sitios afectados" : "incidentes"}`,
-      dimensionLabel,
-      metric
-    );
-    if (await copyHTMLTable(html, topToPlain(top, metric))) {
-      setCopied(true);
-      setTimeout(() => setCopied(false), 1500);
+    if (!topEntry) return;
+    setLoadingExport(true);
+    try {
+      const detail = await fetchTopDetail(topEntry.name, dimensionField, group);
+      const html = detailToHTML(
+        detail,
+        `${title} — ${topEntry.name} (${detail.length} incidentes)`,
+        dimensionLabel,
+        dimensionField
+      );
+      const plain = detail
+        .map((r) => `${r.incidentId}\t${r.company}\t${r.serviceId}\t${new Date(r.openTime).toLocaleString("es-MX")}\t${dimensionField === "state" ? r.state : r.district}\t${r.assignee ?? ""}\t${r.status}`)
+        .join("\n");
+      if (await copyHTMLTable(html, plain)) {
+        setCopied(true);
+        setTimeout(() => setCopied(false), 2000);
+      }
+    } finally {
+      setLoadingExport(false);
     }
   }
 
-  function onExport() {
-    downloadCSV(`${fileBase}.csv`, topToCSV(sorted, dimensionLabel));
+  async function onExport() {
+    if (!topEntry) return;
+    setLoadingExport(true);
+    try {
+      const detail = await fetchTopDetail(topEntry.name, dimensionField, group);
+      const csv = detailToCSV(detail, dimensionLabel, dimensionField);
+      downloadCSV(`${fileBase}-detalle-${topEntry.name.toLowerCase().replace(/\s+/g, "-")}.csv`, csv);
+    } finally {
+      setLoadingExport(false);
+    }
   }
 
   const chip = (active: boolean) =>
@@ -77,10 +168,11 @@ export function TopByDimension({
 
       <div className="space-y-1.5">
         {top.length === 0 && (
-          <p className="py-6 text-center text-xs text-text-muted">Sin datos — sube un CSV de abiertos</p>
+          <p className="py-6 text-center text-xs text-text-muted">Sin datos</p>
         )}
-        {top.map((r) => {
+        {top.map((r, idx) => {
           const v = metric === "sites" ? r.sites : r.incidents;
+          const color = PALETTE[idx % PALETTE.length];
           return (
             <div key={r.name} className="flex items-center gap-2">
               <span className="w-40 shrink-0 truncate text-xs text-text-primary" title={r.name}>
@@ -88,35 +180,59 @@ export function TopByDimension({
               </span>
               <div className="relative h-4 flex-1 overflow-hidden rounded bg-surface-elevated/60">
                 <div
-                  className="absolute inset-y-0 left-0 rounded bg-accent/30"
-                  style={{ width: `${(v / max) * 100}%` }}
+                  className="absolute inset-y-0 left-0 rounded transition-all duration-500"
+                  style={{ width: `${(v / max) * 100}%`, backgroundColor: color, opacity: 0.55 }}
                 />
               </div>
-              <span className="w-10 shrink-0 text-right font-mono text-xs text-text-primary">{v}</span>
+              <span
+                className="w-10 shrink-0 text-right font-mono text-xs font-semibold"
+                style={{ color }}
+              >
+                {v}
+              </span>
             </div>
           );
         })}
       </div>
 
       <div className="mt-3 flex items-center justify-between border-t border-border/50 pt-3">
-        <span className="text-xs text-text-muted">
-          {totalSites} sitios · {totalInc} incidentes
-        </span>
+        <div className="text-xs text-text-muted">
+          <span className="font-semibold text-text-primary">{totalSites}</span> sitios ·{" "}
+          <span className="font-semibold text-text-primary">{totalInc}</span> incidentes
+          {topEntry && (
+            <span className="ml-2 text-text-muted/70">
+              · detalle: <span className="text-text-primary">{topEntry.name}</span>
+            </span>
+          )}
+        </div>
         <div className="flex gap-2">
           <button
             type="button"
             onClick={onCopy}
-            className="flex items-center gap-1 rounded-md border border-border bg-surface px-2 py-1 text-xs text-text-muted transition-colors hover:text-text-primary"
+            disabled={loadingExport || !topEntry}
+            className="flex items-center gap-1 rounded-md border border-border bg-surface px-2 py-1 text-xs text-text-muted transition-colors hover:text-text-primary disabled:opacity-50"
           >
-            {copied ? <Check className="h-3.5 w-3.5 text-success" /> : <Copy className="h-3.5 w-3.5" />}
-            {copied ? "Copiado" : "Copiar tabla"}
+            {loadingExport ? (
+              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+            ) : copied ? (
+              <Check className="h-3.5 w-3.5 text-success" />
+            ) : (
+              <Copy className="h-3.5 w-3.5" />
+            )}
+            {copied ? "Copiado" : "Copiar correo"}
           </button>
           <button
             type="button"
             onClick={onExport}
-            className="flex items-center gap-1 rounded-md border border-border bg-surface px-2 py-1 text-xs text-text-muted transition-colors hover:text-text-primary"
+            disabled={loadingExport || !topEntry}
+            className="flex items-center gap-1 rounded-md border border-border bg-surface px-2 py-1 text-xs text-text-muted transition-colors hover:text-text-primary disabled:opacity-50"
           >
-            <Download className="h-3.5 w-3.5" /> Excel
+            {loadingExport ? (
+              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+            ) : (
+              <Download className="h-3.5 w-3.5" />
+            )}
+            Excel detalle
           </button>
         </div>
       </div>
