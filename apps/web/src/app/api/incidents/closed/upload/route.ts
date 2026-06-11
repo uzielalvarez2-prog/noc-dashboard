@@ -16,7 +16,9 @@ import {
 // apertura y cierre calculamos el SLA (4 h) aquí mismo. Upsert por incidentId:
 // re-subir el archivo del día actualiza en vez de duplicar.
 export async function POST(req: NextRequest) {
-  const session = getSessionFromRequest(req);
+  const internalKey = process.env.INTERNAL_API_KEY;
+  const isInternal = internalKey && req.headers.get("x-internal-key") === internalKey;
+  const session = isInternal ? { id: "scraper-bot" } : getSessionFromRequest(req);
   if (!session) return NextResponse.json({ error: "No autorizado" }, { status: 401 });
 
   try {

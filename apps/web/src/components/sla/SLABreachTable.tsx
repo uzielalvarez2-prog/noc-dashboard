@@ -1,21 +1,36 @@
-import Link from "next/link";
-import { SeverityBadge } from "@/components/incidents/SeverityBadge";
 import { formatDate } from "@/lib/utils";
-import type { Severity } from "@/types";
 
 interface BreachRow {
-  id: string;
-  title: string;
-  severity: Severity;
-  status: string;
-  assignedTo: string | null;
-  slaDeadline: Date | string;
-  createdAt: Date | string;
+  incidentId: string;
+  group: string;
+  closedBy: string;
+  resCause: string;
+  resolutionMins: number;
+  openTime: Date | string;
+  closeTime: Date | string;
 }
 
-const STATUS_LABELS: Record<string, string> = {
-  OPEN: "Abierto", IN_PROGRESS: "En progreso", RESOLVED: "Resuelto", CLOSED: "Cerrado",
-};
+function GroupBadge({ group }: { group: string }) {
+  const isP = group === "PEXA";
+  return (
+    <span
+      className={`rounded px-1.5 py-0.5 text-[10px] font-semibold ${
+        isP ? "bg-accent/15 text-accent" : "bg-warning/15 text-warning"
+      }`}
+    >
+      {group}
+    </span>
+  );
+}
+
+function ResTime({ mins }: { mins: number }) {
+  const h = Math.floor(mins / 60);
+  const m = mins % 60;
+  const label = h > 0 ? `${h}h ${m}m` : `${m}m`;
+  return (
+    <span className="font-mono text-xs text-critical font-semibold">{label}</span>
+  );
+}
 
 export function SLABreachTable({ breaches }: { breaches: BreachRow[] }) {
   return (
@@ -38,8 +53,11 @@ export function SLABreachTable({ breaches }: { breaches: BreachRow[] }) {
           <table className="w-full border-collapse text-sm">
             <thead>
               <tr className="border-b border-border bg-surface-elevated">
-                {["ID", "Título", "Severidad", "Estado", "Asignado", "Deadline SLA", "Abierto"].map((h) => (
-                  <th key={h} className="px-4 py-2 text-left text-xs font-medium uppercase tracking-wider text-text-muted">
+                {["ID", "Grupo", "Asignado", "Causa", "Tiempo", "Abierto", "Cerrado"].map((h) => (
+                  <th
+                    key={h}
+                    className="px-4 py-2 text-left text-xs font-medium uppercase tracking-wider text-text-muted"
+                  >
                     {h}
                   </th>
                 ))}
@@ -47,20 +65,33 @@ export function SLABreachTable({ breaches }: { breaches: BreachRow[] }) {
             </thead>
             <tbody>
               {breaches.map((row) => (
-                <tr key={row.id} className="border-b border-border bg-critical-dim/30 hover:bg-critical-dim/60 transition-colors">
+                <tr
+                  key={row.incidentId}
+                  className="border-b border-border bg-critical-dim/30 hover:bg-critical-dim/60 transition-colors"
+                >
+                  <td className="px-4 py-2 font-mono text-xs text-text-muted">
+                    {row.incidentId}
+                  </td>
                   <td className="px-4 py-2">
-                    <Link href={`/incidents/${row.id}`} className="font-mono text-xs text-accent hover:underline">
-                      {row.id}
-                    </Link>
+                    <GroupBadge group={row.group} />
                   </td>
-                  <td className="max-w-xs px-4 py-2">
-                    <p className="truncate text-sm text-text-primary">{row.title}</p>
+                  <td className="px-4 py-2 font-mono text-xs text-text-primary">
+                    {row.closedBy || "—"}
                   </td>
-                  <td className="px-4 py-2"><SeverityBadge severity={row.severity} /></td>
-                  <td className="px-4 py-2 text-xs text-text-muted">{STATUS_LABELS[row.status] ?? row.status}</td>
-                  <td className="px-4 py-2 font-mono text-xs text-text-muted">{row.assignedTo ?? "—"}</td>
-                  <td className="px-4 py-2 font-mono text-xs text-critical">{formatDate(row.slaDeadline)}</td>
-                  <td className="px-4 py-2 font-mono text-xs text-text-muted">{formatDate(row.createdAt)}</td>
+                  <td className="max-w-[180px] px-4 py-2">
+                    <p className="truncate text-xs text-text-muted" title={row.resCause}>
+                      {row.resCause || "—"}
+                    </p>
+                  </td>
+                  <td className="px-4 py-2">
+                    <ResTime mins={row.resolutionMins} />
+                  </td>
+                  <td className="px-4 py-2 font-mono text-xs text-text-muted">
+                    {formatDate(row.openTime)}
+                  </td>
+                  <td className="px-4 py-2 font-mono text-xs text-text-muted">
+                    {formatDate(row.closeTime)}
+                  </td>
                 </tr>
               ))}
             </tbody>

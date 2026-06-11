@@ -73,10 +73,13 @@ interface TopRow {
   incidents: number;
 }
 
+// TOP 10 de zonas con más incidentes, descendente (requerimiento del usuario:
+// un ranking por Site Name State y otro por Site Name District).
 function topFrom(map: Map<string, { sites: number; ids: Set<string> }>): TopRow[] {
   return [...map.entries()]
     .map(([name, v]) => ({ name: name || "(sin dato)", sites: v.sites, incidents: v.ids.size }))
-    .sort((a, b) => b.sites - a.sites);
+    .sort((a, b) => b.sites - a.sites)
+    .slice(0, 10);
 }
 
 /**

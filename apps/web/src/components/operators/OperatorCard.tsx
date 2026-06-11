@@ -1,6 +1,6 @@
 import { cn } from "@/lib/utils";
-import { User, CheckCircle, AlertTriangle, TrendingUp } from "lucide-react";
-import type { OperatorWithMetrics } from "@/lib/queries/operators";
+import { User } from "lucide-react";
+import type { OperatorStats } from "@/lib/queries/operators";
 
 function Metric({ label, value, color }: { label: string; value: number | string; color?: string }) {
   return (
@@ -11,42 +11,37 @@ function Metric({ label, value, color }: { label: string; value: number | string
   );
 }
 
-export function OperatorCard({ op }: { op: OperatorWithMetrics }) {
+export function OperatorCard({ op }: { op: OperatorStats }) {
   const complianceColor =
     op.slaCompliance >= 90 ? "text-success" :
     op.slaCompliance >= 70 ? "text-warning" : "text-critical";
 
   return (
-    <div className={cn(
-      "rounded-lg border bg-surface p-5 transition-colors hover:bg-surface-elevated",
-      op.isOnShift ? "border-success/40" : "border-border opacity-70"
-    )}>
+    <div className="rounded-lg border border-border bg-surface p-5 transition-colors hover:bg-surface-elevated">
       {/* Header */}
       <div className="flex items-start justify-between gap-2">
         <div className="flex items-center gap-3">
           <div className="flex h-9 w-9 items-center justify-center rounded-full bg-surface-elevated">
             <User className="h-4 w-4 text-text-muted" />
           </div>
-          <div>
-            <p className="font-semibold text-text-primary text-sm">{op.name}</p>
-            <p className="font-mono text-xs text-text-muted">{op.id}</p>
-          </div>
+          <p className="font-semibold text-text-primary text-sm">{op.name}</p>
         </div>
 
-        <span className={cn(
-          "shrink-0 rounded-full px-2 py-0.5 text-xs font-medium",
-          op.isOnShift
-            ? "bg-success-dim text-success"
-            : "bg-surface-elevated text-text-muted"
-        )}>
-          {op.isOnShift ? "En turno" : "Fuera de turno"}
-        </span>
+        {/* Badges de grupo */}
+        <div className="flex gap-1 shrink-0">
+          {op.groups.map((g) => (
+            <span
+              key={g}
+              className={cn(
+                "rounded px-1.5 py-0.5 text-[10px] font-semibold",
+                g === "PEXA" ? "bg-accent/15 text-accent" : "bg-warning/15 text-warning"
+              )}
+            >
+              {g}
+            </span>
+          ))}
+        </div>
       </div>
-
-      {/* Team */}
-      <p className="mt-2 text-xs text-text-muted">
-        Equipo: <span className="text-text-primary">{op.team}</span>
-      </p>
 
       {/* Divider */}
       <div className="my-4 h-px bg-border" />
@@ -54,13 +49,13 @@ export function OperatorCard({ op }: { op: OperatorWithMetrics }) {
       {/* Métricas */}
       <div className="grid grid-cols-3 gap-2">
         <Metric
-          label="Asignados"
-          value={op.assignedCount}
-          color={op.assignedCount > 5 ? "text-warning" : undefined}
+          label="Abiertos"
+          value={op.openCount}
+          color={op.openCount > 5 ? "text-warning" : undefined}
         />
         <Metric
           label="Cerrados"
-          value={op.resolvedCount}
+          value={op.closedCount}
           color="text-success"
         />
         <Metric

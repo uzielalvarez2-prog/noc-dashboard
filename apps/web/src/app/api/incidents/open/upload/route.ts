@@ -15,7 +15,9 @@ import {
 // por (incidente + estado + distrito) y REEMPLAZAMOS el snapshot completo, porque
 // los abiertos son una foto del momento (lo que ya no está = se resolvió).
 export async function POST(req: NextRequest) {
-  const session = getSessionFromRequest(req);
+  const internalKey = process.env.INTERNAL_API_KEY;
+  const isInternal = internalKey && req.headers.get("x-internal-key") === internalKey;
+  const session = isInternal ? { id: "scraper-bot" } : getSessionFromRequest(req);
   if (!session) return NextResponse.json({ error: "No autorizado" }, { status: 401 });
 
   try {
@@ -30,20 +32,30 @@ export async function POST(req: NextRequest) {
     if (rows.length === 0)
       return NextResponse.json({ error: "El CSV está vacío" }, { status: 400 });
 
+    const groupParam = ((formData.get("group") as string) || "").trim().toUpperCase();
+
     const headers = Object.keys(rows[0]);
-    const cId = pickCol(headers, ["Incident ID"]);
-    const cTime = pickCol(headers, ["Open Time"]);
+    const cId = pickCol(headers, ["Incident ID", "ID"]);
+    const cTime = pickCol(headers, ["Open Time", "Opened", "Open"]);
     const cStatus = pickCol(headers, ["Status"]);
     const cCompany = pickCol(headers, ["Company"]);
     const cService = pickCol(headers, ["Service Uniqueid", "Service"]);
-    const cState = pickCol(headers, ["Site Name State"]);
-    const cAssignee = pickCol(headers, ["Assignee"]);
-    const cDistrict = pickCol(headers, ["Site Name District"]);
+    // El scraper exporta "Region" (región Telmex) y "Divisional"; los nombres
+    // "Site Name State/District" se aceptan por compatibilidad con CSVs manuales.
+    const cState = pickCol(headers, ["Site Name State", "Site State", "Region", "Site Name"]);
+    const cAssignee = pickCol(headers, ["Assignee", "Opened by"]);
+    const cDistrict = pickCol(headers, ["Site Name District", "Site District", "Divisional"]);
     const cGroup = pickCol(headers, ["Assignment Group"]);
 
-    if (!cId || !cGroup) {
+    if (!cId) {
       return NextResponse.json(
-        { error: "El CSV no tiene las columnas 'Incident ID' y/o 'Assignment Group'." },
+        { error: "El CSV no tiene columna 'Incident ID' ni 'ID'." },
+        { status: 400 }
+      );
+    }
+    if (!cGroup && !isActiveGroup(groupParam)) {
+      return NextResponse.json(
+        { error: "El CSV no tiene 'Assignment Group' y no se pasó el parámetro 'group' (PEXA/CECOR)." },
         { status: 400 }
       );
     }
@@ -63,11 +75,14 @@ export async function POST(req: NextRequest) {
     let activeRows = 0;
 
     for (const row of rows) {
-      const group = (row[cGroup] ?? "").trim().toUpperCase();
+      const group = cGroup ? (row[cGroup] ?? "").trim().toUpperCase() : groupParam;
       if (!isActiveGroup(group)) continue;
       activeRows++;
       const incidentId = (row[cId] ?? "").trim();
       if (!incidentId) continue;
+      // Excluir incidentes cerrados que puedan aparecer si la búsqueda no filtró por status
+      const rowStatus = cStatus ? (row[cStatus] ?? "").trim().toLowerCase() : "";
+      if (rowStatus === "closed") continue;
       const state = cState ? (row[cState] ?? "").trim() : "";
       const district = cDistrict ? (row[cDistrict] ?? "").trim() : "";
       const key = `${incidentId}|${state}|${district}`;
@@ -96,11 +111,15 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // Reemplazo atómico del snapshot.
-    await db.$transaction([
-      db.openIncident.deleteMany({}),
-      db.openIncident.createMany({ data: records, skipDuplicates: true }),
-    ]);
+    // Reemplazo atómico del snapshot. maxWait amplio: el pooler de Neon puede
+    // tardar varios segundos en abrir la transacción (P2028 con el default de 2s).
+    await db.$transaction(
+      async (tx) => {
+        await tx.openIncident.deleteMany({});
+        await tx.openIncident.createMany({ data: records, skipDuplicates: true });
+      },
+      { maxWait: 20_000, timeout: 90_000 }
+    );
 
     const uniqueIncidents = new Set(records.map((r) => r.incidentId)).size;
 

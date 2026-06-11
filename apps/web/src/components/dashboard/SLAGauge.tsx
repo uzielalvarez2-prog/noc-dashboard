@@ -2,11 +2,16 @@
 
 import { useQuery } from "@tanstack/react-query";
 import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer } from "recharts";
-import { cn } from "@/lib/utils";
+
+interface GroupData {
+  compliance: number;
+  total: number;
+  breached: number;
+}
 
 interface SLAData {
   global: { compliance: number; total: number; breached: number; atRisk: number };
-  bySeverity: Record<string, { compliance: number; total: number; breached: number }>;
+  byGroup: Record<string, GroupData>;
 }
 
 async function fetchSLA(): Promise<SLAData> {
@@ -15,11 +20,9 @@ async function fetchSLA(): Promise<SLAData> {
   return res.json();
 }
 
-const SEVERITY_COLORS: Record<string, string> = {
-  CRITICAL: "#ef4444",
-  HIGH: "#f59e0b",
-  MEDIUM: "#38bdf8",
-  LOW: "#64748b",
+const GROUP_COLORS: Record<string, string> = {
+  PEXA:  "#38bdf8",
+  CECOR: "#f59e0b",
 };
 
 interface SLAGaugeProps {
@@ -43,7 +46,7 @@ export function SLAGauge({ initial }: SLAGaugeProps) {
   const complianceColor =
     compliance >= 90 ? "#22c55e" : compliance >= 70 ? "#f59e0b" : "#ef4444";
 
-  const severities = ["CRITICAL", "HIGH", "MEDIUM", "LOW"] as const;
+  const groups = Object.keys(data.byGroup);
 
   return (
     <div className="rounded-lg border border-border bg-surface p-5">
@@ -83,36 +86,28 @@ export function SLAGauge({ initial }: SLAGaugeProps) {
             </PieChart>
           </ResponsiveContainer>
           <div className="absolute inset-0 flex flex-col items-center justify-center">
-            <span
-              className="text-2xl font-bold"
-              style={{ color: complianceColor }}
-            >
+            <span className="text-2xl font-bold" style={{ color: complianceColor }}>
               {compliance}%
             </span>
             <span className="text-xs text-text-muted">Global</span>
           </div>
         </div>
 
-        {/* Por severidad */}
+        {/* Por grupo */}
         <div className="flex flex-1 flex-col gap-2 w-full">
-          {severities.map((sev) => {
-            const d = data.bySeverity[sev];
+          {groups.map((group) => {
+            const d = data.byGroup[group];
             if (!d) return null;
+            const color = GROUP_COLORS[group] ?? "#64748b";
             return (
-              <div key={sev} className="flex items-center gap-3">
-                <span
-                  className="w-16 shrink-0 text-xs font-medium"
-                  style={{ color: SEVERITY_COLORS[sev] }}
-                >
-                  {sev}
+              <div key={group} className="flex items-center gap-3">
+                <span className="w-16 shrink-0 text-xs font-medium" style={{ color }}>
+                  {group}
                 </span>
                 <div className="relative h-2 flex-1 rounded-full bg-surface-elevated overflow-hidden">
                   <div
                     className="absolute inset-y-0 left-0 rounded-full transition-all duration-500"
-                    style={{
-                      width: `${d.compliance}%`,
-                      backgroundColor: SEVERITY_COLORS[sev],
-                    }}
+                    style={{ width: `${d.compliance}%`, backgroundColor: color }}
                   />
                 </div>
                 <span className="w-10 shrink-0 text-right text-xs font-mono text-text-muted">
@@ -125,7 +120,6 @@ export function SLAGauge({ initial }: SLAGaugeProps) {
           <div className="mt-2 flex gap-4 text-xs text-text-muted">
             <span>Total: <b className="text-text-primary">{data.global.total}</b></span>
             <span>Breach: <b className="text-critical">{data.global.breached}</b></span>
-            <span>En riesgo: <b className="text-warning">{data.global.atRisk}</b></span>
           </div>
         </div>
       </div>

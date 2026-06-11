@@ -16,6 +16,12 @@ export function proxy(request: NextRequest) {
   const isPublic = PUBLIC_PATHS.some((p) => pathname.startsWith(p));
   if (isPublic) return NextResponse.next();
 
+  // Llamadas internas del scraper: clave en header bypass la sesión de usuario
+  const internalKey = process.env.INTERNAL_API_KEY;
+  if (internalKey && request.headers.get("x-internal-key") === internalKey) {
+    return NextResponse.next();
+  }
+
   const cookieValue = request.cookies.get(COOKIE_NAME)?.value;
   const session = getSessionFromCookie(cookieValue);
 

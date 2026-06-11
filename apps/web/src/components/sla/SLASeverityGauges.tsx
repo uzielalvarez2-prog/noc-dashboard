@@ -1,56 +1,54 @@
 import { cn } from "@/lib/utils";
-import type { Severity } from "@/types";
 
-const SEV_COLORS: Record<Severity, { bar: string; text: string; bg: string }> = {
-  CRITICAL: { bar: "bg-critical",  text: "text-critical",  bg: "bg-critical-dim"  },
-  HIGH:     { bar: "bg-warning",   text: "text-warning",   bg: "bg-warning-dim"   },
-  MEDIUM:   { bar: "bg-info",      text: "text-info",      bg: "bg-[#0c1f33]"     },
-  LOW:      { bar: "bg-text-muted", text: "text-text-muted", bg: "bg-surface-elevated" },
+const GROUP_COLORS: Record<string, { bar: string; text: string; bg: string }> = {
+  PEXA:  { bar: "bg-accent",   text: "text-accent",   bg: "bg-accent/10"   },
+  CECOR: { bar: "bg-warning",  text: "text-warning",  bg: "bg-warning/10"  },
 };
 
-const SEV_LABELS: Record<Severity, string> = {
-  CRITICAL: "Crítico", HIGH: "Alto", MEDIUM: "Medio", LOW: "Bajo",
-};
-
-interface SeverityData {
+interface GroupData {
   compliance: number;
   total: number;
   breached: number;
 }
 
-interface SLASeverityGaugesProps {
-  bySeverity: Record<Severity, SeverityData>;
+interface SLAGroupGaugesProps {
+  byGroup: Record<string, GroupData>;
 }
 
-export function SLASeverityGauges({ bySeverity }: SLASeverityGaugesProps) {
-  const severities: Severity[] = ["CRITICAL", "HIGH", "MEDIUM", "LOW"];
+export function SLASeverityGauges({ byGroup }: SLAGroupGaugesProps) {
+  const groups = Object.keys(byGroup);
+
+  if (groups.length === 0) {
+    return (
+      <div className="rounded-lg border border-border bg-surface p-6 text-center text-sm text-text-muted">
+        Sin datos de grupos disponibles
+      </div>
+    );
+  }
 
   return (
-    <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
-      {severities.map((sev) => {
-        const d = bySeverity[sev];
-        const { bar, text, bg } = SEV_COLORS[sev];
+    <div className="grid grid-cols-2 gap-4">
+      {groups.map((group) => {
+        const d = byGroup[group];
+        const colors = GROUP_COLORS[group] ?? { bar: "bg-text-muted", text: "text-text-muted", bg: "bg-surface-elevated" };
         return (
-          <div key={sev} className={cn("rounded-lg border border-border p-4", bg)}>
-            <p className={cn("text-xs font-semibold uppercase tracking-wider", text)}>
-              {SEV_LABELS[sev]}
+          <div key={group} className={cn("rounded-lg border border-border p-4", colors.bg)}>
+            <p className={cn("text-xs font-semibold uppercase tracking-wider", colors.text)}>
+              {group}
             </p>
 
-            {/* Número grande */}
-            <p className={cn("mt-2 text-4xl font-bold tabular-nums", text)}>
+            <p className={cn("mt-2 text-4xl font-bold tabular-nums", colors.text)}>
               {d.compliance}%
             </p>
-            <p className="text-xs text-text-muted">cumplimiento</p>
+            <p className="text-xs text-text-muted">cumplimiento SLA</p>
 
-            {/* Barra */}
             <div className="mt-3 h-1.5 w-full rounded-full bg-surface-elevated overflow-hidden">
               <div
-                className={cn("h-full rounded-full transition-all duration-700", bar)}
+                className={cn("h-full rounded-full transition-all duration-700", colors.bar)}
                 style={{ width: `${d.compliance}%` }}
               />
             </div>
 
-            {/* Conteos */}
             <div className="mt-3 flex justify-between text-xs text-text-muted">
               <span>Total: <b className="text-text-primary">{d.total}</b></span>
               <span>Breach: <b className={d.breached > 0 ? "text-critical" : "text-text-primary"}>{d.breached}</b></span>

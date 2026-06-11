@@ -14,14 +14,11 @@ const EMPTY_KPIS = {
   closedToday: 0, lastSync: new Date().toISOString(),
 };
 const EMPTY_SLA = {
-  global: { compliance: 100, total: 0, breached: 0, atRisk: 0, resolved: 0 },
-  bySeverity: {
-    CRITICAL: { compliance: 100, total: 0, breached: 0 },
-    HIGH:     { compliance: 100, total: 0, breached: 0 },
-    MEDIUM:   { compliance: 100, total: 0, breached: 0 },
-    LOW:      { compliance: 100, total: 0, breached: 0 },
+  global: { compliance: 100, total: 0, breached: 0, atRisk: 0 },
+  byGroup: {
+    PEXA:  { compliance: 100, total: 0, breached: 0 },
+    CECOR: { compliance: 100, total: 0, breached: 0 },
   },
-  trend: { hour: 0, day: 0, week: 0 },
 };
 
 export default async function OverviewPage() {
