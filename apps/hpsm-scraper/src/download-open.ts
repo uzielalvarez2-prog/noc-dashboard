@@ -1,29 +1,11 @@
 import { mkdirSync } from "node:fs";
 import { join } from "node:path";
-import type { Page } from "playwright";
 import { config } from "./config.js";
 import { logger } from "./logger.js";
 import { openHpsmSession, exportCurrentViewToCsv, clearSession } from "./session.js";
 
 const FAVORITES_QUEUE = "All Open Incidents CARE";
 
-/** Espera a que aparezca el botón "More" en cualquier frame — señal de que la vista está lista. */
-async function waitForMoreButton(page: Page, timeoutMs: number): Promise<boolean> {
-  const deadline = Date.now() + timeoutMs;
-  while (Date.now() < deadline) {
-    for (const frame of page.frames()) {
-      try {
-        const n = await frame.locator(':text-is("More")').count();
-        if (n > 0) {
-          logger.info(`More button detectado en: ${frame.url()}`);
-          return true;
-        }
-      } catch { /* frame stale, ignorar */ }
-    }
-    await page.waitForTimeout(1_000);
-  }
-  return false;
-}
 
 async function main(): Promise<void> {
   mkdirSync(config.downloadDir, { recursive: true });
@@ -88,20 +70,15 @@ async function main(): Promise<void> {
       throw new Error(`"${FAVORITES_QUEUE}" no encontrado en la barra lateral tras 20s`);
     }
 
-    // ── 3. Esperar que cargue la lista (buscar botón "More" en cualquier frame) ──
-    logger.info("Esperando que cargue la vista de incidentes (hasta 120s)...");
-    await page.waitForTimeout(2_000);
-    logger.info(`Frames tras click: ${page.frames().map(f => f.url()).join(" | ")}`);
-    await page.screenshot({ path: "debug-open-step2-afterclick.png", fullPage: true });
-
-    const listLoaded = await waitForMoreButton(page, 120_000);
-    if (!listLoaded) {
-      await page.screenshot({ path: "debug-open-step2-nolist.png", fullPage: true });
-      throw new Error("La vista de incidentes no cargó (botón More no apareció en 120s)");
-    }
-    await page.waitForTimeout(2_000);
-    logger.info(`Frames activos: ${page.frames().map(f => f.url()).join(" | ")}`);
-    await page.screenshot({ path: "debug-open-step2-list.png", fullPage: true });
+    // ── 3. Esperar que cargue el queue (~20-30s manualmente) ────────────────────
+    // Esperamos 40s fijo: suficiente para que HPSM renderice la vista completa.
+    logger.info("Esperando 40s para que cargue el queue de incidentes...");
+    await page.waitForTimeout(5_000);
+    logger.info(`Frames a los 5s: ${page.frames().map(f => f.url()).join(" | ")}`);
+    await page.screenshot({ path: "debug-open-step2-5s.png", fullPage: true });
+    await page.waitForTimeout(35_000);
+    logger.info(`Frames a los 40s: ${page.frames().map(f => f.url()).join(" | ")}`);
+    await page.screenshot({ path: "debug-open-step2-40s.png", fullPage: true });
 
     // ── 4. More → Export to Text File → CSV → ✓ ─────────────────────────────
     logger.info("Exportando vista a CSV...");
