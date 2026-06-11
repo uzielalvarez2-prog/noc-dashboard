@@ -88,18 +88,15 @@ export async function openHpsmSession(): Promise<HpsmSession> {
     close: async () => {
       // Logout de HPSM — libera la sesión del servidor y evita acumular logins activos
       try {
-        const logoutUrl = await page.evaluate(() =>
+        // Intentar leer la URL de logout desde cwc; si no está, usar la ruta conocida como fallback
+        const logoutPath = await page.evaluate(() =>
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
           (window as any).cwc?.logoutCleanupJsp as string | undefined ?? null
-        ).catch(() => null);
-        if (logoutUrl) {
-          logger.info(`Logout HPSM: ${logoutUrl}`);
-          await page.goto(logoutUrl, { timeout: 10_000, waitUntil: "domcontentloaded" }).catch(() => {});
-        } else {
-          logger.warn("logoutCleanupJsp no encontrado — sesión HPSM puede quedar activa");
-        }
+        ).catch(() => null) ?? "/sm/cwc/logoutcleanup.jsp?lang=en";
+        const logoutUrl = new URL(logoutPath, config.hpsm.url).href;
+        logger.info(`Logout HPSM: ${logoutUrl}`);
+        await page.goto(logoutUrl, { timeout: 10_000, waitUntil: "domcontentloaded" }).catch(() => {});
       } catch { /* ignorar */ }
-      // No guardamos cookies — la sesión ya fue cerrada en el servidor
       await browser.close();
       logger.info("Sesión cerrada");
     },
