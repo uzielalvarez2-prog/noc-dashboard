@@ -293,12 +293,10 @@ async function main(): Promise<void> {
 
     await page.screenshot({ path: "debug-closed-step3-results.png", fullPage: true });
 
-    // ── 5.5. Fijar columnas para closed incidents ─────────────────────────────
-    logger.info("Configurando columnas para closed incidents...");
-    const freshFrame = await setColumns(page, listDetailFrame, CLOSED_COLUMNS);
-
     // ── 6. More → Export en el frame de resultados ────────────────────────────
-    await exportCurrentViewToCsv(page, dest, freshFrame);
+    // Las columnas de cerrados ya son correctas en la cuenta HPSM del scraper,
+    // no se necesita Modify Columns.
+    await exportCurrentViewToCsv(page, dest, listDetailFrame);
     logger.info("Descarga de incidentes cerrados completada");
   } finally {
     await session.close();

@@ -85,24 +85,36 @@ async function setColumns(
   if (!colFrame) throw new Error("choose.columns form no encontrado en 30s");
   logger.info(`Columns form en: ${colFrame.url()}`);
 
-  // Llenar los 8 inputs via ExtJS API — pressSequentially no actualiza el modelo interno de Ext
+  // Llenar los 8 inputs via ExtJS API
   await page.screenshot({ path: "debug-columns-before.png", fullPage: true });
   await colFrame.evaluate((cols: string[]) => {
     const Ext = (window as any).Ext as any;
-    for (let i = 0; i < 8; i++) {
-      const name = `var/L.current/L.current[${i + 1}]`;
-      const val = cols[i] ?? "";
-      // Intentar via ExtJS ComponentQuery
-      if (Ext?.ComponentQuery) {
-        const comps = Ext.ComponentQuery.query(`[name="${name}"]`) as any[];
-        if (comps.length > 0) { comps[0].setValue(val); continue; }
+    // Obtener todos los componentes TextField del form y llenarlos en orden
+    const fields: any[] = Ext?.ComponentQuery
+      ? (Ext.ComponentQuery.query("textfield") as any[]).filter(
+          (c: any) => typeof c.getName === "function"
+            ? c.getName()?.startsWith("var/L.current")
+            : (c.name ?? "").startsWith("var/L.current")
+        )
+      : [];
+    // Ordenar por índice del name attribute
+    fields.sort((a: any, b: any) => {
+      const idxA = parseInt((a.name ?? a.getName?.() ?? "").match(/\[(\d+)\]/)?.[1] ?? "0");
+      const idxB = parseInt((b.name ?? b.getName?.() ?? "").match(/\[(\d+)\]/)?.[1] ?? "0");
+      return idxA - idxB;
+    });
+    if (fields.length > 0) {
+      for (let i = 0; i < 8; i++) {
+        if (fields[i]) fields[i].setValue(cols[i] ?? "");
       }
-      // Fallback: manipulación DOM + events
-      const el = document.querySelector<HTMLInputElement>(`[name="${name}"]`);
-      if (!el) continue;
-      el.value = val;
-      el.dispatchEvent(new Event("input", { bubbles: true }));
-      el.dispatchEvent(new Event("change", { bubbles: true }));
+      return;
+    }
+    // Fallback DOM sin dispatchEvent (solo setea el value nativo)
+    for (let i = 0; i < 8; i++) {
+      const el = document.querySelector<HTMLInputElement>(
+        `[name="var/L.current/L.current[${i + 1}]"]`
+      );
+      if (el) el.value = cols[i] ?? "";
     }
   }, columns);
   await page.waitForTimeout(500);
