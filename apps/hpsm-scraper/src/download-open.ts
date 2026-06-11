@@ -1,8 +1,8 @@
-import { mkdirSync } from "node:fs";
+import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { config } from "./config.js";
 import { logger } from "./logger.js";
-import { openHpsmSession, exportCurrentViewToCsv, clearSession } from "./session.js";
+import { openHpsmSession, clearSession } from "./session.js";
 
 const FAVORITES_QUEUE = "All Open Incidents CARE";
 
@@ -79,18 +79,53 @@ async function main(): Promise<void> {
     logger.info(`Frames a los 40s: ${page.frames().map(f => f.url()).join(" | ")}`);
     await page.screenshot({ path: "debug-open-step2-40s.png", fullPage: true });
 
-    // ── 4. Exportar desde el frame de contenido (list.do?thread=1) ──────────
-    // El queue "All Open Incidents CARE" carga en list.do?thread=1.
-    // Pasar ese frame a exportCurrentViewToCsv garantiza que More→Export
-    // opere sobre la vista configurada (con Assignment Group), no sobre index.do.
+    // ── 4. Extraer datos del grid ExtJS en list.do?thread=1 ─────────────────
+    // More→Export desde index.do usa el template servidor (columnas fijas sin
+    // Assignment Group). En cambio, el grid en list.do?thread=1 YA muestra las
+    // columnas correctas; las leemos directamente del DOM y escribimos el CSV.
     const listFrame = page.frames().find(f => f.url().includes("list.do") && f.url().includes("thread=1"))
       ?? page.frames().find(f => f.url().includes("list.do"));
     if (!listFrame) {
       await page.screenshot({ path: "debug-open-nolistframe.png", fullPage: true });
       throw new Error("Queue list frame (list.do) no encontrado tras 40s");
     }
-    logger.info(`Exportando desde frame: ${listFrame.url()}`);
-    await exportCurrentViewToCsv(page, dest, listFrame);
+    logger.info(`Leyendo grid desde frame: ${listFrame.url()}`);
+
+    const gridData = await listFrame.evaluate((): { headers: string[]; rows: Record<string, string>[] } => {
+      const headers: string[] = [];
+      document.querySelectorAll(".x-grid3-hd-inner").forEach(el => {
+        const text = (el.textContent ?? "").trim();
+        if (text) headers.push(text);
+      });
+
+      const rows: Record<string, string>[] = [];
+      document.querySelectorAll(".x-grid3-row").forEach(rowEl => {
+        const cells = rowEl.querySelectorAll(".x-grid3-cell-inner");
+        const row: Record<string, string> = {};
+        headers.forEach((h, i) => {
+          row[h] = (cells[i]?.textContent ?? "").trim();
+        });
+        rows.push(row);
+      });
+
+      return { headers, rows };
+    });
+
+    logger.info(`Grid extraído: ${gridData.rows.length} filas — columnas: ${gridData.headers.join(", ")}`);
+
+    if (!gridData.headers.length || !gridData.rows.length) {
+      await page.screenshot({ path: "debug-open-gridvacio.png", fullPage: true });
+      throw new Error(`Grid vacío en ${listFrame.url()} — headers encontrados: ${gridData.headers.join(", ") || "ninguno"}`);
+    }
+
+    const csvLines = [
+      gridData.headers.map(h => `"${h.replace(/"/g, '""')}"`).join(","),
+      ...gridData.rows.map(row =>
+        gridData.headers.map(h => `"${(row[h] ?? "").replace(/"/g, '""')}"`).join(","),
+      ),
+    ];
+    writeFileSync(dest, csvLines.join("\n"), "utf-8");
+    logger.info(`CSV guardado en ${dest} (${gridData.rows.length} filas)`);
     logger.info("Descarga de incidentes abiertos completada");
 
   } finally {
