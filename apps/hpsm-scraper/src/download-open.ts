@@ -156,7 +156,7 @@ async function main(): Promise<void> {
       const newFramePromise = page.waitForEvent("frameattached", { timeout: 20_000 }).catch(() => null);
       await searchInc.click({ timeout: 10_000 });
       await newFramePromise;
-      await page.waitForTimeout(2_000);
+      await page.waitForTimeout(4_000);
     } catch (err) {
       await page.screenshot({ path: "debug-open-step1-nav.png", fullPage: true });
       throw err;
@@ -164,9 +164,10 @@ async function main(): Promise<void> {
 
     logger.info(`Frames tras navegar: ${page.frames().map(f => f.url()).join(" | ")}`);
 
-    // 2. Encontrar el frame del formulario
+    // 2. Encontrar el frame del formulario (hasta 60s — con cookie restore HPSM
+    //    reutiliza el thread anterior y el form tarda mas en cargar)
     let formFrame: Frame | undefined;
-    const formDeadline = Date.now() + 20_000;
+    const formDeadline = Date.now() + 60_000;
     while (!formFrame && Date.now() < formDeadline) {
       for (const frame of page.frames()) {
         const hasAssign = await frame.locator('[name="instance/assignment"]').count().catch(() => 0) > 0;
@@ -178,7 +179,7 @@ async function main(): Promise<void> {
     }
     if (!formFrame) {
       await page.screenshot({ path: "debug-open-step2-noframe.png", fullPage: true });
-      throw new Error("Form Search Incidents no encontrado en ningun frame tras 20s");
+      throw new Error("Form Search Incidents no encontrado en ningun frame tras 60s");
     }
     logger.info(`Form en: ${formFrame.url()}`);
 

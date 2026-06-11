@@ -190,7 +190,7 @@ async function main(): Promise<void> {
       if (newFrame) {
         logger.info(`Nuevo frame tras nav: ${newFrame.url()}`);
       }
-      await page.waitForTimeout(2_000);
+      await page.waitForTimeout(4_000);
     } catch (err) {
       await page.screenshot({ path: "debug-closed-step1-menu.png", fullPage: true });
       throw err;
@@ -203,7 +203,7 @@ async function main(): Promise<void> {
     // Buscar el frame que tenga AMBOS campos: assignment Y choices/closed.
     // Esto evita tomar un frame stale de corridas anteriores que solo tiene assignment.
     let formFrame: Frame | undefined;
-    const formDeadline = Date.now() + 20_000;
+    const formDeadline = Date.now() + 60_000;
     while (!formFrame && Date.now() < formDeadline) {
       for (const frame of page.frames()) {
         const hasAssign = await frame.locator('[name="instance/assignment"]').count().catch(() => 0) > 0;
@@ -218,7 +218,7 @@ async function main(): Promise<void> {
     }
     if (!formFrame) {
       await page.screenshot({ path: "debug-closed-step2-noframe.png", fullPage: true });
-      throw new Error("Form Search Incidents no encontrado en ningún frame tras 20s");
+      throw new Error("Form Search Incidents no encontrado en ningún frame tras 60s");
     }
     logger.info(`Form en: ${formFrame.url()}`);
 
