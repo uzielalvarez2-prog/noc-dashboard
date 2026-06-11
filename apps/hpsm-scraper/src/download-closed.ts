@@ -95,12 +95,11 @@ async function setColumns(
     const val = columns[i] ?? "";
     const input = colFrame.locator(`[name="var/L.current/L.current[${i + 1}]"]`);
     try {
-      await input.click({ force: true });
-      await page.keyboard.press("Control+a");
-      await page.keyboard.press("Delete");
-      if (val) await page.keyboard.type(val, { delay: 40 });
+      await input.click({ clickCount: 3, force: true });
+      await input.press("Delete");
+      if (val) await input.pressSequentially(val, { delay: 40 });
     } catch { /* ignorar */ }
-    await page.waitForTimeout(250);
+    await page.waitForTimeout(300);
   }
   await page.waitForTimeout(1_000);
 
