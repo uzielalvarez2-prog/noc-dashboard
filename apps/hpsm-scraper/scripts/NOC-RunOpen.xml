@@ -1,12 +1,12 @@
 <?xml version="1.0" encoding="UTF-16"?>
 <Task version="1.2" xmlns="http://schemas.microsoft.com/windows/2004/02/mit/task">
   <RegistrationInfo>
-    <Description>NOC scraper - incidentes abiertos cada 8 min de 06:00 a 23:00</Description>
+    <Description>NOC scraper - incidentes abiertos cada 5 min de 06:00 a 23:00</Description>
   </RegistrationInfo>
   <Triggers>
     <CalendarTrigger>
       <Repetition>
-        <Interval>PT8M</Interval>
+        <Interval>PT5M</Interval>
         <Duration>PT17H</Duration>
         <StopAtDurationEnd>false</StopAtDurationEnd>
       </Repetition>
