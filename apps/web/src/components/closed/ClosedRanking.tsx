@@ -5,6 +5,31 @@ import { Download, Copy, Check } from "lucide-react";
 import type { ClosedRankRow } from "@/types/closed";
 import { downloadCSV, copyHTMLTable } from "@/lib/openExport";
 
+// Paleta de colores para causas (cada una un color distinto)
+const CAUSE_PALETTE = [
+  "#38bdf8", // sky
+  "#f59e0b", // amber
+  "#a78bfa", // violet
+  "#34d399", // emerald
+  "#fb7185", // rose
+  "#fb923c", // orange
+  "#22d3ee", // cyan
+  "#f472b6", // fuchsia
+  "#a3e635", // lime
+  "#e879f9", // purple
+  "#4ade80", // green
+  "#94a3b8", // slate
+];
+
+// Verde degradado: rank 0 (más cerrados) → verde oscuro; últimos → verde claro
+function analystColor(idx: number, total: number): string {
+  const ratio = total <= 1 ? 0 : idx / (total - 1);
+  // hsl: tono 142 (verde), saturación 65→35%, luminosidad 38→58%
+  const sat = Math.round(65 - ratio * 30);
+  const lum = Math.round(38 + ratio * 20);
+  return `hsl(142, ${sat}%, ${lum}%)`;
+}
+
 function csvCell(s: string): string {
   return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
 }
@@ -24,28 +49,27 @@ function toHTMLTable(rows: ClosedRankRow[], title: string, dimensionLabel: strin
   const body = rows
     .map((r) => `<tr><td>${escapeHtml(r.name)}</td><td align="right">${r.count}</td></tr>`)
     .join("");
-  return `<table border="1" cellspacing="0" cellpadding="6" style="border-collapse:collapse;font-family:Arial,sans-serif;font-size:13px"><caption style="font-weight:bold;text-align:left;padding-bottom:6px">${escapeHtml(
-    title
-  )}</caption><thead>${head}</thead><tbody>${body}</tbody></table>`;
+  return `<table border="1" cellspacing="0" cellpadding="6" style="border-collapse:collapse;font-family:Arial,sans-serif;font-size:13px"><caption style="font-weight:bold;text-align:left;padding-bottom:6px">${escapeHtml(title)}</caption><thead>${head}</thead><tbody>${body}</tbody></table>`;
 }
 
 function toPlain(rows: ClosedRankRow[]): string {
   return rows.map((r) => `${r.name}\t${r.count}`).join("\n");
 }
 
-/** Ranking de una sola métrica (conteo de cerrados) — hermano simple de TopByDimension. */
 export function ClosedRanking({
   title,
   dimensionLabel,
   rows,
   fileBase,
   limit = 12,
+  variant = "default",
 }: {
   title: string;
   dimensionLabel: string;
   rows: ClosedRankRow[];
   fileBase: string;
   limit?: number;
+  variant?: "analyst" | "cause" | "default";
 }) {
   const [copied, setCopied] = useState(false);
 
@@ -53,6 +77,12 @@ export function ClosedRanking({
   const top = sorted.slice(0, limit);
   const total = rows.reduce((s, r) => s + r.count, 0);
   const max = Math.max(1, ...top.map((r) => r.count));
+
+  function barColor(idx: number): string {
+    if (variant === "analyst") return analystColor(idx, top.length);
+    if (variant === "cause") return CAUSE_PALETTE[idx % CAUSE_PALETTE.length];
+    return "#38bdf8"; // default accent
+  }
 
   async function onCopy() {
     if (await copyHTMLTable(toHTMLTable(top, title, dimensionLabel), toPlain(top))) {
@@ -75,24 +105,39 @@ export function ClosedRanking({
         {top.length === 0 && (
           <p className="py-6 text-center text-xs text-text-muted">Sin datos — sube un CSV de cerrados</p>
         )}
-        {top.map((r) => (
-          <div key={r.name} className="flex items-center gap-2">
-            <span className="w-40 shrink-0 truncate text-xs text-text-primary" title={r.name}>
-              {r.name}
-            </span>
-            <div className="relative h-4 flex-1 overflow-hidden rounded bg-surface-elevated/60">
-              <div
-                className="absolute inset-y-0 left-0 rounded bg-accent/30"
-                style={{ width: `${(r.count / max) * 100}%` }}
-              />
+        {top.map((r, idx) => {
+          const color = barColor(idx);
+          return (
+            <div key={r.name} className="flex items-center gap-2">
+              <span className="w-40 shrink-0 truncate text-xs text-text-primary" title={r.name}>
+                {r.name}
+              </span>
+              <div className="relative h-4 flex-1 overflow-hidden rounded bg-surface-elevated/60">
+                <div
+                  className="absolute inset-y-0 left-0 rounded transition-all duration-500"
+                  style={{
+                    width: `${(r.count / max) * 100}%`,
+                    backgroundColor: color,
+                    opacity: 0.7,
+                  }}
+                />
+              </div>
+              <span
+                className="w-10 shrink-0 text-right font-mono text-xs font-semibold"
+                style={{ color }}
+              >
+                {r.count}
+              </span>
             </div>
-            <span className="w-10 shrink-0 text-right font-mono text-xs text-text-primary">{r.count}</span>
-          </div>
-        ))}
+          );
+        })}
       </div>
 
       <div className="mt-3 flex items-center justify-between border-t border-border/50 pt-3">
-        <span className="text-xs text-text-muted">{total} cerrados</span>
+        <span className="text-sm text-text-muted">
+          <span className="font-bold text-lg text-text-primary">{total}</span>{" "}
+          cerrados
+        </span>
         <div className="flex gap-2">
           <button
             type="button"
