@@ -18,13 +18,6 @@ export const config = {
   database: {
     url: process.env.DATABASE_URL ?? "",
   },
-  redis: {
-    url: process.env.REDIS_URL ?? "",
-  },
-  resend: {
-    apiKey: process.env.RESEND_API_KEY ?? "",
-    fromEmail: process.env.RESEND_FROM ?? "noc@telmexit.com",
-  },
   poll: {
     intervalMs: Number(process.env.POLL_INTERVAL_MS ?? "10000"),
     timeoutMs: Number(process.env.HPSM_TIMEOUT_MS ?? "30000"),

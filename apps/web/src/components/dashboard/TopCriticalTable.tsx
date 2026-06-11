@@ -46,10 +46,10 @@ export function TopCriticalTable() {
     <div className="rounded-lg border border-border bg-surface">
       <div className="flex items-center justify-between border-b border-border px-5 py-3">
         <h2 className="text-base font-semibold text-text-primary">
-          Top Incidentes Críticos
+          Incidentes con SLA Vencido
         </h2>
         <Link
-          href="/incidents?severity=CRITICAL"
+          href="/sla"
           className="text-xs text-accent hover:underline"
         >
           Ver todos →
@@ -58,7 +58,7 @@ export function TopCriticalTable() {
 
       {incidents.length === 0 ? (
         <p className="px-5 py-8 text-center text-sm text-text-muted">
-          Sin incidentes críticos activos
+          Sin incidentes con SLA vencido
         </p>
       ) : (
         <div className="divide-y divide-border">

@@ -1,9 +1,10 @@
-import { getKPIs, getIncidentTrend } from "@/lib/queries/incidents";
+import { getKPIs, getIncidentTrend, getOpenByDay } from "@/lib/queries/incidents";
 import { getSLAMetrics } from "@/lib/queries/sla";
 import { KPIGrid } from "@/components/dashboard/KPIGrid";
 import { AlertBanner } from "@/components/dashboard/AlertBanner";
 import { SLAGauge } from "@/components/dashboard/SLAGauge";
 import { IncidentsChart } from "@/components/dashboard/IncidentsChart";
+import { OpenByDayChart } from "@/components/dashboard/OpenByDayChart";
 import { TopCriticalTable } from "@/components/dashboard/TopCriticalTable";
 import { LiveIndicator } from "@/components/dashboard/LiveIndicator";
 
@@ -23,10 +24,11 @@ const EMPTY_SLA = {
 
 export default async function OverviewPage() {
   // Resiliente a fallos de DB — muestra datos vacíos en lugar de crashear
-  const [kpis, sla, trend] = await Promise.all([
+  const [kpis, sla, trend, byDay] = await Promise.all([
     getKPIs().catch(() => EMPTY_KPIS),
     getSLAMetrics().catch(() => EMPTY_SLA),
     getIncidentTrend().catch(() => []),
+    getOpenByDay().catch(() => []),
   ]);
 
   return (
@@ -58,7 +60,10 @@ export default async function OverviewPage() {
         <IncidentsChart initial={trend} />
       </div>
 
-      <TopCriticalTable />
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+        <OpenByDayChart initial={byDay} />
+        <TopCriticalTable />
+      </div>
     </div>
   );
 }

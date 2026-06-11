@@ -1,0 +1,24 @@
+{
+  "name": "hpsm-scraper",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "download:open": "tsx src/download-open.ts",
+    "download:closed": "tsx src/download-closed.ts",
+    "run:open": "tsx src/run-open.ts",
+    "run:closed": "tsx src/run-closed.ts",
+    "install-browsers": "playwright install chromium",
+    "build": "tsc"
+  },
+  "dependencies": {
+    "dotenv": "^17.4.2",
+    "playwright": "^1.49.0",
+    "winston": "^3.19.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20",
+    "tsx": "^4.22.3",
+    "typescript": "^5"
+  }
+}

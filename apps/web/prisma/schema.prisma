@@ -6,33 +6,6 @@ datasource db {
   provider = "postgresql"
 }
 
-enum Severity {
-  CRITICAL
-  HIGH
-  MEDIUM
-  LOW
-}
-
-enum IncidentStatus {
-  OPEN
-  IN_PROGRESS
-  RESOLVED
-  CLOSED
-}
-
-enum UserRole {
-  NOC_OPERATOR
-  NOC_ADMIN
-  ENGINEER
-}
-
-enum AlertTrigger {
-  SLA_RISK
-  SLA_BREACHED
-  CRITICAL_OPEN
-  CRITICAL_UNASSIGNED
-}
-
 model Incident {
   id          String         @id
   title       String
@@ -88,11 +61,11 @@ model AlertRule {
 model AuditLog {
   id        String   @id @default(cuid())
   userId    String
-  user      User     @relation(fields: [userId], references: [id])
   action    String
   targetId  String?
   metadata  Json?
   createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id])
 
   @@index([userId])
   @@index([createdAt])
@@ -110,13 +83,13 @@ model OpenIncident {
   id         String   @id @default(cuid())
   incidentId String
   openTime   DateTime
-  status     String // estado crudo de HPSM: WORK IN PROGRESS, PENDING CUSTOMER, ...
+  status     String
   company    String
   serviceId  String
-  state      String // Site Name State
-  district   String // Site Name District
+  state      String
+  district   String
   assignee   String?
-  group      String // PEXA | CECOR
+  group      String
   uploadedAt DateTime @default(now())
 
   @@unique([incidentId, state, district])
@@ -134,15 +107,15 @@ model OpenIncident {
 // ─────────────────────────────────────────────────────────────────────────────
 model ClosedIncident {
   incidentId     String   @id
-  group          String // PEXA | CECOR (elegido al subir)
+  group          String
   openTime       DateTime
   closeTime      DateTime
-  status         String // normalmente "Closed"
-  closedBy       String // nombre del analista (o bot, p.ej. rpa_integration)
-  resAnalystCode String // cadena completa, p.ej. "POWER FAILURE | NA | NA"
-  resCause       String // primer segmento para estadística, p.ej. "POWER FAILURE"
-  resolutionMins Int // (closeTime - openTime) en minutos
-  slaBreached    Boolean // resolutionMins > 240 (4 h)
+  status         String
+  closedBy       String
+  resAnalystCode String
+  resCause       String
+  resolutionMins Int
+  slaBreached    Boolean
   uploadedAt     DateTime @default(now())
 
   @@index([group])
@@ -150,4 +123,31 @@ model ClosedIncident {
   @@index([resCause])
   @@index([slaBreached])
   @@index([closeTime])
+}
+
+enum Severity {
+  CRITICAL
+  HIGH
+  MEDIUM
+  LOW
+}
+
+enum IncidentStatus {
+  OPEN
+  IN_PROGRESS
+  RESOLVED
+  CLOSED
+}
+
+enum UserRole {
+  NOC_OPERATOR
+  NOC_ADMIN
+  ENGINEER
+}
+
+enum AlertTrigger {
+  SLA_RISK
+  SLA_BREACHED
+  CRITICAL_OPEN
+  CRITICAL_UNASSIGNED
 }
