@@ -113,26 +113,23 @@ export interface TrendPoint {
   LOW: number;
 }
 
-/** Devuelve conteos de incidentes abiertos agrupados por dia (ultimos 7 dias). */
-export async function getOpenByDay(): Promise<{ day: string; total: number; breached: number }[]> {
+/** Devuelve conteos de incidentes por dia — solo dias con datos (hasta 30 dias atras). */
+export async function getOpenByDay(): Promise<{ day: string; total: number }[]> {
   const result = [];
-  for (let i = 6; i >= 0; i--) {
+  for (let i = 29; i >= 0; i--) {
     const start = new Date();
     start.setDate(start.getDate() - i);
     start.setHours(0, 0, 0, 0);
     const end = new Date(start);
     end.setHours(23, 59, 59, 999);
 
-    const [total, breached] = await Promise.all([
-      db.incident.count({ where: { createdAt: { gte: start, lte: end } } }),
-      db.incident.count({ where: { createdAt: { gte: start, lte: end }, slaBreached: true } }),
-    ]);
-
-    result.push({
-      day: start.toLocaleDateString("es-MX", { weekday: "short", day: "2-digit" }),
-      total,
-      breached,
-    });
+    const total = await db.incident.count({ where: { createdAt: { gte: start, lte: end } } });
+    if (total > 0) {
+      result.push({
+        day: start.toLocaleDateString("es-MX", { weekday: "short", day: "2-digit" }),
+        total,
+      });
+    }
   }
   return result;
 }
