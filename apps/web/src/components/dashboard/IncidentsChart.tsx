@@ -14,10 +14,8 @@ import {
 
 interface TrendPoint {
   hour: string;
-  CRITICAL: number;
-  HIGH: number;
-  MEDIUM: number;
-  LOW: number;
+  PEXA: number;
+  CECOR: number;
 }
 
 interface KPIData {
@@ -31,10 +29,8 @@ async function fetchKPIs(): Promise<KPIData> {
 }
 
 const COLORS = {
-  CRITICAL: "#ef4444",
-  HIGH: "#f59e0b",
-  MEDIUM: "#38bdf8",
-  LOW: "#64748b",
+  PEXA: "#3b82f6",
+  CECOR: "#f59e0b",
 };
 
 interface IncidentsChartProps {
@@ -65,7 +61,7 @@ export function IncidentsChart({ initial }: IncidentsChartProps) {
   return (
     <div className="rounded-lg border border-border bg-surface p-5">
       <h2 className="mb-4 text-base font-semibold text-text-primary">
-        Incidentes por hora — últimas 24h
+        Abiertos por hora — últimas 24h
       </h2>
       <div className="h-56">
         <ResponsiveContainer width="100%" height="100%">
@@ -83,7 +79,7 @@ export function IncidentsChart({ initial }: IncidentsChartProps) {
                   x2="0"
                   y2="1"
                 >
-                  <stop offset="5%" stopColor={COLORS[key]} stopOpacity={0.25} />
+                  <stop offset="5%" stopColor={COLORS[key]} stopOpacity={0.3} />
                   <stop offset="95%" stopColor={COLORS[key]} stopOpacity={0} />
                 </linearGradient>
               ))}

@@ -101,13 +101,11 @@ export async function getKPIs() {
 
 export interface TrendPoint {
   hour: string;
-  CRITICAL: number;
-  HIGH: number;
-  MEDIUM: number;
-  LOW: number;
+  PEXA: number;
+  CECOR: number;
 }
 
-/** Devuelve conteos de incidentes por dia — solo dias con datos (hasta 30 dias atras). */
+/** Devuelve conteos de incidentes abiertos por dia — solo dias con datos (hasta 30 dias atras). */
 export async function getOpenByDay(): Promise<{ day: string; total: number }[]> {
   const result = [];
   for (let i = 29; i >= 0; i--) {
@@ -117,8 +115,8 @@ export async function getOpenByDay(): Promise<{ day: string; total: number }[]> 
     const end = new Date(start);
     end.setHours(23, 59, 59, 999);
 
-    const total = await db.incident.count({
-      where: { createdAt: { gte: start, lte: end }, status: { in: ["OPEN", "IN_PROGRESS"] } },
+    const total = await db.openIncident.count({
+      where: { openTime: { gte: start, lte: end } },
     });
     if (total > 0) {
       result.push({
@@ -130,36 +128,35 @@ export async function getOpenByDay(): Promise<{ day: string; total: number }[]> 
   return result;
 }
 
-/** Devuelve conteos por hora en las últimas 24h para el chart de tendencia. */
+/** Devuelve conteos por hora en las últimas 24h para el chart de tendencia (PEXA vs CECOR). */
 export async function getIncidentTrend(): Promise<TrendPoint[]> {
   const now = new Date();
   const since = new Date(now.getTime() - 24 * 3600000);
 
-  const incidents = await db.incident.findMany({
-    where: { createdAt: { gte: since } },
-    select: { createdAt: true, severity: true },
+  const incidents = await db.openIncident.findMany({
+    where: { openTime: { gte: since } },
+    select: { openTime: true, group: true },
   });
 
-  const buckets: Record<string, Record<string, number>> = {};
+  const buckets: Record<string, { PEXA: number; CECOR: number }> = {};
   for (let i = 0; i < 24; i++) {
     const h = new Date(since.getTime() + i * 3600000);
     const label = `${String(h.getHours()).padStart(2, "0")}:00`;
-    buckets[label] = { CRITICAL: 0, HIGH: 0, MEDIUM: 0, LOW: 0 };
+    buckets[label] = { PEXA: 0, CECOR: 0 };
   }
 
   for (const inc of incidents) {
-    const h = new Date(inc.createdAt);
+    const h = new Date(inc.openTime);
     const label = `${String(h.getHours()).padStart(2, "0")}:00`;
     if (buckets[label]) {
-      buckets[label][inc.severity] = (buckets[label][inc.severity] ?? 0) + 1;
+      if (inc.group === "CECOR") buckets[label].CECOR++;
+      else buckets[label].PEXA++;
     }
   }
 
   return Object.entries(buckets).map(([hour, counts]) => ({
     hour,
-    CRITICAL: counts.CRITICAL ?? 0,
-    HIGH: counts.HIGH ?? 0,
-    MEDIUM: counts.MEDIUM ?? 0,
-    LOW: counts.LOW ?? 0,
+    PEXA: counts.PEXA,
+    CECOR: counts.CECOR,
   }));
 }
