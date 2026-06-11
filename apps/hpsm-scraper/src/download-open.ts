@@ -85,13 +85,20 @@ async function setColumns(
   if (!colFrame) throw new Error("choose.columns form no encontrado en 30s");
   logger.info(`Columns form en: ${colFrame.url()}`);
 
-  // Llenar los 8 inputs
+  // Llenar los 8 inputs usando teclado — fill() no actualiza el modelo ExtJS
+  await page.screenshot({ path: "debug-columns-before.png", fullPage: true });
   for (let i = 0; i < 8; i++) {
     const val = columns[i] ?? "";
-    await colFrame.locator(`[name="var/L.current/L.current[${i + 1}]"]`)
-      .fill(val, { force: true }).catch(() => {});
-    await page.waitForTimeout(200);
+    const input = colFrame.locator(`[name="var/L.current/L.current[${i + 1}]"]`);
+    try {
+      await input.click({ force: true });
+      await page.keyboard.press("Control+a");
+      await page.keyboard.press("Delete");
+      if (val) await page.keyboard.type(val, { delay: 40 });
+    } catch { /* ignorar */ }
+    await page.waitForTimeout(250);
   }
+  await page.screenshot({ path: "debug-columns-after.png", fullPage: true });
   await page.waitForTimeout(1_000);
 
   // Click Proceed (con reintentos — tarda en renderizar)

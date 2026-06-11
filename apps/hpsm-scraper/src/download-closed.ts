@@ -92,9 +92,15 @@ async function setColumns(
   logger.info(`Columns form en: ${colFrame.url()}`);
 
   for (let i = 0; i < 8; i++) {
-    await colFrame.locator(`[name="var/L.current/L.current[${i + 1}]"]`)
-      .fill(columns[i] ?? "", { force: true }).catch(() => {});
-    await page.waitForTimeout(200);
+    const val = columns[i] ?? "";
+    const input = colFrame.locator(`[name="var/L.current/L.current[${i + 1}]"]`);
+    try {
+      await input.click({ force: true });
+      await page.keyboard.press("Control+a");
+      await page.keyboard.press("Delete");
+      if (val) await page.keyboard.type(val, { delay: 40 });
+    } catch { /* ignorar */ }
+    await page.waitForTimeout(250);
   }
   await page.waitForTimeout(1_000);
 
