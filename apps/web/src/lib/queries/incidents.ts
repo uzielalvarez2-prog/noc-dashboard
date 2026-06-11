@@ -123,7 +123,9 @@ export async function getOpenByDay(): Promise<{ day: string; total: number }[]> 
     const end = new Date(start);
     end.setHours(23, 59, 59, 999);
 
-    const total = await db.incident.count({ where: { createdAt: { gte: start, lte: end } } });
+    const total = await db.incident.count({
+      where: { createdAt: { gte: start, lte: end }, status: { in: ["OPEN", "IN_PROGRESS"] } },
+    });
     if (total > 0) {
       result.push({
         day: start.toLocaleDateString("es-MX", { weekday: "short", day: "2-digit" }),
