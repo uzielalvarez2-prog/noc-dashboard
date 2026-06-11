@@ -3,7 +3,7 @@ import { join } from "node:path";
 import type { Frame, Page } from "playwright";
 import { config } from "./config.js";
 import { logger } from "./logger.js";
-import { openHpsmSession, exportCurrentViewToCsv } from "./session.js";
+import { openHpsmSession, exportCurrentViewToCsv, clearSession } from "./session.js";
 
 async function waitForFrame(
   page: Page,
@@ -121,6 +121,10 @@ async function setColumns(
 async function main(): Promise<void> {
   mkdirSync(config.downloadDir, { recursive: true });
   const dest = join(config.downloadDir, "open-incidents.csv");
+
+  // Forzar login fresco — elimina cookies del run anterior para evitar que HPSM
+  // restaure un workspace con thread=9&notredirect=true que bloquea la carga del form.
+  clearSession();
 
   const session = await openHpsmSession();
   try {

@@ -3,7 +3,7 @@ import { join } from "node:path";
 import type { Frame, Page } from "playwright";
 import { config } from "./config.js";
 import { logger } from "./logger.js";
-import { openHpsmSession, exportCurrentViewToCsv } from "./session.js";
+import { openHpsmSession, exportCurrentViewToCsv, clearSession } from "./session.js";
 
 /**
  * Flujo HPSM:
@@ -136,6 +136,9 @@ async function main(): Promise<void> {
     config.downloadDir,
     `closed-incidents-${now.toISOString().slice(0, 10)}.csv`,
   );
+
+  // Forzar login fresco — igual que download-open.ts
+  clearSession();
 
   const session = await openHpsmSession();
   try {

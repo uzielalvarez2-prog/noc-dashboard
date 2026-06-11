@@ -1,5 +1,5 @@
 import { chromium, type Browser, type Page, type BrowserContext, type Frame } from "playwright";
-import { existsSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, readFileSync, writeFileSync, unlinkSync } from "node:fs";
 import { join } from "node:path";
 import { config } from "./config.js";
 import { logger } from "./logger.js";
@@ -11,6 +11,16 @@ export interface HpsmSession {
 }
 
 const COOKIE_FILE = join(process.cwd(), "hpsm-cookies.json");
+
+/** Elimina el archivo de cookies — fuerza login fresco en la siguiente apertura de sesión. */
+export function clearSession(): void {
+  try {
+    unlinkSync(COOKIE_FILE);
+    logger.info("Cookie file eliminado — próximo run hará login fresco");
+  } catch {
+    // no existía, no pasa nada
+  }
+}
 
 async function saveCookies(context: BrowserContext): Promise<void> {
   const cookies = await context.cookies();
@@ -73,9 +83,22 @@ export async function openHpsmSession(): Promise<HpsmSession> {
     browser,
     page,
     close: async () => {
-      await saveCookies(context).catch(() => {});
+      // Logout de HPSM — libera la sesión del servidor y evita acumular logins activos
+      try {
+        const logoutUrl = await page.evaluate(() =>
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          (window as any).cwc?.logoutCleanupJsp as string | undefined ?? null
+        ).catch(() => null);
+        if (logoutUrl) {
+          logger.info(`Logout HPSM: ${logoutUrl}`);
+          await page.goto(logoutUrl, { timeout: 10_000, waitUntil: "domcontentloaded" }).catch(() => {});
+        } else {
+          logger.warn("logoutCleanupJsp no encontrado — sesión HPSM puede quedar activa");
+        }
+      } catch { /* ignorar */ }
+      // No guardamos cookies — la sesión ya fue cerrada en el servidor
       await browser.close();
-      logger.info("Sesión cerrada (cookies actualizadas)");
+      logger.info("Sesión cerrada");
     },
   };
 }
