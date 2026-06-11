@@ -24,9 +24,10 @@ function GroupBadge({ group }: { group: string }) {
 }
 
 function ResTime({ mins }: { mins: number }) {
-  const h = Math.floor(mins / 60);
+  const d = Math.floor(mins / 1440);
+  const h = Math.floor((mins % 1440) / 60);
   const m = mins % 60;
-  const label = h > 0 ? `${h}h ${m}m` : `${m}m`;
+  const label = d > 0 ? `${d}d ${h}h ${m}m` : h > 0 ? `${h}h ${m}m` : `${m}m`;
   return (
     <span className="font-mono text-xs text-critical font-semibold">{label}</span>
   );
