@@ -1,7 +1,6 @@
 import { getKPIs, getIncidentTrend, getOpenByDay } from "@/lib/queries/incidents";
 import { getSLAMetrics } from "@/lib/queries/sla";
 import { KPIGrid } from "@/components/dashboard/KPIGrid";
-import { AlertBanner } from "@/components/dashboard/AlertBanner";
 import { SLAGauge } from "@/components/dashboard/SLAGauge";
 import { IncidentsChart } from "@/components/dashboard/IncidentsChart";
 import { OpenByDayChart } from "@/components/dashboard/OpenByDayChart";
@@ -42,8 +41,6 @@ export default async function OverviewPage() {
         </div>
         <LiveIndicator lastSync={kpis.lastSync} />
       </div>
-
-      <AlertBanner />
 
       <KPIGrid
         initial={{
