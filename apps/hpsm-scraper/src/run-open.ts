@@ -11,7 +11,7 @@ async function run(): Promise<void> {
   await downloadOpen();
 
   logger.info("Subiendo incidentes abiertos al dashboard (PEXA + CECOR)...");
-  await uploadCsv(dest, "PEXA,CECOR", true);
+  await uploadCsv(dest, "PEXA,CECOR", "open");
 
   logger.info("=== run-open: completado ===");
 }

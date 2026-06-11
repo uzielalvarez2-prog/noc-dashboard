@@ -10,5 +10,5 @@ const defaultCsv = join(config.downloadDir, `closed-incidents-${now.toISOString(
 const csvPath = process.argv[2] ?? defaultCsv;
 
 console.log(`Subiendo ${csvPath} a ${config.dashboardUrl}...`);
-await uploadCsv(csvPath, "PEXA,CECOR");
+await uploadCsv(csvPath, "PEXA", "closed");
 console.log("Listo.");
