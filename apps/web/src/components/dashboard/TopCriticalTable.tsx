@@ -27,9 +27,10 @@ async function fetchKPIs(): Promise<KPIData> {
 
 function elapsedLabel(openTime: string): string {
   const mins = Math.floor((Date.now() - new Date(openTime).getTime()) / 60_000);
-  const h = Math.floor(mins / 60);
+  const d = Math.floor(mins / 1440);
+  const h = Math.floor((mins % 1440) / 60);
   const m = mins % 60;
-  return h > 0 ? `${h}h ${m}m` : `${m}m`;
+  return d > 0 ? `${d}d ${h}h ${m}m` : h > 0 ? `${h}h ${m}m` : `${m}m`;
 }
 
 function GroupBadge({ group }: { group: string }) {
