@@ -29,9 +29,11 @@ export async function uploadCsv(csvPath: string, groups: string, clearOpen = fal
     body: formData,
   });
 
-  const data = await res.json() as Record<string, unknown>;
+  const text = await res.text();
   if (!res.ok) {
-    throw new Error(`Upload falló [${res.status}]: ${JSON.stringify(data)}`);
+    throw new Error(`Upload falló [${res.status}]: ${text.slice(0, 500)}`);
   }
+  let data: Record<string, unknown> = {};
+  try { data = JSON.parse(text) as Record<string, unknown>; } catch { /* respuesta no-JSON */ }
   logger.info("Upload completado", data);
 }
