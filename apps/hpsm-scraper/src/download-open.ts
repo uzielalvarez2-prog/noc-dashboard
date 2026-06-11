@@ -7,11 +7,19 @@ import { openHpsmSession, exportCurrentViewToCsv, clearSession } from "./session
 
 const FAVORITES_QUEUE = "All Open Incidents CARE";
 
-async function waitForListDetail(page: Page, timeoutMs: number): Promise<boolean> {
+/** Espera a que aparezca el botón "More" en cualquier frame — señal de que la vista está lista. */
+async function waitForMoreButton(page: Page, timeoutMs: number): Promise<boolean> {
   const deadline = Date.now() + timeoutMs;
   while (Date.now() < deadline) {
-    const found = page.frames().some(f => f.url().includes("cwc_listdetail"));
-    if (found) return true;
+    for (const frame of page.frames()) {
+      try {
+        const n = await frame.locator(':text-is("More")').count();
+        if (n > 0) {
+          logger.info(`More button detectado en: ${frame.url()}`);
+          return true;
+        }
+      } catch { /* frame stale, ignorar */ }
+    }
     await page.waitForTimeout(1_000);
   }
   return false;
@@ -80,14 +88,18 @@ async function main(): Promise<void> {
       throw new Error(`"${FAVORITES_QUEUE}" no encontrado en la barra lateral tras 20s`);
     }
 
-    // ── 3. Esperar que cargue la lista de incidentes ─────────────────────────
-    logger.info("Esperando que cargue la lista de incidentes (hasta 90s)...");
-    const listLoaded = await waitForListDetail(page, 90_000);
+    // ── 3. Esperar que cargue la lista (buscar botón "More" en cualquier frame) ──
+    logger.info("Esperando que cargue la vista de incidentes (hasta 120s)...");
+    await page.waitForTimeout(2_000);
+    logger.info(`Frames tras click: ${page.frames().map(f => f.url()).join(" | ")}`);
+    await page.screenshot({ path: "debug-open-step2-afterclick.png", fullPage: true });
+
+    const listLoaded = await waitForMoreButton(page, 120_000);
     if (!listLoaded) {
       await page.screenshot({ path: "debug-open-step2-nolist.png", fullPage: true });
-      throw new Error("La lista de incidentes no cargó en 90s");
+      throw new Error("La vista de incidentes no cargó (botón More no apareció en 120s)");
     }
-    await page.waitForTimeout(3_000); // dejar que el frame termine de renderizar
+    await page.waitForTimeout(2_000);
     logger.info(`Frames activos: ${page.frames().map(f => f.url()).join(" | ")}`);
     await page.screenshot({ path: "debug-open-step2-list.png", fullPage: true });
 
