@@ -91,16 +91,23 @@ async function setColumns(
   if (!colFrame) throw new Error("choose.columns form no encontrado en 30s");
   logger.info(`Columns form en: ${colFrame.url()}`);
 
-  for (let i = 0; i < 8; i++) {
-    const val = columns[i] ?? "";
-    const input = colFrame.locator(`[name="var/L.current/L.current[${i + 1}]"]`);
-    try {
-      await input.click({ clickCount: 3, force: true });
-      await input.press("Delete");
-      if (val) await input.pressSequentially(val, { delay: 40 });
-    } catch { /* ignorar */ }
-    await page.waitForTimeout(300);
-  }
+  // Llenar via ExtJS API — pressSequentially no actualiza el modelo interno de Ext
+  await colFrame.evaluate((cols: string[]) => {
+    const Ext = (window as any).Ext as any;
+    for (let i = 0; i < 8; i++) {
+      const name = `var/L.current/L.current[${i + 1}]`;
+      const val = cols[i] ?? "";
+      if (Ext?.ComponentQuery) {
+        const comps = Ext.ComponentQuery.query(`[name="${name}"]`) as any[];
+        if (comps.length > 0) { comps[0].setValue(val); continue; }
+      }
+      const el = document.querySelector<HTMLInputElement>(`[name="${name}"]`);
+      if (!el) continue;
+      el.value = val;
+      el.dispatchEvent(new Event("input", { bubbles: true }));
+      el.dispatchEvent(new Event("change", { bubbles: true }));
+    }
+  }, columns);
   await page.waitForTimeout(1_000);
 
   let proceedClicked = false;
