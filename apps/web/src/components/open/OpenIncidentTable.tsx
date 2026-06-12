@@ -4,7 +4,7 @@ import { useState, useEffect } from "react";
 import { useQuery, keepPreviousData } from "@tanstack/react-query";
 import { Search, ChevronLeft, ChevronRight, RefreshCw } from "lucide-react";
 import type { OpenListResponse } from "@/types/open";
-import { cn, formatHpsm } from "@/lib/utils";
+import { cn, formatDate, formatHpsm } from "@/lib/utils";
 
 const COLUMNS = [
   { key: "incidentId", label: "Incident ID" },
@@ -185,7 +185,8 @@ export function OpenIncidentTable({ group }: { group: string }) {
           {total > 0
             ? `${(page - 1) * limit + 1}–${Math.min(page * limit, total)} de ${total} sitios`
             : "0 sitios"}
-          {lastSync && <span className="ml-2">· última carga {formatHpsm(lastSync)}</span>}
+          {/* uploadedAt sí es UTC real (lo pone la DB), no "reloj de pared" HPSM */}
+          {lastSync && <span className="ml-2">· última carga {formatDate(lastSync)}</span>}
         </span>
         <div className="flex items-center gap-1">
           <button

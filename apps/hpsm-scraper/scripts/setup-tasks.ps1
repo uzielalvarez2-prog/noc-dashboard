@@ -6,7 +6,7 @@
 
 $dir = "C:\Users\Admin\noc-dashboard\apps\hpsm-scraper\scripts"
 $ps  = "$env:SystemRoot\System32\WindowsPowerShell\v1.0\powershell.exe"
-$flg = "-NonInteractive -ExecutionPolicy Bypass -File"
+$flg = "-NonInteractive -WindowStyle Hidden -ExecutionPolicy Bypass -File"
 
 # -------------------------------------------------------
 # 1. NOC-RunOpen — diario, cada 8 min de 06:00 a 23:00
