@@ -91,37 +91,70 @@ async function main(): Promise<void> {
     }
     logger.info(`Leyendo grid desde frame: ${listFrame.url()}`);
 
-    const gridData = await listFrame.evaluate((): { headers: string[]; rows: Record<string, string>[] } => {
-      const headers: string[] = [];
+    // ── 4a. Cargar TODOS los registros en el store (el grid pagina a ~50) ────
+    // PEXA/CECOR pueden no estar en la página 1; pedimos al store el total.
+    const totalRegistros = await listFrame.evaluate(() =>
+      new Promise<number>((resolve, reject) => {
+        // tsx/esbuild envuelve funciones nombradas con __name, que no existe en el browser
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        (window as any).__name = (window as any).__name ?? ((fn: unknown) => fn);
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const Ext = (window as any).Ext as any;
+        if (!Ext?.ComponentMgr) { reject(new Error("Ext.ComponentMgr no disponible")); return; }
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        let store: any = null;
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        Ext.ComponentMgr.all.each((c: any) => {
+          if (c.getStore && c.getColumnModel) store = c.getStore();
+        });
+        if (!store) { reject(new Error("Store del grid no encontrado")); return; }
+        const total: number = store.getTotalCount();
+        if (store.getCount() >= total) { resolve(total); return; }
+        store.load({
+          params: { start: 0, limit: total },
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          callback: (_r: any, _o: any, success: boolean) => {
+            success ? resolve(total) : reject(new Error("Store load falló"));
+          },
+        });
+      }),
+    );
+    logger.info(`Store cargado: ${totalRegistros} registros totales`);
+    await page.waitForTimeout(3_000); // dejar que el grid re-renderice todas las filas
+
+    // ── 4b. Extraer headers y celdas alineados por índice ────────────────────
+    // La primera columna (checkbox de selección) tiene header vacío: se incluye
+    // como null para que header[i] corresponda a cell[i], y se omite del CSV.
+    const gridData = await listFrame.evaluate((): { headers: (string | null)[]; rows: string[][] } => {
+      const headers: (string | null)[] = [];
       document.querySelectorAll(".x-grid3-hd-inner").forEach(el => {
-        const text = (el.textContent ?? "").trim();
-        if (text) headers.push(text);
+        const text = (el.textContent ?? "").replace(/Sortable$/, "").trim();
+        headers.push(text || null);
       });
 
-      const rows: Record<string, string>[] = [];
+      const rows: string[][] = [];
       document.querySelectorAll(".x-grid3-row").forEach(rowEl => {
         const cells = rowEl.querySelectorAll(".x-grid3-cell-inner");
-        const row: Record<string, string> = {};
-        headers.forEach((h, i) => {
-          row[h] = (cells[i]?.textContent ?? "").trim();
-        });
-        rows.push(row);
+        rows.push(headers.map((_, i) => (cells[i]?.textContent ?? "").trim()));
       });
 
       return { headers, rows };
     });
 
-    logger.info(`Grid extraído: ${gridData.rows.length} filas — columnas: ${gridData.headers.join(", ")}`);
+    const keepIdx = gridData.headers.flatMap((h, i) => (h ? [i] : []));
+    const colNames = keepIdx.map(i => gridData.headers[i] as string);
 
-    if (!gridData.headers.length || !gridData.rows.length) {
+    logger.info(`Grid extraído: ${gridData.rows.length} filas — columnas: ${colNames.join(", ")}`);
+
+    if (!colNames.length || !gridData.rows.length) {
       await page.screenshot({ path: "debug-open-gridvacio.png", fullPage: true });
-      throw new Error(`Grid vacío en ${listFrame.url()} — headers encontrados: ${gridData.headers.join(", ") || "ninguno"}`);
+      throw new Error(`Grid vacío en ${listFrame.url()} — headers encontrados: ${colNames.join(", ") || "ninguno"}`);
     }
 
     const csvLines = [
-      gridData.headers.map(h => `"${h.replace(/"/g, '""')}"`).join(","),
-      ...gridData.rows.map(row =>
-        gridData.headers.map(h => `"${(row[h] ?? "").replace(/"/g, '""')}"`).join(","),
+      colNames.map(h => `"${h.replace(/"/g, '""')}"`).join(","),
+      ...gridData.rows.map(cells =>
+        keepIdx.map(i => `"${(cells[i] ?? "").replace(/"/g, '""')}"`).join(","),
       ),
     ];
     writeFileSync(dest, csvLines.join("\n"), "utf-8");
