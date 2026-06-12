@@ -110,11 +110,17 @@ export async function openHpsmSession(): Promise<HpsmSession> {
 /**
  * @param contentFrame  Frame donde vive la lista de resultados. Si se omite se
  *                      busca automáticamente en todos los frames de la página.
+ * @param onlyVisibleMore  Si hay varios botones "More" (un tab por panel abierto,
+ *                      p.ej. "To Do Queue" + el queue), clickear el ÚLTIMO visible
+ *                      en lugar del primero del DOM. Los tabs inactivos quedan con
+ *                      display:none pero su More sigue siendo clickeable por JS y
+ *                      exportaría la vista equivocada.
  */
 export async function exportCurrentViewToCsv(
   page: Page,
   destPath: string,
   contentFrame?: Frame,
+  onlyVisibleMore = false,
 ): Promise<void> {
   // Buscar el botón "More" en el frame indicado o en todos los frames
   const framesToSearch = contentFrame
@@ -124,7 +130,20 @@ export async function exportCurrentViewToCsv(
   let moreClicked = false;
   for (const frame of framesToSearch) {
     try {
-      const moreText = frame.locator(':text-is("More")').first();
+      const moreTexts = frame.locator(':text-is("More")');
+      let moreText = moreTexts.first();
+      if (onlyVisibleMore) {
+        const n = await moreTexts.count();
+        let visible: typeof moreText | null = null;
+        for (let i = n - 1; i >= 0; i--) {
+          if (await moreTexts.nth(i).isVisible().catch(() => false)) {
+            visible = moreTexts.nth(i);
+            break;
+          }
+        }
+        if (!visible) throw new Error("sin More visible en este frame");
+        moreText = visible;
+      }
       const moreBtn = moreText.locator(
         'xpath=ancestor::*[contains(concat(" ", normalize-space(@class), " "), " x-btn ")][1]',
       );

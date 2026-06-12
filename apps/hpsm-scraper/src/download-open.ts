@@ -1,8 +1,8 @@
-import { mkdirSync, writeFileSync } from "node:fs";
+import { mkdirSync } from "node:fs";
 import { join } from "node:path";
 import { config } from "./config.js";
 import { logger } from "./logger.js";
-import { openHpsmSession, clearSession } from "./session.js";
+import { openHpsmSession, clearSession, exportCurrentViewToCsv } from "./session.js";
 
 const FAVORITES_QUEUE = "All Open Incidents CARE";
 
@@ -79,86 +79,17 @@ async function main(): Promise<void> {
     logger.info(`Frames a los 40s: ${page.frames().map(f => f.url()).join(" | ")}`);
     await page.screenshot({ path: "debug-open-step2-40s.png", fullPage: true });
 
-    // ── 4. Extraer datos del grid ExtJS en list.do?thread=1 ─────────────────
-    // More→Export desde index.do usa el template servidor (columnas fijas sin
-    // Assignment Group). En cambio, el grid en list.do?thread=1 YA muestra las
-    // columnas correctas; las leemos directamente del DOM y escribimos el CSV.
+    // ── 4. More → Export to Text File (igual que el proceso manual) ─────────
+    // El grid/store solo expone ~50 registros (paginación servidor de HPSM);
+    // el export del servidor trae TODO el queue (~2,400 filas) con Assignment
+    // Group incluido. La descarga tarda ~40-60s; el helper espera hasta 5 min.
     const listFrame = page.frames().find(f => f.url().includes("list.do") && f.url().includes("thread=1"))
       ?? page.frames().find(f => f.url().includes("list.do"));
     if (!listFrame) {
       await page.screenshot({ path: "debug-open-nolistframe.png", fullPage: true });
       throw new Error("Queue list frame (list.do) no encontrado tras 40s");
     }
-    logger.info(`Leyendo grid desde frame: ${listFrame.url()}`);
-
-    // ── 4a. Cargar TODOS los registros en el store (el grid pagina a ~50) ────
-    // PEXA/CECOR pueden no estar en la página 1; pedimos al store el total.
-    const totalRegistros = await listFrame.evaluate(() =>
-      new Promise<number>((resolve, reject) => {
-        // tsx/esbuild envuelve funciones nombradas con __name, que no existe en el browser
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        (window as any).__name = (window as any).__name ?? ((fn: unknown) => fn);
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const Ext = (window as any).Ext as any;
-        if (!Ext?.ComponentMgr) { reject(new Error("Ext.ComponentMgr no disponible")); return; }
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        let store: any = null;
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        Ext.ComponentMgr.all.each((c: any) => {
-          if (c.getStore && c.getColumnModel) store = c.getStore();
-        });
-        if (!store) { reject(new Error("Store del grid no encontrado")); return; }
-        const total: number = store.getTotalCount();
-        if (store.getCount() >= total) { resolve(total); return; }
-        store.load({
-          params: { start: 0, limit: total },
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          callback: (_r: any, _o: any, success: boolean) => {
-            success ? resolve(total) : reject(new Error("Store load falló"));
-          },
-        });
-      }),
-    );
-    logger.info(`Store cargado: ${totalRegistros} registros totales`);
-    await page.waitForTimeout(3_000); // dejar que el grid re-renderice todas las filas
-
-    // ── 4b. Extraer headers y celdas alineados por índice ────────────────────
-    // La primera columna (checkbox de selección) tiene header vacío: se incluye
-    // como null para que header[i] corresponda a cell[i], y se omite del CSV.
-    const gridData = await listFrame.evaluate((): { headers: (string | null)[]; rows: string[][] } => {
-      const headers: (string | null)[] = [];
-      document.querySelectorAll(".x-grid3-hd-inner").forEach(el => {
-        const text = (el.textContent ?? "").replace(/Sortable$/, "").trim();
-        headers.push(text || null);
-      });
-
-      const rows: string[][] = [];
-      document.querySelectorAll(".x-grid3-row").forEach(rowEl => {
-        const cells = rowEl.querySelectorAll(".x-grid3-cell-inner");
-        rows.push(headers.map((_, i) => (cells[i]?.textContent ?? "").trim()));
-      });
-
-      return { headers, rows };
-    });
-
-    const keepIdx = gridData.headers.flatMap((h, i) => (h ? [i] : []));
-    const colNames = keepIdx.map(i => gridData.headers[i] as string);
-
-    logger.info(`Grid extraído: ${gridData.rows.length} filas — columnas: ${colNames.join(", ")}`);
-
-    if (!colNames.length || !gridData.rows.length) {
-      await page.screenshot({ path: "debug-open-gridvacio.png", fullPage: true });
-      throw new Error(`Grid vacío en ${listFrame.url()} — headers encontrados: ${colNames.join(", ") || "ninguno"}`);
-    }
-
-    const csvLines = [
-      colNames.map(h => `"${h.replace(/"/g, '""')}"`).join(","),
-      ...gridData.rows.map(cells =>
-        keepIdx.map(i => `"${(cells[i] ?? "").replace(/"/g, '""')}"`).join(","),
-      ),
-    ];
-    writeFileSync(dest, csvLines.join("\n"), "utf-8");
-    logger.info(`CSV guardado en ${dest} (${gridData.rows.length} filas)`);
+    await exportCurrentViewToCsv(page, dest, listFrame, true);
     logger.info("Descarga de incidentes abiertos completada");
 
   } finally {
