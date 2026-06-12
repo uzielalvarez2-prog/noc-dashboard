@@ -125,6 +125,17 @@ model ClosedIncident {
   @@index([closeTime])
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// ESCALADOS: incidentes marcados manualmente para atención especial. Vive aparte
+// de OpenIncident porque ese snapshot se reemplaza completo cada 5 min; la marca
+// debe sobrevivir. Se cruza por incidentId al consultar.
+// ─────────────────────────────────────────────────────────────────────────────
+model EscalatedIncident {
+  incidentId String   @id
+  markedBy   String
+  createdAt  DateTime @default(now())
+}
+
 enum Severity {
   CRITICAL
   HIGH

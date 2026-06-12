@@ -33,16 +33,48 @@ function ResTime({ mins }: { mins: number }) {
   );
 }
 
+// Antigüedad de resolución de los vencidos (el SLA es 4h = 240 min)
+const AGE_BUCKETS = [
+  { label: "4-8h", min: 240, max: 480, color: "text-warning" },
+  { label: "8-24h", min: 480, max: 1440, color: "text-warning" },
+  { label: "24-36h", min: 1440, max: 2160, color: "text-critical" },
+  { label: "+36h", min: 2160, max: Infinity, color: "text-critical" },
+];
+
+function AgeBuckets({ breaches }: { breaches: BreachRow[] }) {
+  return (
+    <div className="flex flex-wrap gap-2">
+      {AGE_BUCKETS.map((b) => {
+        const count = breaches.filter(
+          (r) => r.resolutionMins >= b.min && r.resolutionMins < b.max
+        ).length;
+        return (
+          <span
+            key={b.label}
+            className="flex items-baseline gap-1.5 rounded-md border border-border bg-surface-elevated px-2.5 py-1"
+          >
+            <span className={`font-mono text-sm font-bold ${b.color}`}>{count}</span>
+            <span className="text-xs text-text-muted">{b.label}</span>
+          </span>
+        );
+      })}
+    </div>
+  );
+}
+
 export function SLABreachTable({ breaches }: { breaches: BreachRow[] }) {
   return (
     <div className="rounded-lg border border-border bg-surface">
-      <div className="flex items-center justify-between border-b border-border px-5 py-3">
-        <h2 className="text-base font-semibold text-text-primary">
-          Incidentes con SLA Vencido
-        </h2>
-        <span className="rounded-full bg-critical-dim px-2 py-0.5 font-mono text-xs text-critical">
-          {breaches.length} breach{breaches.length !== 1 ? "es" : ""}
-        </span>
+      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border px-5 py-3">
+        <div className="flex items-center gap-2">
+          <h2 className="text-base font-semibold text-text-primary">
+            Incidentes con SLA Vencido
+          </h2>
+          <span className="rounded-full bg-critical-dim px-2 py-0.5 font-mono text-xs text-critical">
+            {breaches.length} breach{breaches.length !== 1 ? "es" : ""}
+          </span>
+        </div>
+        <AgeBuckets breaches={breaches} />
       </div>
 
       {breaches.length === 0 ? (

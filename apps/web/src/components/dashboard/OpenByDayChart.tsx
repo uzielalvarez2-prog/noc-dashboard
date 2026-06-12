@@ -144,7 +144,9 @@ export function OpenByDayChart({ initial }: Props) {
             Incidentes por día
           </h2>
           <span className="text-2xl font-bold text-info">{grandTotal}</span>
-          <span className="text-xs text-text-muted">total</span>
+          <span className="text-xs text-text-muted">
+            abiertos ahora, según el día en que cayeron
+          </span>
         </div>
         <button
           type="button"

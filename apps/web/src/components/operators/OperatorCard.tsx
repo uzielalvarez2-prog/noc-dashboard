@@ -2,33 +2,30 @@ import { cn } from "@/lib/utils";
 import { User } from "lucide-react";
 import type { OperatorStats } from "@/lib/queries/operators";
 
-function Metric({ label, value, color }: { label: string; value: number | string; color?: string }) {
-  return (
-    <div className="text-center">
-      <p className={cn("text-xl font-bold tabular-nums", color ?? "text-text-primary")}>{value}</p>
-      <p className="mt-0.5 text-xs text-text-muted">{label}</p>
-    </div>
-  );
+function statusColor(status: string): string {
+  if (status.includes("RESOLVED")) return "text-success";
+  if (status.includes("PROGRESS")) return "text-warning";
+  if (status.includes("PENDING")) return "text-accent";
+  return "text-text-muted";
 }
 
 export function OperatorCard({ op }: { op: OperatorStats }) {
-  const complianceColor =
-    op.slaCompliance >= 90 ? "text-success" :
-    op.slaCompliance >= 70 ? "text-warning" : "text-critical";
-
   return (
     <div className="rounded-lg border border-border bg-surface p-5 transition-colors hover:bg-surface-elevated">
-      {/* Header */}
+      {/* Header: login + en línea + grupos */}
       <div className="flex items-start justify-between gap-2">
         <div className="flex items-center gap-3">
-          <div className="flex h-9 w-9 items-center justify-center rounded-full bg-surface-elevated">
+          <div className="relative flex h-9 w-9 items-center justify-center rounded-full bg-surface-elevated">
             <User className="h-4 w-4 text-text-muted" />
+            <span className="absolute -right-0.5 -top-0.5 h-2.5 w-2.5 rounded-full border-2 border-surface bg-success" />
           </div>
-          <p className="font-semibold text-text-primary text-sm">{op.name}</p>
+          <div>
+            <p className="font-mono text-sm font-semibold text-text-primary">{op.login}</p>
+            <p className="text-[10px] uppercase tracking-wider text-success">en línea</p>
+          </div>
         </div>
 
-        {/* Badges de grupo */}
-        <div className="flex gap-1 shrink-0">
+        <div className="flex shrink-0 items-center gap-2">
           {op.groups.map((g) => (
             <span
               key={g}
@@ -40,41 +37,32 @@ export function OperatorCard({ op }: { op: OperatorStats }) {
               {g}
             </span>
           ))}
+          <span
+            className={cn(
+              "rounded-full px-2 py-0.5 font-mono text-sm font-bold",
+              op.openCount > 5 ? "bg-warning/15 text-warning" : "bg-surface-elevated text-text-primary"
+            )}
+          >
+            {op.openCount}
+          </span>
         </div>
       </div>
 
       {/* Divider */}
-      <div className="my-4 h-px bg-border" />
+      <div className="my-3 h-px bg-border" />
 
-      {/* Métricas */}
-      <div className="grid grid-cols-3 gap-2">
-        <Metric
-          label="Abiertos"
-          value={op.openCount}
-          color={op.openCount > 5 ? "text-warning" : undefined}
-        />
-        <Metric
-          label="Cerrados"
-          value={op.closedCount}
-          color="text-success"
-        />
-        <Metric
-          label="SLA"
-          value={`${op.slaCompliance}%`}
-          color={complianceColor}
-        />
-      </div>
-
-      {/* SLA bar */}
-      <div className="mt-4 h-1 w-full overflow-hidden rounded-full bg-surface-elevated">
-        <div
-          className={cn(
-            "h-full rounded-full transition-all duration-700",
-            op.slaCompliance >= 90 ? "bg-success" :
-            op.slaCompliance >= 70 ? "bg-warning" : "bg-critical"
-          )}
-          style={{ width: `${op.slaCompliance}%` }}
-        />
+      {/* Desglose por estatus */}
+      <div className="space-y-1.5">
+        {op.statuses.map((s) => (
+          <div key={s.status} className="flex items-center justify-between gap-2">
+            <span className={cn("truncate text-xs font-medium", statusColor(s.status))}>
+              {s.status}
+            </span>
+            <span className="shrink-0 font-mono text-xs font-semibold text-text-primary">
+              {s.count}
+            </span>
+          </div>
+        ))}
       </div>
     </div>
   );

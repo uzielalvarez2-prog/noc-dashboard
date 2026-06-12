@@ -61,7 +61,7 @@ export function TopCriticalTable() {
       <div className="flex items-center justify-between border-b border-border px-4 py-3">
         <div className="flex items-center gap-2">
           <h2 className="text-sm font-semibold text-text-primary">
-            Incidentes con SLA Vencido
+            Top 15 — SLA Vencido (más tiempo abiertos)
           </h2>
           {incidents.length > 0 && (
             <span className="rounded-full bg-critical-dim px-2 py-0.5 font-mono text-xs text-critical">

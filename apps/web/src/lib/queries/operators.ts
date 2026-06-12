@@ -1,58 +1,48 @@
 import { db } from "@/lib/db";
 
+/**
+ * Vista EN VIVO: operadores (logins HPSM, p.ej. kvieyra) con incidentes
+ * abiertos asignados en el snapshot actual. Sin históricos de cerrados —
+ * refleja quién está gestionando qué en este momento.
+ */
 export async function getOperators() {
-  const [openRecs, closedRecs] = await Promise.all([
-    db.openIncident.findMany({
-      where: { assignee: { not: null } },
-      select: { assignee: true, incidentId: true, group: true },
-    }),
-    db.closedIncident.findMany({
-      select: { closedBy: true, slaBreached: true, group: true },
-    }),
-  ]);
+  const rows = await db.openIncident.findMany({
+    where: { assignee: { not: null } },
+    select: { assignee: true, incidentId: true, group: true, status: true },
+  });
 
-  // Agrupar abiertos por assignee
-  const openMap = new Map<string, { incidents: Set<string>; groups: Set<string> }>();
-  for (const r of openRecs) {
+  interface Acc {
+    incidents: Set<string>;
+    groups: Set<string>;
+    statuses: Map<string, Set<string>>;
+  }
+  const map = new Map<string, Acc>();
+  for (const r of rows) {
     if (!r.assignee) continue;
-    let e = openMap.get(r.assignee);
-    if (!e) openMap.set(r.assignee, (e = { incidents: new Set(), groups: new Set() }));
+    let e = map.get(r.assignee);
+    if (!e)
+      map.set(
+        r.assignee,
+        (e = { incidents: new Set(), groups: new Set(), statuses: new Map() })
+      );
     e.incidents.add(r.incidentId);
     e.groups.add(r.group);
+    const st = (r.status || "SIN ESTATUS").toUpperCase();
+    let s = e.statuses.get(st);
+    if (!s) e.statuses.set(st, (s = new Set()));
+    s.add(r.incidentId);
   }
 
-  // Agrupar cerrados por closedBy
-  const closedMap = new Map<string, { total: number; breached: number }>();
-  for (const r of closedRecs) {
-    let e = closedMap.get(r.closedBy);
-    if (!e) closedMap.set(r.closedBy, (e = { total: 0, breached: 0 }));
-    e.total++;
-    if (r.slaBreached) e.breached++;
-  }
-
-  // Unir ambas fuentes
-  const allNames = new Set([...openMap.keys(), ...closedMap.keys()]);
-
-  return [...allNames]
-    .map((name) => {
-      const open = openMap.get(name);
-      const closed = closedMap.get(name);
-      const closedTotal = closed?.total ?? 0;
-      const closedBreached = closed?.breached ?? 0;
-      const slaCompliance =
-        closedTotal > 0
-          ? Math.round(((closedTotal - closedBreached) / closedTotal) * 100)
-          : 100;
-      return {
-        name,
-        openCount: open?.incidents.size ?? 0,
-        closedCount: closedTotal,
-        breachedCount: closedBreached,
-        slaCompliance,
-        groups: [...(open?.groups ?? [])],
-      };
-    })
-    .sort((a, b) => b.openCount - a.openCount || b.closedCount - a.closedCount);
+  return [...map.entries()]
+    .map(([login, e]) => ({
+      login,
+      openCount: e.incidents.size,
+      groups: [...e.groups].sort(),
+      statuses: [...e.statuses.entries()]
+        .map(([status, ids]) => ({ status, count: ids.size }))
+        .sort((a, b) => b.count - a.count),
+    }))
+    .sort((a, b) => b.openCount - a.openCount || a.login.localeCompare(b.login));
 }
 
 export type OperatorStats = Awaited<ReturnType<typeof getOperators>>[number];

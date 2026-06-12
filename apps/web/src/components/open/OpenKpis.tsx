@@ -28,7 +28,11 @@ export function OpenKpis({ stats }: { stats?: OpenStats }) {
   return (
     <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
       <Card label="Incidentes abiertos" value={stats?.totalIncidents ?? "—"} sub="únicos" />
-      <Card label="Sitios afectados" value={stats?.totalSites ?? "—"} sub="ubicaciones" />
+      <Card
+        label="Sitios afectados"
+        value={stats?.totalSites ?? "—"}
+        sub="ubicaciones — un incidente puede abarcar varios sitios"
+      />
       <Card label="PEXA" value={pexa} accent="text-accent" sub="incidentes" />
       <Card label="CECOR" value={cecor} accent="text-warning" sub="incidentes" />
     </div>

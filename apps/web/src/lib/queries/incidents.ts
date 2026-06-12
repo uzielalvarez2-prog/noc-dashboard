@@ -72,12 +72,20 @@ export async function getKPIs() {
   }
   const incidents = [...incidentMap.values()];
 
-  const breached = incidents.filter((r) => r.openTime <= slaBreachThreshold);
+  // Los RESUELTOS siguen en la cola pero ya no requieren atención
+  const isActive = (s: string) => !s.toUpperCase().includes("RESOLVED");
+
+  const breached = incidents.filter(
+    (r) => isActive(r.status) && r.openTime <= slaBreachThreshold
+  );
   const atRisk = incidents.filter(
-    (r) => r.openTime > slaBreachThreshold && r.openTime <= slaRiskThreshold
+    (r) =>
+      isActive(r.status) &&
+      r.openTime > slaBreachThreshold &&
+      r.openTime <= slaRiskThreshold
   );
 
-  const criticalIncidents = breached.slice(0, 10).map((r) => ({
+  const criticalIncidents = breached.slice(0, 15).map((r) => ({
     id: r.incidentId,
     title: `${r.incidentId} — ${r.group}`,
     group: r.group,
@@ -91,7 +99,9 @@ export async function getKPIs() {
 
   return {
     totalOpen: incidents.length,
-    criticalActive: breached.length,
+    openPexa: incidents.filter((r) => r.group === "PEXA").length,
+    openCecor: incidents.filter((r) => r.group === "CECOR").length,
+    criticalActive: breached.filter((r) => r.group === "PEXA").length,
     slaAtRisk: atRisk.length,
     closedToday,
     criticalIncidents,
@@ -105,22 +115,42 @@ export interface TrendPoint {
   CECOR: number;
 }
 
-/** Devuelve conteos de incidentes abiertos por dia — solo dias con datos (hasta 30 dias atras). */
+/**
+ * Conteo por día de los incidentes abiertos ACTUALES (únicos, no filas por
+ * sitio) según cuándo cayeron — solo días con datos, hasta 30 días atrás.
+ */
 export async function getOpenByDay(): Promise<{ day: string; total: number }[]> {
+  const since = new Date();
+  since.setDate(since.getDate() - 29);
+  since.setHours(0, 0, 0, 0);
+
+  const rows = await db.openIncident.findMany({
+    where: { openTime: { gte: since } },
+    select: { incidentId: true, openTime: true },
+  });
+
+  // Un incidente abarca varios sitios (filas); usar su primer openTime
+  const firstOpen = new Map<string, Date>();
+  for (const r of rows) {
+    const prev = firstOpen.get(r.incidentId);
+    if (!prev || r.openTime < prev) firstOpen.set(r.incidentId, r.openTime);
+  }
+
+  const counts = new Map<string, number>();
+  for (const t of firstOpen.values()) {
+    const key = t.toISOString().slice(0, 10);
+    counts.set(key, (counts.get(key) ?? 0) + 1);
+  }
+
   const result = [];
   for (let i = 29; i >= 0; i--) {
-    const start = new Date();
-    start.setDate(start.getDate() - i);
-    start.setHours(0, 0, 0, 0);
-    const end = new Date(start);
-    end.setHours(23, 59, 59, 999);
-
-    const total = await db.openIncident.count({
-      where: { openTime: { gte: start, lte: end } },
-    });
+    const d = new Date();
+    d.setDate(d.getDate() - i);
+    d.setHours(12, 0, 0, 0);
+    const total = counts.get(d.toISOString().slice(0, 10)) ?? 0;
     if (total > 0) {
       result.push({
-        day: start.toLocaleDateString("es-MX", { weekday: "short", day: "2-digit" }),
+        day: d.toLocaleDateString("es-MX", { weekday: "short", day: "2-digit" }),
         total,
       });
     }
@@ -128,15 +158,23 @@ export async function getOpenByDay(): Promise<{ day: string; total: number }[]> 
   return result;
 }
 
-/** Devuelve conteos por hora en las últimas 24h para el chart de tendencia (PEXA vs CECOR). */
+/** Conteos por hora (incidentes únicos) en las últimas 24h — PEXA vs CECOR. */
 export async function getIncidentTrend(): Promise<TrendPoint[]> {
   const now = new Date();
   const since = new Date(now.getTime() - 24 * 3600000);
 
-  const incidents = await db.openIncident.findMany({
+  const rows = await db.openIncident.findMany({
     where: { openTime: { gte: since } },
-    select: { openTime: true, group: true },
+    select: { incidentId: true, openTime: true, group: true },
   });
+
+  // Deduplicar: un incidente abarca varios sitios (filas)
+  const uniq = new Map<string, { openTime: Date; group: string }>();
+  for (const r of rows) {
+    const prev = uniq.get(r.incidentId);
+    if (!prev || r.openTime < prev.openTime)
+      uniq.set(r.incidentId, { openTime: r.openTime, group: r.group });
+  }
 
   const buckets: Record<string, { PEXA: number; CECOR: number }> = {};
   for (let i = 0; i < 24; i++) {
@@ -145,7 +183,7 @@ export async function getIncidentTrend(): Promise<TrendPoint[]> {
     buckets[label] = { PEXA: 0, CECOR: 0 };
   }
 
-  for (const inc of incidents) {
+  for (const inc of uniq.values()) {
     const h = new Date(inc.openTime);
     const label = `${String(h.getHours()).padStart(2, "0")}:00`;
     if (buckets[label]) {

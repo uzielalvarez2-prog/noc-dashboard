@@ -4,12 +4,12 @@ import { KPIGrid } from "@/components/dashboard/KPIGrid";
 import { SLAGauge } from "@/components/dashboard/SLAGauge";
 import { IncidentsChart } from "@/components/dashboard/IncidentsChart";
 import { OpenByDayChart } from "@/components/dashboard/OpenByDayChart";
-import { TopCriticalTable } from "@/components/dashboard/TopCriticalTable";
+import { EscalatedPanel } from "@/components/dashboard/EscalatedPanel";
 
 export const dynamic = "force-dynamic";
 
 const EMPTY_KPIS = {
-  totalOpen: 0, criticalActive: 0, slaAtRisk: 0,
+  totalOpen: 0, openPexa: 0, openCecor: 0, criticalActive: 0, slaAtRisk: 0,
   closedToday: 0, lastSync: new Date().toISOString(),
 };
 const EMPTY_SLA = {
@@ -41,6 +41,8 @@ export default async function OverviewPage() {
       <KPIGrid
         initial={{
           totalOpen: kpis.totalOpen,
+          openPexa: kpis.openPexa,
+          openCecor: kpis.openCecor,
           criticalActive: kpis.criticalActive,
           slaAtRisk: kpis.slaAtRisk,
           closedToday: kpis.closedToday,
@@ -55,7 +57,7 @@ export default async function OverviewPage() {
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
         <OpenByDayChart initial={byDay} />
-        <TopCriticalTable />
+        <EscalatedPanel />
       </div>
     </div>
   );

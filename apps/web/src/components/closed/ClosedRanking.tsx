@@ -21,13 +21,17 @@ const CAUSE_PALETTE = [
   "#94a3b8", // slate
 ];
 
-// Verde degradado: rank 0 (más cerrados) → verde oscuro; últimos → verde claro
-function analystColor(idx: number, total: number): string {
-  const ratio = total <= 1 ? 0 : idx / (total - 1);
-  // hsl: tono 142 (verde), saturación 65→35%, luminosidad 38→58%
-  const sat = Math.round(65 - ratio * 30);
-  const lum = Math.round(38 + ratio * 20);
-  return `hsl(142, ${sat}%, ${lum}%)`;
+// Semáforo por volumen de cierres: 31+ verde, 20-30 ámbar, <20 rojo
+function analystColor(count: number): string {
+  if (count >= 31) return "#22c55e";
+  if (count >= 20) return "#f59e0b";
+  return "#ef4444";
+}
+
+// "NOMBRE SEGUNDO APELLIDO1 APELLIDO2" → "NOMBRE APELLIDO1" para que quepa
+function shortName(full: string): string {
+  const parts = full.trim().split(/\s+/);
+  return parts.length <= 2 ? full : `${parts[0]} ${parts[parts.length - 2]}`;
 }
 
 function csvCell(s: string): string {
@@ -78,8 +82,8 @@ export function ClosedRanking({
   const total = rows.reduce((s, r) => s + r.count, 0);
   const max = Math.max(1, ...top.map((r) => r.count));
 
-  function barColor(idx: number): string {
-    if (variant === "analyst") return analystColor(idx, top.length);
+  function barColor(idx: number, count: number): string {
+    if (variant === "analyst") return analystColor(count);
     if (variant === "cause") return CAUSE_PALETTE[idx % CAUSE_PALETTE.length];
     return "#38bdf8"; // default accent
   }
@@ -99,6 +103,19 @@ export function ClosedRanking({
     <div className="rounded-xl border border-border/60 bg-surface/60 p-4 backdrop-blur-md">
       <div className="mb-3 flex items-center justify-between gap-2">
         <h3 className="text-sm font-semibold text-text-primary">{title}</h3>
+        {variant === "analyst" && (
+          <div className="flex items-center gap-2 text-[10px] text-text-muted">
+            <span className="flex items-center gap-1">
+              <span className="h-2 w-2 rounded-full bg-[#22c55e]" /> 31+
+            </span>
+            <span className="flex items-center gap-1">
+              <span className="h-2 w-2 rounded-full bg-[#f59e0b]" /> 20-30
+            </span>
+            <span className="flex items-center gap-1">
+              <span className="h-2 w-2 rounded-full bg-[#ef4444]" /> &lt;20
+            </span>
+          </div>
+        )}
       </div>
 
       <div className="space-y-1.5">
@@ -106,11 +123,11 @@ export function ClosedRanking({
           <p className="py-6 text-center text-xs text-text-muted">Sin datos — sube un CSV de cerrados</p>
         )}
         {top.map((r, idx) => {
-          const color = barColor(idx);
+          const color = barColor(idx, r.count);
           return (
             <div key={r.name} className="flex items-center gap-2">
               <span className="w-40 shrink-0 truncate text-xs text-text-primary" title={r.name}>
-                {r.name}
+                {variant === "analyst" ? shortName(r.name) : r.name}
               </span>
               <div className="relative h-4 flex-1 overflow-hidden rounded bg-surface-elevated/60">
                 <div
