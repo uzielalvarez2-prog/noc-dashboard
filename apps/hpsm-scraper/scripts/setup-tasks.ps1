@@ -32,6 +32,19 @@ $out = schtasks /Create /TN "NOC-RunClosed-2230" /TR "$ps $flg $dir\run-closed-2
 if ($LASTEXITCODE -eq 0) { Write-Host "OK   NOC-RunClosed-2230 (diario 22:30)" }
 else                      { Write-Host "ERR  NOC-RunClosed-2230: $out" }
 
+# -------------------------------------------------------
+# 4. Ajustes de las tareas de cerrados: despertar la PC si está
+#    dormida a la hora del trigger y no bloquear por batería.
+#    (schtasks no puede configurar esto; se aplica después de crear.)
+#    NOC-RunOpen NO lleva WakeToRun: despertaría la PC cada 8 min.
+# -------------------------------------------------------
+$settings = New-ScheduledTaskSettingsSet -WakeToRun -AllowStartIfOnBatteries `
+    -DontStopIfGoingOnBatteries -ExecutionTimeLimit (New-TimeSpan -Hours 1)
+foreach ($t in "NOC-RunClosed-15", "NOC-RunClosed-2230") {
+    Set-ScheduledTask -TaskName $t -Settings $settings | Out-Null
+    Write-Host "OK   $t (WakeToRun + bateria)"
+}
+
 Write-Host ""
 Write-Host "Verificar con:"
 Write-Host "  schtasks /Query /TN NOC-RunOpen /V /FO LIST"
