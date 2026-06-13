@@ -12,12 +12,15 @@ export interface OpenIncidentRow {
   assignee: string | null;
   group: string;
   uploadedAt: string;
+  /** Nº de sitios que abarca el incidente (1 si es de un solo sitio). */
+  siteCount: number;
 }
 
 export interface OpenListResponse {
   data: OpenIncidentRow[];
   meta: {
     total: number;
+    totalSites: number;
     uniqueIncidents: number;
     page: number;
     limit: number;

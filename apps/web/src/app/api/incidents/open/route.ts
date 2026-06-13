@@ -17,6 +17,7 @@ export async function GET(req: NextRequest) {
       status: sp.get("status") ?? undefined,
       page: Number(sp.get("page") ?? "1"),
       limit: Number(sp.get("limit") ?? "50"),
+      collapse: sp.get("collapse") !== "false",
     });
     return NextResponse.json(result);
   } catch (err) {

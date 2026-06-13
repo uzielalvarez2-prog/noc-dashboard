@@ -10,6 +10,8 @@ export interface OpenFilters {
   status?: string;
   page?: number;
   limit?: number;
+  /** false = filas a nivel sitio (detalle). default true = 1 fila por incidente. */
+  collapse?: boolean;
 }
 
 /** Arma el filtro Prisma. El buscador `q` abarca todas las columnas visibles. */
@@ -20,6 +22,7 @@ export function buildOpenWhere(f: OpenFilters): Prisma.OpenIncidentWhereInput {
   if (f.district) and.push({ district: { equals: f.district, mode: "insensitive" } });
   if (f.assignee) and.push({ assignee: { contains: f.assignee, mode: "insensitive" } });
   if (f.status) and.push({ status: { contains: f.status, mode: "insensitive" } });
+  // `collapse` no es columna; no se agrega al where.
   if (f.q?.trim()) {
     const q = f.q.trim();
     and.push({
@@ -38,31 +41,93 @@ export function buildOpenWhere(f: OpenFilters): Prisma.OpenIncidentWhereInput {
   return and.length ? { AND: and } : {};
 }
 
-/** Lista paginada a nivel incidente×sitio + total de filas e incidentes únicos. */
+/**
+ * Lista de incidentes abiertos.
+ * - Por defecto colapsa a 1 fila por incidente (un IM puede abarcar varios
+ *   sitios); agrega `siteCount` y muestra "Varios (N)" en estado/distrito cuando
+ *   el incidente toca más de uno. La paginación es a nivel incidente.
+ * - Con `collapse:false` devuelve las filas a nivel sitio (para el detalle/exporte
+ *   de Top por estado/distrito).
+ */
 export async function getOpenIncidents(f: OpenFilters) {
   const page = Math.max(1, f.page ?? 1);
-  const limit = Math.min(200, Math.max(1, f.limit ?? 50));
   const where = buildOpenWhere(f);
 
-  const [rows, total, distinctIds] = await Promise.all([
-    db.openIncident.findMany({
-      where,
-      orderBy: [{ openTime: "desc" }],
-      skip: (page - 1) * limit,
-      take: limit,
-    }),
-    db.openIncident.count({ where }),
-    db.openIncident.findMany({ where, select: { incidentId: true }, distinct: ["incidentId"] }),
-  ]);
+  if (f.collapse === false) {
+    const limit = Math.min(500, Math.max(1, f.limit ?? 50));
+    const [rows, total, distinctIds] = await Promise.all([
+      db.openIncident.findMany({
+        where,
+        orderBy: [{ openTime: "desc" }],
+        skip: (page - 1) * limit,
+        take: limit,
+      }),
+      db.openIncident.count({ where }),
+      db.openIncident.findMany({ where, select: { incidentId: true }, distinct: ["incidentId"] }),
+    ]);
+    return {
+      data: rows.map((r) => ({ ...r, siteCount: 1 })),
+      meta: {
+        total,
+        totalSites: total,
+        uniqueIncidents: distinctIds.length,
+        page,
+        limit,
+        lastSync: rows[0]?.uploadedAt ?? null,
+      },
+    };
+  }
+
+  const limit = Math.min(200, Math.max(1, f.limit ?? 50));
+  // Dataset acotado (~2.5k filas máx): traemos y colapsamos en memoria.
+  const all = await db.openIncident.findMany({ where, orderBy: [{ openTime: "desc" }] });
+
+  const byIncident = new Map<
+    string,
+    (typeof all)[number] & { siteCount: number; _states: Set<string>; _districts: Set<string> }
+  >();
+  for (const r of all) {
+    const agg = byIncident.get(r.incidentId);
+    if (!agg) {
+      byIncident.set(r.incidentId, {
+        ...r,
+        siteCount: 1,
+        _states: new Set([r.state]),
+        _districts: new Set([r.district]),
+      });
+    } else {
+      agg.siteCount++;
+      agg._states.add(r.state);
+      agg._districts.add(r.district);
+    }
+  }
+
+  const incidents = [...byIncident.values()].map((a) => ({
+    id: a.id,
+    incidentId: a.incidentId,
+    openTime: a.openTime,
+    status: a.status,
+    company: a.company,
+    serviceId: a.serviceId,
+    state: a._states.size > 1 ? `Varios (${a._states.size})` : a.state,
+    district: a._districts.size > 1 ? `Varios (${a._districts.size})` : a.district,
+    assignee: a.assignee,
+    group: a.group,
+    uploadedAt: a.uploadedAt,
+    siteCount: a.siteCount,
+  }));
+
+  const pageRows = incidents.slice((page - 1) * limit, page * limit);
 
   return {
-    data: rows,
+    data: pageRows,
     meta: {
-      total,
-      uniqueIncidents: distinctIds.length,
+      total: incidents.length,
+      totalSites: all.length,
+      uniqueIncidents: incidents.length,
       page,
       limit,
-      lastSync: rows[0]?.uploadedAt ?? null,
+      lastSync: all[0]?.uploadedAt ?? null,
     },
   };
 }

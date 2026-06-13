@@ -70,6 +70,7 @@ async function fetchTopDetail(
   if (group && group !== "ALL") params.set("group", group);
   params.set(dimensionField, topName);
   params.set("limit", "500");
+  params.set("collapse", "false"); // detalle a nivel sitio
   const res = await fetch(`/api/incidents/open?${params}`);
   if (!res.ok) throw new Error("Error al obtener detalle");
   const json = await res.json();
