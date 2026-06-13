@@ -163,11 +163,12 @@ export function OpenByDayChart({ initial }: Props) {
         </button>
       </div>
 
-      <div ref={chartRef} className="h-64">
+      <div ref={chartRef} className="mx-auto h-56 max-w-2xl">
         <ResponsiveContainer width="100%" height="100%">
           <BarChart
             data={chartData}
             margin={{ top: 20, right: 8, bottom: 24, left: -8 }}
+            barCategoryGap="30%"
           >
             <CartesianGrid strokeDasharray="3 3" stroke="#1e3048" />
             <XAxis
@@ -187,7 +188,7 @@ export function OpenByDayChart({ initial }: Props) {
               allowDecimals={false}
             />
             <Tooltip {...TOOLTIP_STYLE} />
-            <Bar dataKey="total" name="Incidentes" radius={[4, 4, 0, 0]}>
+            <Bar dataKey="total" name="Incidentes" radius={[4, 4, 0, 0]} maxBarSize={36}>
               {chartData.map((_, idx) => (
                 <Cell
                   key={idx}
