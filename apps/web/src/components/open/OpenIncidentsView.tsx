@@ -28,14 +28,6 @@ export function OpenIncidentsView() {
     refetchInterval: 240_000,
   });
 
-  // El Top por Estado/Distrito es SIEMPRE de PEXA (CECOR tiene su propia vista).
-  // No depende del botón Todos/PEXA/CECOR.
-  const { data: pexaStats } = useQuery<OpenStats>({
-    queryKey: ["open-stats", "PEXA"],
-    queryFn: () => fetchStats("PEXA"),
-    refetchInterval: 240_000,
-  });
-
   const groupBtn = (g: Group) =>
     cn(
       "rounded-md px-3 py-1.5 text-sm font-medium transition-colors",
@@ -58,22 +50,22 @@ export function OpenIncidentsView() {
 
       <div className="grid gap-4 lg:grid-cols-2">
         <TopByDimension
-          title="Top por Estado (PEXA)"
+          title="Top por Estado"
           dimensionLabel="Estado"
           dimensionField="state"
-          rows={pexaStats?.topByState ?? []}
-          total={pexaStats?.stateTotal ?? 0}
-          fileBase="top-estado-pexa"
-          group="PEXA"
+          rows={stats?.topByState ?? []}
+          total={stats?.stateTotal ?? 0}
+          fileBase={`top-estado-${group.toLowerCase()}`}
+          group={group}
         />
         <TopByDimension
-          title="Top por Distrito (PEXA)"
+          title="Top por Distrito"
           dimensionLabel="Distrito"
           dimensionField="district"
-          rows={pexaStats?.topByDistrict ?? []}
-          total={pexaStats?.districtTotal ?? 0}
-          fileBase="top-distrito-pexa"
-          group="PEXA"
+          rows={stats?.topByDistrict ?? []}
+          total={stats?.districtTotal ?? 0}
+          fileBase={`top-distrito-${group.toLowerCase()}`}
+          group={group}
         />
       </div>
 
