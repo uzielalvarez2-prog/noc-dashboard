@@ -6,18 +6,22 @@ import type { TopRow, OpenIncidentRow } from "@/types/open";
 import { copyHTMLTable } from "@/lib/openExport";
 import { downloadXLSX } from "@/lib/excelExport";
 
-const DETAIL_COLS = ["Incident ID", "Apertura", "Estatus", "Empresa", "Servicio", "Estado", "Asignado", "Distrito", "Grupo"];
+// El Excel solo lleva la columna de su propia dimensión: Top por Estado omite
+// Distrito y Top por Distrito omite Estado (así la masiva queda limpia).
+function detailCols(dimField: "state" | "district"): string[] {
+  const dim = dimField === "state" ? "Estado" : "Distrito";
+  return ["Incident ID", "Apertura", "Estatus", "Empresa", "Servicio", dim, "Asignado", "Grupo"];
+}
 
-function detailToRows(rows: OpenIncidentRow[]): (string | number)[][] {
+function detailToRows(rows: OpenIncidentRow[], dimField: "state" | "district"): (string | number)[][] {
   return rows.map((r) => [
     r.incidentId,
     new Date(r.openTime).toLocaleString("es-MX", { hour12: false }),
     r.status,
     r.company,
     r.serviceId,
-    r.state,
+    dimField === "state" ? r.state : r.district,
     r.assignee ?? "",
-    r.district,
     r.group,
   ]);
 }
@@ -135,8 +139,8 @@ export function TopByDimension({
       await downloadXLSX(
         `${fileBase}-${name.toLowerCase().replace(/\s+/g, "-")}.xlsx`,
         name.slice(0, 28),
-        DETAIL_COLS,
-        detailToRows(detail),
+        detailCols(dimensionField),
+        detailToRows(detail, dimensionField),
       );
     } finally {
       setRowLoading(null);
@@ -151,8 +155,8 @@ export function TopByDimension({
       await downloadXLSX(
         `${fileBase}-${topEntry.name.toLowerCase().replace(/\s+/g, "-")}.xlsx`,
         topEntry.name.slice(0, 28),
-        DETAIL_COLS,
-        detailToRows(detail),
+        detailCols(dimensionField),
+        detailToRows(detail, dimensionField),
       );
     } finally {
       setLoadingExport(false);
