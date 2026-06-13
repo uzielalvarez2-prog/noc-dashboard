@@ -93,7 +93,7 @@ export function TopByDimension({
   group?: string;
   limit?: number;
 }) {
-  const [metric, setMetric] = useState<Metric>("sites");
+  const [metric, setMetric] = useState<Metric>("incidents");
   const [copied, setCopied] = useState(false);
   const [loadingExport, setLoadingExport] = useState(false);
   const [rowLoading, setRowLoading] = useState<string | null>(null);
