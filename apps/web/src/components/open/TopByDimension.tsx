@@ -3,8 +3,25 @@
 import { useState } from "react";
 import { Download, Copy, Check, Loader2 } from "lucide-react";
 import type { TopRow, OpenIncidentRow } from "@/types/open";
-import { downloadCSV, copyHTMLTable } from "@/lib/openExport";
+import { copyHTMLTable } from "@/lib/openExport";
+import { downloadXLSX } from "@/lib/excelExport";
 import { cn } from "@/lib/utils";
+
+const DETAIL_COLS = ["Incident ID", "Apertura", "Estatus", "Empresa", "Servicio", "Estado", "Asignado", "Distrito", "Grupo"];
+
+function detailToRows(rows: OpenIncidentRow[]): (string | number)[][] {
+  return rows.map((r) => [
+    r.incidentId,
+    new Date(r.openTime).toLocaleString("es-MX", { hour12: false }),
+    r.status,
+    r.company,
+    r.serviceId,
+    r.state,
+    r.assignee ?? "",
+    r.district,
+    r.group,
+  ]);
+}
 
 type Metric = "sites" | "incidents";
 
@@ -15,30 +32,8 @@ const PALETTE = [
   "#4ade80", "#94a3b8",
 ];
 
-function csvCell(s: string): string {
-  return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
-}
-
 function escapeHtml(s: string): string {
   return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
-}
-
-function detailToCSV(rows: OpenIncidentRow[]): string {
-  const header = ["Incident ID", "Apertura", "Estatus", "Empresa", "Servicio", "Estado", "Asignado", "Distrito", "Grupo"].join(",");
-  const lines = rows.map((r) =>
-    [
-      csvCell(r.incidentId),
-      csvCell(new Date(r.openTime).toLocaleString("es-MX", { hour12: false })),
-      csvCell(r.status),
-      csvCell(r.company),
-      csvCell(r.serviceId),
-      csvCell(r.state),
-      csvCell(r.assignee ?? ""),
-      csvCell(r.district),
-      csvCell(r.group),
-    ].join(",")
-  );
-  return [header, ...lines].join("\r\n");
 }
 
 function detailToHTML(rows: OpenIncidentRow[], title: string, dimLabel: string, dimField: "state" | "district"): string {
@@ -136,13 +131,17 @@ export function TopByDimension({
     }
   }
 
-  // Descarga el CSV (todos los campos) de un estado/distrito específico
+  // Descarga el Excel (todos los campos) de un estado/distrito específico
   async function downloadDetail(name: string) {
     setRowLoading(name);
     try {
       const detail = await fetchTopDetail(name, dimensionField, group);
-      const csv = detailToCSV(detail);
-      downloadCSV(`${fileBase}-${name.toLowerCase().replace(/\s+/g, "-")}.csv`, csv);
+      await downloadXLSX(
+        `${fileBase}-${name.toLowerCase().replace(/\s+/g, "-")}.xlsx`,
+        name.slice(0, 28),
+        DETAIL_COLS,
+        detailToRows(detail),
+      );
     } finally {
       setRowLoading(null);
     }
@@ -153,8 +152,12 @@ export function TopByDimension({
     setLoadingExport(true);
     try {
       const detail = await fetchTopDetail(topEntry.name, dimensionField, group);
-      const csv = detailToCSV(detail);
-      downloadCSV(`${fileBase}-${topEntry.name.toLowerCase().replace(/\s+/g, "-")}.csv`, csv);
+      await downloadXLSX(
+        `${fileBase}-${topEntry.name.toLowerCase().replace(/\s+/g, "-")}.xlsx`,
+        topEntry.name.slice(0, 28),
+        DETAIL_COLS,
+        detailToRows(detail),
+      );
     } finally {
       setLoadingExport(false);
     }
@@ -222,7 +225,7 @@ export function TopByDimension({
         })}
       </div>
       <p className="mt-2 text-[11px] text-text-muted/70">
-        Tip: haz click en cualquier barra para bajar el CSV de ese {dimensionLabel.toLowerCase()}.
+        Tip: haz click en cualquier barra para bajar el Excel de ese {dimensionLabel.toLowerCase()}.
       </p>
 
       <div className="mt-3 flex items-center justify-between border-t border-border/50 pt-3">

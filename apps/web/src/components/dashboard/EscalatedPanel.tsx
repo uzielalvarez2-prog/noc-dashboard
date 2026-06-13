@@ -3,7 +3,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Star, X, Download } from "lucide-react";
 import { cn, formatHpsm } from "@/lib/utils";
-import { downloadCSV, rowsToCSV } from "@/lib/openExport";
+import { downloadXLSX } from "@/lib/excelExport";
 
 export interface EscalatedItem {
   incidentId: string;
@@ -98,7 +98,7 @@ export function EscalatedPanel() {
       it.district,
       it.group ?? "—",
     ]);
-    downloadCSV("escalados-atencion-especial.csv", rowsToCSV(COLS, rows));
+    downloadXLSX("escalados-atencion-especial.xlsx", "Escalados", COLS, rows);
   }
 
   return (

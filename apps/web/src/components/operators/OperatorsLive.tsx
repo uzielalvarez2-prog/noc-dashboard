@@ -5,7 +5,7 @@ import { Download } from "lucide-react";
 import type { OperatorStats } from "@/lib/queries/operators";
 import { OperatorCard } from "./OperatorCard";
 import { ShiftSummary } from "./ShiftSummary";
-import { downloadCSV, rowsToCSV } from "@/lib/openExport";
+import { downloadXLSX } from "@/lib/excelExport";
 
 async function fetchOperators(): Promise<OperatorStats[]> {
   const res = await fetch("/api/operators");
@@ -42,7 +42,7 @@ export function OperatorsLive({ initial }: { initial: OperatorStats[] }) {
 
   function onExport() {
     const { headers, rows } = buildPivot(data);
-    downloadCSV("operadores-en-vivo.csv", rowsToCSV(headers, rows));
+    downloadXLSX("operadores-en-vivo.xlsx", "Operadores", headers, rows);
   }
 
   return (
@@ -59,7 +59,7 @@ export function OperatorsLive({ initial }: { initial: OperatorStats[] }) {
               onClick={onExport}
               className="flex items-center gap-1.5 rounded-md border border-border bg-surface px-3 py-1.5 text-xs font-medium text-text-muted transition-colors hover:border-accent hover:text-accent"
             >
-              <Download className="h-3.5 w-3.5" /> Descargar tabla dinámica (CSV)
+              <Download className="h-3.5 w-3.5" /> Descargar tabla dinámica (Excel)
             </button>
           </div>
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">

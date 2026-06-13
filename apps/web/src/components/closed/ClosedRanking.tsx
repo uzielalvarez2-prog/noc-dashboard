@@ -3,7 +3,8 @@
 import { useState } from "react";
 import { Download, Copy, Check } from "lucide-react";
 import type { ClosedRankRow } from "@/types/closed";
-import { downloadCSV, copyHTMLTable } from "@/lib/openExport";
+import { copyHTMLTable } from "@/lib/openExport";
+import { downloadXLSX } from "@/lib/excelExport";
 
 // Paleta de colores para causas (cada una un color distinto)
 const CAUSE_PALETTE = [
@@ -34,18 +35,8 @@ function shortName(full: string): string {
   return parts.length <= 2 ? full : `${parts[0]} ${parts[parts.length - 2]}`;
 }
 
-function csvCell(s: string): string {
-  return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
-}
-
 function escapeHtml(s: string): string {
   return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
-}
-
-function toCSV(rows: ClosedRankRow[], dimensionLabel: string): string {
-  const header = [dimensionLabel, "Cerrados"].join(",");
-  const lines = rows.map((r) => [csvCell(r.name), r.count].join(","));
-  return [header, ...lines].join("\r\n");
 }
 
 function toHTMLTable(rows: ClosedRankRow[], title: string, dimensionLabel: string): string {
@@ -96,7 +87,12 @@ export function ClosedRanking({
   }
 
   function onExport() {
-    downloadCSV(`${fileBase}.csv`, toCSV(sorted, dimensionLabel));
+    downloadXLSX(
+      `${fileBase}.xlsx`,
+      dimensionLabel,
+      [dimensionLabel, "Cerrados"],
+      sorted.map((r) => [r.name, r.count]),
+    );
   }
 
   return (
