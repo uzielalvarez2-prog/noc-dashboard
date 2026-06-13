@@ -75,7 +75,10 @@ async function fetchTopDetail(
   const res = await fetch(`/api/incidents/open?${params}`);
   if (!res.ok) throw new Error("Error al obtener detalle");
   const json = await res.json();
-  return (json.data ?? []) as OpenIncidentRow[];
+  const data = (json.data ?? []) as OpenIncidentRow[];
+  // El detalle viene a nivel sitio; para la masiva dedup a 1 fila por incidente.
+  const seen = new Set<string>();
+  return data.filter((r) => (seen.has(r.incidentId) ? false : seen.add(r.incidentId)));
 }
 
 export function TopByDimension({
