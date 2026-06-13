@@ -124,29 +124,36 @@ export interface TrendPoint {
 
 /**
  * Conteo por día de los incidentes abiertos ACTUALES (únicos, no filas por
- * sitio) según cuándo cayeron — solo días con datos, hasta 30 días atrás.
+ * sitio) según cuándo cayeron, separado por grupo — solo días con datos,
+ * hasta 30 días atrás.
  */
-export async function getOpenByDay(): Promise<{ day: string; total: number }[]> {
+export async function getOpenByDay(): Promise<
+  { day: string; PEXA: number; CECOR: number; total: number }[]
+> {
   const since = new Date();
   since.setDate(since.getDate() - 29);
   since.setHours(0, 0, 0, 0);
 
   const rows = await db.openIncident.findMany({
     where: { openTime: { gte: since } },
-    select: { incidentId: true, openTime: true },
+    select: { incidentId: true, openTime: true, group: true },
   });
 
-  // Un incidente abarca varios sitios (filas); usar su primer openTime
-  const firstOpen = new Map<string, Date>();
+  // Un incidente abarca varios sitios (filas); usar su primer openTime + grupo
+  const firstOpen = new Map<string, { openTime: Date; group: string }>();
   for (const r of rows) {
     const prev = firstOpen.get(r.incidentId);
-    if (!prev || r.openTime < prev) firstOpen.set(r.incidentId, r.openTime);
+    if (!prev || r.openTime < prev.openTime)
+      firstOpen.set(r.incidentId, { openTime: r.openTime, group: r.group });
   }
 
-  const counts = new Map<string, number>();
-  for (const t of firstOpen.values()) {
-    const key = t.toISOString().slice(0, 10);
-    counts.set(key, (counts.get(key) ?? 0) + 1);
+  const counts = new Map<string, { PEXA: number; CECOR: number }>();
+  for (const { openTime, group } of firstOpen.values()) {
+    const key = openTime.toISOString().slice(0, 10);
+    let c = counts.get(key);
+    if (!c) counts.set(key, (c = { PEXA: 0, CECOR: 0 }));
+    if (group === "CECOR") c.CECOR++;
+    else c.PEXA++;
   }
 
   const result = [];
@@ -154,11 +161,13 @@ export async function getOpenByDay(): Promise<{ day: string; total: number }[]> 
     const d = new Date();
     d.setDate(d.getDate() - i);
     d.setHours(12, 0, 0, 0);
-    const total = counts.get(d.toISOString().slice(0, 10)) ?? 0;
-    if (total > 0) {
+    const c = counts.get(d.toISOString().slice(0, 10));
+    if (c && c.PEXA + c.CECOR > 0) {
       result.push({
         day: d.toLocaleDateString("es-MX", { weekday: "short", day: "2-digit" }),
-        total,
+        PEXA: c.PEXA,
+        CECOR: c.CECOR,
+        total: c.PEXA + c.CECOR,
       });
     }
   }
