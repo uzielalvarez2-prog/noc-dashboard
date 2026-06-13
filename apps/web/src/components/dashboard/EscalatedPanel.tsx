@@ -1,7 +1,7 @@
 "use client";
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Star, X, Download } from "lucide-react";
+import { Siren, X, Download } from "lucide-react";
 import { cn, formatHpsm } from "@/lib/utils";
 import { downloadXLSX } from "@/lib/excelExport";
 
@@ -102,15 +102,18 @@ export function EscalatedPanel() {
   }
 
   return (
-    <div className="flex flex-col rounded-lg border border-warning/40 bg-surface">
-      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-warning/30 bg-warning/5 px-4 py-3">
+    <div className="flex flex-col rounded-lg border border-critical/50 bg-surface shadow-[0_0_20px_-6px] shadow-critical/40">
+      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-critical/40 bg-critical/10 px-4 py-3">
         <div className="flex items-center gap-2">
-          <Star className="h-4 w-4 fill-warning text-warning" />
-          <h2 className="text-sm font-semibold text-text-primary">
+          <span className="relative flex h-5 w-5 items-center justify-center">
+            <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-critical/40" />
+            <Siren className="relative h-4 w-4 animate-pulse text-critical" />
+          </span>
+          <h2 className="text-sm font-bold uppercase tracking-wide text-critical">
             Atención especial — escalados
           </h2>
           {items.length > 0 && (
-            <span className="rounded-full bg-warning/15 px-2 py-0.5 font-mono text-xs text-warning">
+            <span className="rounded-full bg-critical px-2 py-0.5 font-mono text-xs font-bold text-white">
               {items.length}
             </span>
           )}
@@ -132,9 +135,9 @@ export function EscalatedPanel() {
           escalar uno aquí.
         </p>
       ) : (
-        <div className="overflow-x-auto">
+        <div className="max-h-[400px] overflow-auto">
           <table className="w-full border-collapse text-xs">
-            <thead className="bg-surface-elevated">
+            <thead className="sticky top-0 z-10 bg-surface-elevated">
               <tr className="border-b border-border">
                 {COLS.map((h) => (
                   <th
