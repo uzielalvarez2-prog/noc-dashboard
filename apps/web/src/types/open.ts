@@ -40,4 +40,7 @@ export interface OpenStats {
   byGroup: { group: string; incidents: number }[];
   topByState: TopRow[];
   topByDistrict: TopRow[];
+  /** Total de incidentes contado por la columna estado / distrito (todas las entradas). */
+  stateTotal: number;
+  districtTotal: number;
 }

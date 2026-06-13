@@ -143,8 +143,13 @@ interface TopRow {
 function topFrom(map: Map<string, { sites: number; ids: Set<string> }>): TopRow[] {
   return [...map.entries()]
     .map(([name, v]) => ({ name: name || "(sin dato)", sites: v.sites, incidents: v.ids.size }))
-    .sort((a, b) => b.sites - a.sites)
+    .sort((a, b) => b.incidents - a.incidents)
     .slice(0, 10);
+}
+
+/** Suma de incidentes (1 por incidente) sobre TODAS las entradas de la dimensión. */
+function colTotal(map: Map<string, { sites: number; ids: Set<string> }>): number {
+  return [...map.values()].reduce((s, v) => s + v.ids.size, 0);
 }
 
 /**
@@ -190,5 +195,8 @@ export async function getOpenStats(group?: string) {
       .sort((a, b) => b.incidents - a.incidents),
     topByState: topFrom(stateMap),
     topByDistrict: topFrom(distMap),
+    // Total de incidentes contado por cada columna (todas las entradas, no solo el top).
+    stateTotal: colTotal(stateMap),
+    districtTotal: colTotal(distMap),
   };
 }

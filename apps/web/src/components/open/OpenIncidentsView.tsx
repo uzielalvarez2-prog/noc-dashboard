@@ -54,6 +54,7 @@ export function OpenIncidentsView() {
           dimensionLabel="Estado"
           dimensionField="state"
           rows={stats?.topByState ?? []}
+          total={stats?.stateTotal ?? 0}
           fileBase={`top-estado-${group.toLowerCase()}`}
           group={group}
         />
@@ -62,6 +63,7 @@ export function OpenIncidentsView() {
           dimensionLabel="Distrito"
           dimensionField="district"
           rows={stats?.topByDistrict ?? []}
+          total={stats?.districtTotal ?? 0}
           fileBase={`top-distrito-${group.toLowerCase()}`}
           group={group}
         />

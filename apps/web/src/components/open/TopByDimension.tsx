@@ -5,7 +5,6 @@ import { Download, Copy, Check, Loader2 } from "lucide-react";
 import type { TopRow, OpenIncidentRow } from "@/types/open";
 import { copyHTMLTable } from "@/lib/openExport";
 import { downloadXLSX } from "@/lib/excelExport";
-import { cn } from "@/lib/utils";
 
 const DETAIL_COLS = ["Incident ID", "Apertura", "Estatus", "Empresa", "Servicio", "Estado", "Asignado", "Distrito", "Grupo"];
 
@@ -22,8 +21,6 @@ function detailToRows(rows: OpenIncidentRow[]): (string | number)[][] {
     r.group,
   ]);
 }
-
-type Metric = "sites" | "incidents";
 
 // Paleta de colores distinta por posición
 const PALETTE = [
@@ -82,6 +79,7 @@ export function TopByDimension({
   dimensionLabel,
   dimensionField = "state",
   rows,
+  total,
   fileBase,
   group,
   limit = 12,
@@ -90,22 +88,19 @@ export function TopByDimension({
   dimensionLabel: string;
   dimensionField?: "state" | "district";
   rows: TopRow[];
+  total: number;
   fileBase: string;
   group?: string;
   limit?: number;
 }) {
-  const [metric, setMetric] = useState<Metric>("incidents");
   const [copied, setCopied] = useState(false);
   const [loadingExport, setLoadingExport] = useState(false);
   const [rowLoading, setRowLoading] = useState<string | null>(null);
 
-  const sorted = [...rows].sort((a, b) =>
-    metric === "sites" ? b.sites - a.sites : b.incidents - a.incidents
-  );
+  // 1 registro por incidente: ordenamos y graficamos por incidentes únicos.
+  const sorted = [...rows].sort((a, b) => b.incidents - a.incidents);
   const top = sorted.slice(0, limit);
-  const totalSites = rows.reduce((s, r) => s + r.sites, 0);
-  const totalInc = rows.reduce((s, r) => s + r.incidents, 0);
-  const max = Math.max(1, ...top.map((r) => (metric === "sites" ? r.sites : r.incidents)));
+  const max = Math.max(1, ...top.map((r) => r.incidents));
 
   const topEntry = sorted[0]; // el que más tiene
 
@@ -164,24 +159,11 @@ export function TopByDimension({
     }
   }
 
-  const chip = (active: boolean) =>
-    cn(
-      "rounded-md px-2 py-0.5 text-xs font-medium transition-colors",
-      active ? "bg-accent/15 text-accent" : "text-text-muted hover:text-text-primary"
-    );
-
   return (
     <div className="rounded-xl border border-border/60 bg-surface/60 p-4 backdrop-blur-md">
       <div className="mb-3 flex items-center justify-between gap-2">
         <h3 className="text-sm font-semibold text-text-primary">{title}</h3>
-        <div className="flex items-center gap-1">
-          <button type="button" onClick={() => setMetric("sites")} className={chip(metric === "sites")}>
-            Sitios
-          </button>
-          <button type="button" onClick={() => setMetric("incidents")} className={chip(metric === "incidents")}>
-            Incidentes
-          </button>
-        </div>
+        <span className="font-mono text-xs text-text-muted">{total} incidentes</span>
       </div>
 
       <div className="space-y-1.5">
@@ -189,7 +171,7 @@ export function TopByDimension({
           <p className="py-6 text-center text-xs text-text-muted">Sin datos</p>
         )}
         {top.map((r, idx) => {
-          const v = metric === "sites" ? r.sites : r.incidents;
+          const v = r.incidents;
           const color = PALETTE[idx % PALETTE.length];
           const isLoading = rowLoading === r.name;
           return (
@@ -231,8 +213,7 @@ export function TopByDimension({
 
       <div className="mt-3 flex items-center justify-between border-t border-border/50 pt-3">
         <div className="text-xs text-text-muted">
-          <span className="font-semibold text-text-primary">{totalSites}</span> sitios ·{" "}
-          <span className="font-semibold text-text-primary">{totalInc}</span> incidentes
+          <span className="font-semibold text-text-primary">{total}</span> incidentes
           {topEntry && (
             <span className="ml-2 text-text-muted/70">
               · detalle: <span className="text-text-primary">{topEntry.name}</span>
