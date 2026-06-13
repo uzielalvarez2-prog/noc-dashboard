@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Download, Search, Star } from "lucide-react";
-import { cn, formatHpsm } from "@/lib/utils";
+import { cn, formatHpsm, formatHpsmExcel } from "@/lib/utils";
 import { downloadXLSX } from "@/lib/excelExport";
 import { fetchEscalated, type EscalatedResponse } from "./EscalatedPanel";
 
@@ -104,7 +104,7 @@ export function TopCriticalTable() {
     const rows = incidents.map((inc) => [
       inc.id,
       elapsedLabel(inc.openTime),
-      formatHpsm(inc.openTime),
+      formatHpsmExcel(inc.openTime),
       inc.status,
       inc.company,
       inc.serviceId,

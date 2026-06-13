@@ -5,6 +5,7 @@ import { Download, Copy, Check, Loader2 } from "lucide-react";
 import type { TopRow, OpenIncidentRow } from "@/types/open";
 import { copyHTMLTable } from "@/lib/openExport";
 import { downloadXLSX } from "@/lib/excelExport";
+import { formatHpsmExcel } from "@/lib/utils";
 
 // El Excel solo lleva la columna de su propia dimensión: Top por Estado omite
 // Distrito y Top por Distrito omite Estado (así la masiva queda limpia).
@@ -16,7 +17,7 @@ function detailCols(dimField: "state" | "district"): string[] {
 function detailToRows(rows: OpenIncidentRow[], dimField: "state" | "district"): (string | number)[][] {
   return rows.map((r) => [
     r.incidentId,
-    new Date(r.openTime).toLocaleString("es-MX", { hour12: false }),
+    formatHpsmExcel(r.openTime),
     r.status,
     r.company,
     r.serviceId,
@@ -47,7 +48,7 @@ function detailToHTML(rows: OpenIncidentRow[], title: string, dimLabel: string, 
         td(r.incidentId),
         td(r.company),
         td(r.serviceId),
-        td(new Date(r.openTime).toLocaleString("es-MX", { hour12: false })),
+        td(formatHpsmExcel(r.openTime)),
         td(dimField === "state" ? r.state : r.district),
         td(r.assignee ?? "—"),
         td(r.status),
@@ -123,7 +124,7 @@ export function TopByDimension({
         dimensionField
       );
       const plain = detail
-        .map((r) => `${r.incidentId}\t${r.company}\t${r.serviceId}\t${new Date(r.openTime).toLocaleString("es-MX")}\t${dimensionField === "state" ? r.state : r.district}\t${r.assignee ?? ""}\t${r.status}`)
+        .map((r) => `${r.incidentId}\t${r.company}\t${r.serviceId}\t${formatHpsmExcel(r.openTime)}\t${dimensionField === "state" ? r.state : r.district}\t${r.assignee ?? ""}\t${r.status}`)
         .join("\n");
       if (await copyHTMLTable(html, plain)) {
         setCopied(true);

@@ -2,7 +2,7 @@
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Siren, X, Download } from "lucide-react";
-import { cn, formatHpsm } from "@/lib/utils";
+import { cn, formatHpsm, formatHpsmExcel } from "@/lib/utils";
 import { downloadXLSX } from "@/lib/excelExport";
 
 export interface EscalatedItem {
@@ -89,7 +89,7 @@ export function EscalatedPanel() {
   function onExport() {
     const rows = items.map((it) => [
       it.incidentId,
-      it.openTime ? formatHpsm(it.openTime) : "—",
+      it.openTime ? formatHpsmExcel(it.openTime) : "—",
       it.status,
       it.company,
       it.serviceId,

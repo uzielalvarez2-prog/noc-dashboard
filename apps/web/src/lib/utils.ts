@@ -34,6 +34,34 @@ export function formatHpsm(date: Date | string): string {
   }).format(new Date(date));
 }
 
+/**
+ * Formato para los archivos Excel/CSV que se descargan: "aaaa/mm/dd hh:mm".
+ * Se arma con formatToParts para forzar el orden año/mes/día sin importar locale.
+ */
+function formatYmdHm(date: Date | string, timeZone: string): string {
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+    timeZone,
+  }).formatToParts(new Date(date));
+  const p = (t: string) => parts.find((x) => x.type === t)?.value ?? "";
+  return `${p("year")}/${p("month")}/${p("day")} ${p("hour")}:${p("minute")}`;
+}
+
+/** Fechas HPSM (reloj de pared en UTC) para exportes: aaaa/mm/dd hh:mm. */
+export function formatHpsmExcel(date: Date | string): string {
+  return formatYmdHm(date, "UTC");
+}
+
+/** Timestamps reales de DB para exportes: aaaa/mm/dd hh:mm en hora de México. */
+export function formatDateExcel(date: Date | string): string {
+  return formatYmdHm(date, "America/Mexico_City");
+}
+
 export function formatRelativeTime(date: Date | string): string {
   const now = new Date();
   const target = new Date(date);

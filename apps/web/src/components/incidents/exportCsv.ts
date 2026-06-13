@@ -1,5 +1,6 @@
 import type { Incident } from "@/types";
 import { downloadXLSX } from "@/lib/excelExport";
+import { formatDateExcel } from "@/lib/utils";
 
 const SEV_LABELS: Record<string, string> = {
   CRITICAL: "CRÍTICO",
@@ -16,15 +17,7 @@ const STATUS_LABELS: Record<string, string> = {
 };
 
 function fmt(d: Date | string) {
-  return new Date(d).toLocaleString("es-MX", {
-    timeZone: "America/Mexico_City",
-    day: "2-digit",
-    month: "2-digit",
-    year: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-    hour12: false,
-  });
+  return formatDateExcel(d);
 }
 
 export function exportIncidentsCSV(incidents: Incident[]) {
