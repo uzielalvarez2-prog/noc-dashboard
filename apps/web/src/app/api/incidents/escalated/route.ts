@@ -21,10 +21,13 @@ export async function GET(req: NextRequest) {
           where: { incidentId: { in: ids } },
           select: {
             incidentId: true,
-            serviceId: true,
-            assignee: true,
+            openTime: true,
             status: true,
             company: true,
+            serviceId: true,
+            state: true,
+            assignee: true,
+            district: true,
             group: true,
           },
         })
@@ -38,7 +41,10 @@ export async function GET(req: NextRequest) {
       const live = byId.get(m.incidentId);
       return {
         incidentId: m.incidentId,
+        openTime: live?.openTime?.toISOString() ?? null,
         serviceId: live?.serviceId ?? "—",
+        state: live?.state ?? "—",
+        district: live?.district ?? "—",
         assignee: live?.assignee ?? null,
         status: live?.status ?? "CERRADO / FUERA DE COLA",
         company: live?.company ?? "—",

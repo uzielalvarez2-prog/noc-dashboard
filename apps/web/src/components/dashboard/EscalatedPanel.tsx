@@ -1,12 +1,16 @@
 "use client";
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Star, X } from "lucide-react";
-import { cn } from "@/lib/utils";
+import { Star, X, Download } from "lucide-react";
+import { cn, formatHpsm } from "@/lib/utils";
+import { downloadCSV, rowsToCSV } from "@/lib/openExport";
 
 export interface EscalatedItem {
   incidentId: string;
+  openTime: string | null;
   serviceId: string;
+  state: string;
+  district: string;
   assignee: string | null;
   status: string;
   company: string;
@@ -41,6 +45,25 @@ function StatusBadge({ status, stillOpen }: { status: string; stillOpen: boolean
   return <span className={cn("text-xs font-medium", color)}>{status || "—"}</span>;
 }
 
+function GroupBadge({ group }: { group: string | null }) {
+  if (!group) return <span className="text-text-muted">—</span>;
+  return (
+    <span
+      className={cn(
+        "rounded px-1.5 py-0.5 text-[10px] font-semibold",
+        group === "PEXA" ? "bg-accent/15 text-accent" : "bg-warning/15 text-warning"
+      )}
+    >
+      {group}
+    </span>
+  );
+}
+
+const COLS = [
+  "Incident ID", "Apertura", "Estatus", "Empresa", "Servicio",
+  "Estado", "Asignado", "Distrito", "Grupo",
+];
+
 export function EscalatedPanel() {
   const qc = useQueryClient();
 
@@ -63,17 +86,43 @@ export function EscalatedPanel() {
 
   const items = data?.items ?? [];
 
+  function onExport() {
+    const rows = items.map((it) => [
+      it.incidentId,
+      it.openTime ? formatHpsm(it.openTime) : "—",
+      it.status,
+      it.company,
+      it.serviceId,
+      it.state,
+      it.assignee ?? "—",
+      it.district,
+      it.group ?? "—",
+    ]);
+    downloadCSV("escalados-atencion-especial.csv", rowsToCSV(COLS, rows));
+  }
+
   return (
     <div className="flex flex-col rounded-lg border border-warning/40 bg-surface">
-      <div className="flex items-center gap-2 border-b border-warning/30 bg-warning/5 px-4 py-3">
-        <Star className="h-4 w-4 fill-warning text-warning" />
-        <h2 className="text-sm font-semibold text-text-primary">
-          Atención especial — escalados
-        </h2>
+      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-warning/30 bg-warning/5 px-4 py-3">
+        <div className="flex items-center gap-2">
+          <Star className="h-4 w-4 fill-warning text-warning" />
+          <h2 className="text-sm font-semibold text-text-primary">
+            Atención especial — escalados
+          </h2>
+          {items.length > 0 && (
+            <span className="rounded-full bg-warning/15 px-2 py-0.5 font-mono text-xs text-warning">
+              {items.length}
+            </span>
+          )}
+        </div>
         {items.length > 0 && (
-          <span className="rounded-full bg-warning/15 px-2 py-0.5 font-mono text-xs text-warning">
-            {items.length}
-          </span>
+          <button
+            type="button"
+            onClick={onExport}
+            className="flex items-center gap-1.5 rounded-md border border-border bg-surface px-2.5 py-1 text-xs text-text-muted transition-colors hover:border-accent hover:text-accent"
+          >
+            <Download className="h-3.5 w-3.5" /> Excel
+          </button>
         )}
       </div>
 
@@ -83,18 +132,19 @@ export function EscalatedPanel() {
           escalar uno aquí.
         </p>
       ) : (
-        <div className="max-h-[320px] overflow-y-auto">
+        <div className="overflow-x-auto">
           <table className="w-full border-collapse text-xs">
-            <thead className="sticky top-0 z-10 bg-surface-elevated">
+            <thead className="bg-surface-elevated">
               <tr className="border-b border-border">
-                {["Incidente ID", "Servicio", "Asignado", "Estatus", "Empresa", ""].map((h, i) => (
+                {COLS.map((h) => (
                   <th
-                    key={i}
-                    className="px-3 py-2 text-left font-medium uppercase tracking-wider text-text-muted"
+                    key={h}
+                    className="whitespace-nowrap px-3 py-2 text-left font-medium uppercase tracking-wider text-text-muted"
                   >
                     {h}
                   </th>
                 ))}
+                <th className="px-3 py-2" />
               </tr>
             </thead>
             <tbody>
@@ -108,19 +158,21 @@ export function EscalatedPanel() {
                       : "opacity-60 hover:opacity-80"
                   )}
                 >
-                  <td className="px-3 py-2 font-mono text-text-primary">{it.incidentId}</td>
-                  <td className="px-3 py-2 font-mono text-text-muted">{it.serviceId}</td>
-                  <td className="px-3 py-2 font-mono text-text-primary">
+                  <td className="whitespace-nowrap px-3 py-2 font-mono text-text-primary">{it.incidentId}</td>
+                  <td className="whitespace-nowrap px-3 py-2 font-mono text-text-muted">
+                    {it.openTime ? formatHpsm(it.openTime) : "—"}
+                  </td>
+                  <td className="px-3 py-2"><StatusBadge status={it.status} stillOpen={it.stillOpen} /></td>
+                  <td className="max-w-[12rem] px-3 py-2">
+                    <span className="block truncate text-text-primary" title={it.company}>{it.company}</span>
+                  </td>
+                  <td className="whitespace-nowrap px-3 py-2 font-mono text-text-muted">{it.serviceId}</td>
+                  <td className="whitespace-nowrap px-3 py-2 text-text-primary">{it.state}</td>
+                  <td className="whitespace-nowrap px-3 py-2 font-mono text-text-primary">
                     {it.assignee ?? <span className="text-text-muted">—</span>}
                   </td>
-                  <td className="px-3 py-2">
-                    <StatusBadge status={it.status} stillOpen={it.stillOpen} />
-                  </td>
-                  <td className="max-w-[14rem] px-3 py-2">
-                    <span className="block truncate text-text-primary" title={it.company}>
-                      {it.company}
-                    </span>
-                  </td>
+                  <td className="whitespace-nowrap px-3 py-2 text-text-primary">{it.district}</td>
+                  <td className="px-3 py-2"><GroupBadge group={it.group} /></td>
                   <td className="px-3 py-2 text-right">
                     <button
                       type="button"

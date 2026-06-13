@@ -16,7 +16,7 @@ async function main() {
       email: "admin@noc.local",
       passwordHash,
       name: "NOC Admin",
-      role: "NOC_ADMIN",
+      role: "ADMIN",
     },
   });
 

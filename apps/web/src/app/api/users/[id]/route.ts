@@ -3,12 +3,13 @@ import { getSessionFromRequest } from "@/lib/auth-session";
 import { db } from "@/lib/db";
 import bcrypt from "bcryptjs";
 import type { UserRole } from "@/types";
+import { ROLES, canAccessSettings } from "@/lib/permissions";
 
-const VALID_ROLES: UserRole[] = ["NOC_OPERATOR", "NOC_ADMIN", "ENGINEER"];
+const VALID_ROLES: UserRole[] = ROLES;
 
 function adminOnly(req: NextRequest) {
   const s = getSessionFromRequest(req);
-  if (!s || s.role !== "NOC_ADMIN") return null;
+  if (!s || !canAccessSettings(s.role)) return null;
   return s;
 }
 
@@ -29,10 +30,10 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   }
 
   // Evitar quitar el último admin
-  if (role && role !== "NOC_ADMIN") {
+  if (role && role !== "ADMIN") {
     const target = await db.user.findUnique({ where: { id } });
-    if (target?.role === "NOC_ADMIN") {
-      const adminCount = await db.user.count({ where: { role: "NOC_ADMIN" } });
+    if (target?.role === "ADMIN") {
+      const adminCount = await db.user.count({ where: { role: "ADMIN" } });
       if (adminCount <= 1)
         return NextResponse.json({ error: "Debe existir al menos un administrador" }, { status: 409 });
     }
@@ -79,8 +80,8 @@ export async function DELETE(req: NextRequest, { params }: { params: Promise<{ i
   const target = await db.user.findUnique({ where: { id } });
   if (!target) return NextResponse.json({ error: "Usuario no encontrado" }, { status: 404 });
 
-  if (target.role === "NOC_ADMIN") {
-    const adminCount = await db.user.count({ where: { role: "NOC_ADMIN" } });
+  if (target.role === "ADMIN") {
+    const adminCount = await db.user.count({ where: { role: "ADMIN" } });
     if (adminCount <= 1)
       return NextResponse.json({ error: "Debe existir al menos un administrador" }, { status: 409 });
   }

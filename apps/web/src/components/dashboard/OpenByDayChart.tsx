@@ -163,18 +163,22 @@ export function OpenByDayChart({ initial }: Props) {
         </button>
       </div>
 
-      <div ref={chartRef} className="h-56">
+      <div ref={chartRef} className="h-64">
         <ResponsiveContainer width="100%" height="100%">
           <BarChart
             data={chartData}
-            margin={{ top: 20, right: 8, bottom: 0, left: -8 }}
+            margin={{ top: 20, right: 8, bottom: 24, left: -8 }}
           >
             <CartesianGrid strokeDasharray="3 3" stroke="#1e3048" />
             <XAxis
               dataKey="day"
-              tick={{ fill: "#64748b", fontSize: 11 }}
+              tick={{ fill: "#64748b", fontSize: 10 }}
               tickLine={false}
               axisLine={{ stroke: "#1e3048" }}
+              interval={0}
+              angle={-40}
+              textAnchor="end"
+              height={50}
             />
             <YAxis
               tick={{ fill: "#64748b", fontSize: 11 }}

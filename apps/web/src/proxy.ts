@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSessionFromCookie, COOKIE_NAME } from "@/lib/session";
+import { canAccessSettings } from "@/lib/permissions";
 
 const PUBLIC_PATHS = [
   "/login",
@@ -34,7 +35,13 @@ export function proxy(request: NextRequest) {
     return NextResponse.redirect(loginUrl);
   }
 
-  if (pathname.startsWith("/settings") && session.role !== "NOC_ADMIN") {
+  // Configuración (página, usuarios y alertas) — solo ADMIN y SUPERVISOR
+  const isSettingsArea =
+    pathname.startsWith("/settings") ||
+    pathname.startsWith("/api/users") ||
+    pathname.startsWith("/api/alerts") ||
+    pathname.startsWith("/api/audit-logs");
+  if (isSettingsArea && !canAccessSettings(session.role)) {
     if (pathname.startsWith("/api/")) {
       return NextResponse.json({ error: "Sin permiso" }, { status: 403 });
     }

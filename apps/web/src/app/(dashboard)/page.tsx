@@ -4,7 +4,7 @@ import { KPIGrid } from "@/components/dashboard/KPIGrid";
 import { SLAGauge } from "@/components/dashboard/SLAGauge";
 import { IncidentsChart } from "@/components/dashboard/IncidentsChart";
 import { OpenByDayChart } from "@/components/dashboard/OpenByDayChart";
-import { EscalatedPanel } from "@/components/dashboard/EscalatedPanel";
+import { OverviewClosedRankings } from "@/components/dashboard/OverviewClosedRankings";
 
 export const dynamic = "force-dynamic";
 
@@ -55,10 +55,9 @@ export default async function OverviewPage() {
         <IncidentsChart initial={trend} />
       </div>
 
-      <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-        <OpenByDayChart initial={byDay} />
-        <EscalatedPanel />
-      </div>
+      <OpenByDayChart initial={byDay} />
+
+      <OverviewClosedRankings />
     </div>
   );
 }

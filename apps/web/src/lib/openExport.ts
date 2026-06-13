@@ -17,6 +17,13 @@ export function topToCSV(rows: TopRow[], dimensionLabel: string): string {
   return [header, ...lines].join("\r\n");
 }
 
+/** CSV genérico desde encabezados + filas de strings. BOM lo agrega downloadCSV. */
+export function rowsToCSV(headers: string[], rows: (string | number)[][]): string {
+  const head = headers.map((h) => csvCell(h)).join(",");
+  const body = rows.map((r) => r.map((c) => csvCell(String(c ?? ""))).join(","));
+  return [head, ...body].join("\r\n");
+}
+
 export function downloadCSV(filename: string, csv: string): void {
   const blob = new Blob(["﻿" + csv], { type: "text/csv;charset=utf-8;" });
   const url = URL.createObjectURL(blob);

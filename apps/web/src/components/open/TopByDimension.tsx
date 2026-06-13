@@ -23,17 +23,18 @@ function escapeHtml(s: string): string {
   return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 }
 
-function detailToCSV(rows: OpenIncidentRow[], dimLabel: string, dimField: "state" | "district"): string {
-  const header = ["IM", "Empresa", "Referencia/Servicio", "Apertura", dimLabel, "Asignado", "Estatus", "Grupo"].join(",");
+function detailToCSV(rows: OpenIncidentRow[]): string {
+  const header = ["Incident ID", "Apertura", "Estatus", "Empresa", "Servicio", "Estado", "Asignado", "Distrito", "Grupo"].join(",");
   const lines = rows.map((r) =>
     [
       csvCell(r.incidentId),
+      csvCell(new Date(r.openTime).toLocaleString("es-MX", { hour12: false })),
+      csvCell(r.status),
       csvCell(r.company),
       csvCell(r.serviceId),
-      csvCell(new Date(r.openTime).toLocaleString("es-MX", { hour12: false })),
-      csvCell(dimField === "state" ? r.state : r.district),
+      csvCell(r.state),
       csvCell(r.assignee ?? ""),
-      csvCell(r.status),
+      csvCell(r.district),
       csvCell(r.group),
     ].join(",")
   );
@@ -100,6 +101,7 @@ export function TopByDimension({
   const [metric, setMetric] = useState<Metric>("sites");
   const [copied, setCopied] = useState(false);
   const [loadingExport, setLoadingExport] = useState(false);
+  const [rowLoading, setRowLoading] = useState<string | null>(null);
 
   const sorted = [...rows].sort((a, b) =>
     metric === "sites" ? b.sites - a.sites : b.incidents - a.incidents
@@ -134,13 +136,25 @@ export function TopByDimension({
     }
   }
 
+  // Descarga el CSV (todos los campos) de un estado/distrito específico
+  async function downloadDetail(name: string) {
+    setRowLoading(name);
+    try {
+      const detail = await fetchTopDetail(name, dimensionField, group);
+      const csv = detailToCSV(detail);
+      downloadCSV(`${fileBase}-${name.toLowerCase().replace(/\s+/g, "-")}.csv`, csv);
+    } finally {
+      setRowLoading(null);
+    }
+  }
+
   async function onExport() {
     if (!topEntry) return;
     setLoadingExport(true);
     try {
       const detail = await fetchTopDetail(topEntry.name, dimensionField, group);
-      const csv = detailToCSV(detail, dimensionLabel, dimensionField);
-      downloadCSV(`${fileBase}-detalle-${topEntry.name.toLowerCase().replace(/\s+/g, "-")}.csv`, csv);
+      const csv = detailToCSV(detail);
+      downloadCSV(`${fileBase}-${topEntry.name.toLowerCase().replace(/\s+/g, "-")}.csv`, csv);
     } finally {
       setLoadingExport(false);
     }
@@ -173,14 +187,27 @@ export function TopByDimension({
         {top.map((r, idx) => {
           const v = metric === "sites" ? r.sites : r.incidents;
           const color = PALETTE[idx % PALETTE.length];
+          const isLoading = rowLoading === r.name;
           return (
-            <div key={r.name} className="flex items-center gap-2">
-              <span className="w-40 shrink-0 truncate text-xs text-text-primary" title={r.name}>
-                {r.name}
+            <button
+              key={r.name}
+              type="button"
+              onClick={() => downloadDetail(r.name)}
+              disabled={isLoading}
+              title={`Descargar CSV de ${r.name}`}
+              className="group flex w-full items-center gap-2 rounded px-1 py-0.5 transition-colors hover:bg-surface-elevated/50"
+            >
+              <span className="flex w-40 shrink-0 items-center gap-1 truncate text-left text-xs text-text-primary" title={r.name}>
+                {isLoading ? (
+                  <Loader2 className="h-3 w-3 shrink-0 animate-spin text-accent" />
+                ) : (
+                  <Download className="h-3 w-3 shrink-0 text-text-muted/0 transition-colors group-hover:text-accent" />
+                )}
+                <span className="truncate">{r.name}</span>
               </span>
               <div className="relative h-4 flex-1 overflow-hidden rounded bg-surface-elevated/60">
                 <div
-                  className="absolute inset-y-0 left-0 rounded transition-all duration-500"
+                  className="absolute inset-y-0 left-0 rounded transition-all duration-500 group-hover:opacity-90"
                   style={{ width: `${(v / max) * 100}%`, backgroundColor: color, opacity: 0.55 }}
                 />
               </div>
@@ -190,10 +217,13 @@ export function TopByDimension({
               >
                 {v}
               </span>
-            </div>
+            </button>
           );
         })}
       </div>
+      <p className="mt-2 text-[11px] text-text-muted/70">
+        Tip: haz click en cualquier barra para bajar el CSV de ese {dimensionLabel.toLowerCase()}.
+      </p>
 
       <div className="mt-3 flex items-center justify-between border-t border-border/50 pt-3">
         <div className="text-xs text-text-muted">

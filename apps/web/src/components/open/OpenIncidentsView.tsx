@@ -7,6 +7,7 @@ import { OpenKpis } from "./OpenKpis";
 import { TopByDimension } from "./TopByDimension";
 import { OpenIncidentTable } from "./OpenIncidentTable";
 import { TopCriticalTable } from "@/components/dashboard/TopCriticalTable";
+import { EscalatedPanel } from "@/components/dashboard/EscalatedPanel";
 import { cn } from "@/lib/utils";
 
 type Group = "ALL" | "PEXA" | "CECOR";
@@ -45,7 +46,9 @@ export function OpenIncidentsView() {
 
       <OpenKpis stats={stats} />
 
-      <div className="grid gap-4 lg:grid-cols-2 xl:grid-cols-3">
+      <EscalatedPanel />
+
+      <div className="grid gap-4 lg:grid-cols-2">
         <TopByDimension
           title="Top por Estado"
           dimensionLabel="Estado"
@@ -62,8 +65,9 @@ export function OpenIncidentsView() {
           fileBase={`top-distrito-${group.toLowerCase()}`}
           group={group}
         />
-        <TopCriticalTable />
       </div>
+
+      <TopCriticalTable />
 
       <OpenIncidentTable group={group} />
     </div>

@@ -54,7 +54,10 @@ export async function getKPIs() {
 
   const [openRows, closedToday, uploadedAtRow] = await Promise.all([
     db.openIncident.findMany({
-      select: { incidentId: true, openTime: true, status: true, group: true, assignee: true },
+      select: {
+        incidentId: true, openTime: true, status: true, group: true, assignee: true,
+        company: true, serviceId: true, state: true, district: true,
+      },
       orderBy: { openTime: "asc" },
     }),
     db.closedIncident.count({ where: { closeTime: { gte: todayStart } } }),
@@ -85,17 +88,21 @@ export async function getKPIs() {
       r.openTime <= slaRiskThreshold
   );
 
-  const criticalIncidents = breached.slice(0, 15).map((r) => ({
-    id: r.incidentId,
-    title: `${r.incidentId} — ${r.group}`,
-    group: r.group,
-    severity: "HIGH" as const,
-    status: r.status,
-    assignedTo: r.assignee,
-    slaDeadline: new Date(r.openTime.getTime() + SLA_MINS * 60_000).toISOString(),
-    slaBreached: true,
-    openTime: r.openTime.toISOString(),
-  }));
+  // Top 15 con MÁS tiempo abierto (los más críticos primero)
+  const criticalIncidents = [...breached]
+    .sort((a, b) => a.openTime.getTime() - b.openTime.getTime())
+    .slice(0, 15)
+    .map((r) => ({
+      id: r.incidentId,
+      group: r.group,
+      status: r.status,
+      assignedTo: r.assignee,
+      company: r.company,
+      serviceId: r.serviceId,
+      state: r.state,
+      district: r.district,
+      openTime: r.openTime.toISOString(),
+    }));
 
   return {
     totalOpen: incidents.length,

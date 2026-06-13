@@ -11,6 +11,7 @@ const BREADCRUMBS: Record<string, string> = {
   "/incidents": "Incidentes",
   "/sla": "SLA",
   "/operators": "Operadores",
+  "/import": "Importar CSV",
   "/settings": "Configuración",
 };
 
