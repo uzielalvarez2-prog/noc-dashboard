@@ -66,13 +66,15 @@ function detailToHTML(rows: OpenIncidentRow[], title: string, dimLabel: string, 
 async function fetchTopDetail(
   topName: string,
   dimensionField: "state" | "district",
-  group?: string
+  group?: string,
+  maxAgeHours?: number
 ): Promise<OpenIncidentRow[]> {
   const params = new URLSearchParams();
   if (group && group !== "ALL") params.set("group", group);
   params.set(dimensionField, topName);
   params.set("limit", "500");
   params.set("collapse", "false"); // detalle a nivel sitio
+  if (maxAgeHours) params.set("maxAgeHours", String(maxAgeHours));
   const res = await fetch(`/api/incidents/open?${params}`);
   if (!res.ok) throw new Error("Error al obtener detalle");
   const json = await res.json();
@@ -90,6 +92,7 @@ export function TopByDimension({
   total,
   fileBase,
   group,
+  maxAgeHours,
   limit = 12,
 }: {
   title: string;
@@ -99,6 +102,7 @@ export function TopByDimension({
   total: number;
   fileBase: string;
   group?: string;
+  maxAgeHours?: number;
   limit?: number;
 }) {
   const [copied, setCopied] = useState(false);
@@ -116,7 +120,7 @@ export function TopByDimension({
     if (!topEntry) return;
     setLoadingExport(true);
     try {
-      const detail = await fetchTopDetail(topEntry.name, dimensionField, group);
+      const detail = await fetchTopDetail(topEntry.name, dimensionField, group, maxAgeHours);
       const html = detailToHTML(
         detail,
         `${title} — ${topEntry.name} (${detail.length} incidentes)`,
@@ -139,7 +143,7 @@ export function TopByDimension({
   async function downloadDetail(name: string) {
     setRowLoading(name);
     try {
-      const detail = await fetchTopDetail(name, dimensionField, group);
+      const detail = await fetchTopDetail(name, dimensionField, group, maxAgeHours);
       await downloadXLSX(
         `${fileBase}-${name.toLowerCase().replace(/\s+/g, "-")}.xlsx`,
         name.slice(0, 28),
@@ -155,7 +159,7 @@ export function TopByDimension({
     if (!topEntry) return;
     setLoadingExport(true);
     try {
-      const detail = await fetchTopDetail(topEntry.name, dimensionField, group);
+      const detail = await fetchTopDetail(topEntry.name, dimensionField, group, maxAgeHours);
       await downloadXLSX(
         `${fileBase}-${topEntry.name.toLowerCase().replace(/\s+/g, "-")}.xlsx`,
         topEntry.name.slice(0, 28),

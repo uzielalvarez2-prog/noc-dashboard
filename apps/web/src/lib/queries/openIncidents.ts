@@ -12,6 +12,8 @@ export interface OpenFilters {
   limit?: number;
   /** false = filas a nivel sitio (detalle). default true = 1 fila por incidente. */
   collapse?: boolean;
+  /** Solo incidentes con antigüedad <= N horas (openTime >= ahora - N). */
+  maxAgeHours?: number;
 }
 
 /** Arma el filtro Prisma. El buscador `q` abarca todas las columnas visibles. */
@@ -22,6 +24,9 @@ export function buildOpenWhere(f: OpenFilters): Prisma.OpenIncidentWhereInput {
   if (f.district) and.push({ district: { equals: f.district, mode: "insensitive" } });
   if (f.assignee) and.push({ assignee: { contains: f.assignee, mode: "insensitive" } });
   if (f.status) and.push({ status: { contains: f.status, mode: "insensitive" } });
+  if (f.maxAgeHours && f.maxAgeHours > 0) {
+    and.push({ openTime: { gte: new Date(Date.now() - f.maxAgeHours * 3_600_000) } });
+  }
   // `collapse` no es columna; no se agrega al where.
   if (f.q?.trim()) {
     const q = f.q.trim();
@@ -157,8 +162,11 @@ function colTotal(map: Map<string, { sites: number; ids: Set<string> }>): number
  * agrega en memoria (≈1k filas) para entregar de un jalón "sitios afectados" y
  * "incidentes únicos" por estado y por distrito (falla masiva).
  */
-export async function getOpenStats(group?: string) {
+export async function getOpenStats(group?: string, maxAgeHours?: number) {
   const where: Prisma.OpenIncidentWhereInput = group && group !== "ALL" ? { group } : {};
+  if (maxAgeHours && maxAgeHours > 0) {
+    where.openTime = { gte: new Date(Date.now() - maxAgeHours * 3_600_000) };
+  }
   const rows = await db.openIncident.findMany({
     where,
     select: { incidentId: true, state: true, district: true, group: true },
