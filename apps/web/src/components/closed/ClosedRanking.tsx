@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Download, Copy, Check } from "lucide-react";
+import { Download, Copy, Check, Camera } from "lucide-react";
 import type { ClosedRankRow } from "@/types/closed";
 import { copyHTMLTable } from "@/lib/openExport";
 import { downloadXLSX } from "@/lib/excelExport";
@@ -67,6 +67,7 @@ export function ClosedRanking({
   variant?: "analyst" | "cause" | "default";
 }) {
   const [copied, setCopied] = useState(false);
+  const [imgCopied, setImgCopied] = useState(false);
 
   const sorted = [...rows].sort((a, b) => b.count - a.count);
   const top = sorted.slice(0, limit);
@@ -84,6 +85,78 @@ export function ClosedRanking({
       setCopied(true);
       setTimeout(() => setCopied(false), 1500);
     }
+  }
+
+  async function onDownloadImage() {
+    const SCALE = 2;
+    const W = 480;
+    const PAD = 16;
+    const TITLE_H = 58;
+    const ROW_H = 20;
+    const GAP = 7;
+    const NAME_W = 172;
+    const COUNT_W = 44;
+    const totalH = TITLE_H + top.length * (ROW_H + GAP) + PAD;
+
+    const canvas = document.createElement("canvas");
+    canvas.width = W * SCALE;
+    canvas.height = totalH * SCALE;
+    const ctx = canvas.getContext("2d")!;
+    ctx.scale(SCALE, SCALE);
+
+    ctx.fillStyle = "#0d1526";
+    ctx.fillRect(0, 0, W, totalH);
+
+    ctx.fillStyle = "#f8fafc";
+    ctx.font = "bold 13px Arial,sans-serif";
+    ctx.textAlign = "left";
+    ctx.fillText(title, PAD, 24);
+
+    ctx.fillStyle = "#64748b";
+    ctx.font = "11px Arial,sans-serif";
+    ctx.fillText(`${total} cerrados`, PAD, 42);
+
+    const barMaxW = W - PAD - NAME_W - COUNT_W - PAD;
+
+    top.forEach((r, idx) => {
+      const color = barColor(idx, r.count);
+      const y = TITLE_H + idx * (ROW_H + GAP);
+      const barW = Math.max(2, (r.count / max) * barMaxW);
+      const label = variant === "analyst" ? shortName(r.name) : r.name;
+      const display = label.length > 23 ? label.slice(0, 21) + "…" : label;
+
+      ctx.fillStyle = "#e2e8f0";
+      ctx.font = "11px Arial,sans-serif";
+      ctx.textAlign = "left";
+      ctx.fillText(display, PAD, y + ROW_H - 5);
+
+      ctx.fillStyle = "#1e293b";
+      ctx.fillRect(PAD + NAME_W, y, barMaxW, ROW_H);
+
+      ctx.fillStyle = color;
+      ctx.globalAlpha = 0.7;
+      ctx.fillRect(PAD + NAME_W, y, barW, ROW_H);
+      ctx.globalAlpha = 1;
+
+      ctx.fillStyle = color;
+      ctx.font = "bold 11px Arial,sans-serif";
+      ctx.textAlign = "right";
+      ctx.fillText(String(r.count), W - PAD, y + ROW_H - 5);
+    });
+
+    canvas.toBlob(async (blob) => {
+      if (!blob) return;
+      try {
+        await navigator.clipboard.write([new ClipboardItem({ "image/png": blob })]);
+        setImgCopied(true);
+        setTimeout(() => setImgCopied(false), 1500);
+      } catch {
+        const a = document.createElement("a");
+        a.href = URL.createObjectURL(blob);
+        a.download = `${fileBase}.png`;
+        a.click();
+      }
+    }, "image/png");
   }
 
   function onExport() {
@@ -159,6 +232,14 @@ export function ClosedRanking({
           >
             {copied ? <Check className="h-3.5 w-3.5 text-success" /> : <Copy className="h-3.5 w-3.5" />}
             {copied ? "Copiado" : "Copiar tabla"}
+          </button>
+          <button
+            type="button"
+            onClick={onDownloadImage}
+            className="flex items-center gap-1 rounded-md border border-border bg-surface px-2 py-1 text-xs text-text-muted transition-colors hover:border-accent hover:text-accent"
+          >
+            {imgCopied ? <Check className="h-3.5 w-3.5 text-success" /> : <Camera className="h-3.5 w-3.5" />}
+            {imgCopied ? "Copiada" : "Imagen"}
           </button>
           <button
             type="button"

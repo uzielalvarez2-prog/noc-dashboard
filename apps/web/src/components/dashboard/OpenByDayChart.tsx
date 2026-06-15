@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import {
   BarChart,
@@ -46,7 +46,6 @@ interface Props {
 }
 
 export function OpenByDayChart({ initial }: Props) {
-  const chartRef = useRef<HTMLDivElement>(null);
   const [copied, setCopied] = useState(false);
 
   const { data } = useQuery<DayPoint[]>({
@@ -62,53 +61,124 @@ export function OpenByDayChart({ initial }: Props) {
   const totalCecor = chartData.reduce((s, d) => s + d.CECOR, 0);
 
   async function copyAsImage() {
-    const container = chartRef.current;
-    if (!container) return;
-    const svg = container.querySelector("svg");
-    if (!svg) return;
+    const chart = chartData;
+    if (!chart.length) return;
 
-    const { width, height } = svg.getBoundingClientRect();
-    const titleH = 52;
-    const pad = 16;
-    const scale = 2;
+    const SCALE = 2;
+    const PAD = 20;
+    const TITLE_H = 56;
+    const CHART_H = 180;
+    const BOTTOM = 58;
+    const LEGEND_H = 24;
+    const BAR_W = 40;
+    const GAP = 12;
+    const AXIS_L = 32;
+    const AXIS_R = 12;
 
-    const svgStr = new XMLSerializer().serializeToString(svg);
-    const svgBlob = new Blob([svgStr], { type: "image/svg+xml;charset=utf-8" });
-    const svgUrl = URL.createObjectURL(svgBlob);
-
-    const img = new Image();
-    img.src = svgUrl;
-    await new Promise<void>((resolve) => { img.onload = () => resolve(); });
+    const n = chart.length;
+    const W = Math.max(520, PAD + AXIS_L + n * (BAR_W + GAP) - GAP + AXIS_R + PAD);
+    const H = TITLE_H + CHART_H + BOTTOM + LEGEND_H;
 
     const canvas = document.createElement("canvas");
-    canvas.width = (width + pad * 2) * scale;
-    canvas.height = (height + titleH + pad) * scale;
-
+    canvas.width = W * SCALE;
+    canvas.height = H * SCALE;
     const ctx = canvas.getContext("2d")!;
-    ctx.scale(scale, scale);
+    ctx.scale(SCALE, SCALE);
 
     // Fondo
     ctx.fillStyle = "#0d1526";
-    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    ctx.fillRect(0, 0, W, H);
 
-    // Título
-    ctx.fillStyle = "#f8fafc";
-    ctx.font = "bold 14px Arial,sans-serif";
-    ctx.fillText("Incidentes por día", pad, 22);
+    // Header: título + números PEXA / CECOR / total
+    const parts: Array<{ text: string; color: string; bold: boolean; size: number }> = [
+      { text: "Incidentes por día  ", color: "#f8fafc", bold: true, size: 13 },
+      { text: String(totalPexa), color: "#3b82f6", bold: true, size: 18 },
+      { text: " PEXA  ", color: "#64748b", bold: false, size: 11 },
+      { text: String(totalCecor), color: "#f59e0b", bold: true, size: 18 },
+      { text: " CECOR  ", color: "#64748b", bold: false, size: 11 },
+      { text: String(grandTotal), color: "#f8fafc", bold: true, size: 18 },
+      { text: " total", color: "#64748b", bold: false, size: 11 },
+    ];
+    let hx = PAD;
+    for (const p of parts) {
+      ctx.font = `${p.bold ? "bold " : ""}${p.size}px Arial,sans-serif`;
+      ctx.fillStyle = p.color;
+      ctx.textAlign = "left";
+      ctx.fillText(p.text, hx, 26);
+      hx += ctx.measureText(p.text).width;
+    }
 
-    // Total
-    const titleW = ctx.measureText("Incidentes por día  ").width;
-    ctx.fillStyle = "#60a5fa";
-    ctx.font = "bold 22px Arial,sans-serif";
-    ctx.fillText(String(grandTotal), pad + titleW, 26);
-    ctx.fillStyle = "#64748b";
-    ctx.font = "11px Arial,sans-serif";
-    const totalW = ctx.measureText(String(grandTotal) + "  ").width;
-    ctx.fillText("total", pad + titleW + totalW, 24);
+    const maxVal = Math.max(1, ...chart.map((d) => d.total));
+    const chartTop = TITLE_H;
 
-    // Gráfica SVG
-    ctx.drawImage(img, pad, titleH, width, height);
-    URL.revokeObjectURL(svgUrl);
+    // Grid lines
+    ctx.strokeStyle = "#1e3048";
+    ctx.lineWidth = 1;
+    for (let i = 0; i <= 4; i++) {
+      const y = chartTop + CHART_H - (i / 4) * CHART_H;
+      ctx.beginPath();
+      ctx.moveTo(PAD + AXIS_L, y);
+      ctx.lineTo(W - PAD - AXIS_R, y);
+      ctx.stroke();
+    }
+
+    // Barras apiladas PEXA (abajo) + CECOR (arriba)
+    chart.forEach((d, i) => {
+      const x = PAD + AXIS_L + i * (BAR_W + GAP);
+      const pexaH = Math.max(0, (d.PEXA / maxVal) * CHART_H);
+      const cecorH = Math.max(0, (d.CECOR / maxVal) * CHART_H);
+      const pexaY = chartTop + CHART_H - pexaH;
+      const cecorY = pexaY - cecorH;
+
+      ctx.globalAlpha = 0.85;
+      ctx.fillStyle = "#3b82f6";
+      ctx.fillRect(x, pexaY, BAR_W, pexaH);
+      ctx.fillStyle = "#f59e0b";
+      ctx.fillRect(x, cecorY, BAR_W, cecorH);
+      ctx.globalAlpha = 1;
+
+      // Total encima
+      if (d.total > 0) {
+        ctx.fillStyle = "#e2e8f0";
+        ctx.font = "bold 10px Arial,sans-serif";
+        ctx.textAlign = "center";
+        ctx.fillText(String(d.total), x + BAR_W / 2, cecorY - 4);
+      }
+
+      // Etiqueta X rotada
+      ctx.save();
+      ctx.fillStyle = "#64748b";
+      ctx.font = "10px Arial,sans-serif";
+      ctx.textAlign = "right";
+      ctx.translate(x + BAR_W / 2, chartTop + CHART_H + 8);
+      ctx.rotate((-40 * Math.PI) / 180);
+      ctx.fillText(d.day, 0, 0);
+      ctx.restore();
+    });
+
+    // Línea base
+    ctx.strokeStyle = "#1e3048";
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(PAD + AXIS_L - 4, chartTop + CHART_H);
+    ctx.lineTo(W - PAD - AXIS_R, chartTop + CHART_H);
+    ctx.stroke();
+
+    // Leyenda
+    const lY = H - LEGEND_H + 8;
+    let lx = PAD + AXIS_L;
+    [
+      { label: "PEXA", color: "#3b82f6" },
+      { label: "CECOR", color: "#f59e0b" },
+    ].forEach(({ label, color }) => {
+      ctx.fillStyle = color;
+      ctx.fillRect(lx, lY - 9, 12, 12);
+      ctx.fillStyle = "#94a3b8";
+      ctx.font = "11px Arial,sans-serif";
+      ctx.textAlign = "left";
+      ctx.fillText(label, lx + 16, lY);
+      lx += 16 + ctx.measureText(label + "   ").width;
+    });
 
     canvas.toBlob(async (blob) => {
       if (!blob) return;
@@ -117,7 +187,6 @@ export function OpenByDayChart({ initial }: Props) {
         setCopied(true);
         setTimeout(() => setCopied(false), 2000);
       } catch {
-        // fallback: descarga la imagen
         const a = document.createElement("a");
         a.href = URL.createObjectURL(blob);
         a.download = "incidentes-por-dia.png";
@@ -161,7 +230,7 @@ export function OpenByDayChart({ initial }: Props) {
         </button>
       </div>
 
-      <div ref={chartRef} className="mx-auto h-56 max-w-2xl">
+      <div className="mx-auto h-56 max-w-2xl">
         <ResponsiveContainer width="100%" height="100%">
           <BarChart
             data={chartData}
