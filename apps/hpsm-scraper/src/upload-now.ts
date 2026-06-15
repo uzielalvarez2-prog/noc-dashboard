@@ -5,5 +5,5 @@ import { join } from "node:path";
 
 const dest = join(config.downloadDir, "open-incidents.csv");
 console.log(`Subiendo ${dest} a ${config.dashboardUrl} con clearOpen=true`);
-await uploadCsv(dest, "PEXA,CECOR", true);
+await uploadCsv(dest, "PEXA,CECOR", "open");
 console.log("Listo.");

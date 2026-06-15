@@ -9,7 +9,7 @@ import { logger } from "./logger.js";
  * @param csvPath   Ruta local al archivo CSV
  * @param groups    Grupo(s) a filtrar, separados por coma: "PEXA" o "PEXA,CECOR"
  */
-export async function uploadCsv(csvPath: string, groups: string, clearOpen = false): Promise<void> {
+export async function uploadCsv(csvPath: string, groups: string, type: "open" | "closed" = "open"): Promise<void> {
   const content = readFileSync(csvPath);
   const formData = new FormData();
   formData.append(
@@ -18,9 +18,8 @@ export async function uploadCsv(csvPath: string, groups: string, clearOpen = fal
     basename(csvPath),
   );
   formData.append("group", groups);
-  if (clearOpen) formData.append("clearOpen", "true");
 
-  const url = `${config.dashboardUrl}/api/incidents/upload`;
+  const url = `${config.dashboardUrl}/api/incidents/${type}/upload`;
   logger.info(`Subiendo CSV al dashboard`, { url, groups, file: basename(csvPath) });
 
   const res = await fetch(url, {
@@ -29,9 +28,11 @@ export async function uploadCsv(csvPath: string, groups: string, clearOpen = fal
     body: formData,
   });
 
-  const data = await res.json() as Record<string, unknown>;
+  const text = await res.text();
   if (!res.ok) {
-    throw new Error(`Upload falló [${res.status}]: ${JSON.stringify(data)}`);
+    throw new Error(`Upload falló [${res.status}]: ${text.slice(0, 500)}`);
   }
+  let data: Record<string, unknown> = {};
+  try { data = JSON.parse(text) as Record<string, unknown>; } catch { /* respuesta no-JSON */ }
   logger.info("Upload completado", data);
 }

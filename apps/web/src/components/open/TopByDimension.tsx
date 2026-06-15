@@ -3,10 +3,29 @@
 import { useState } from "react";
 import { Download, Copy, Check, Loader2 } from "lucide-react";
 import type { TopRow, OpenIncidentRow } from "@/types/open";
-import { downloadCSV, copyHTMLTable } from "@/lib/openExport";
-import { cn } from "@/lib/utils";
+import { copyHTMLTable } from "@/lib/openExport";
+import { downloadXLSX } from "@/lib/excelExport";
+import { formatHpsmExcel } from "@/lib/utils";
 
-type Metric = "sites" | "incidents";
+// El Excel solo lleva la columna de su propia dimensión: Top por Estado omite
+// Distrito y Top por Distrito omite Estado (así la masiva queda limpia).
+function detailCols(dimField: "state" | "district"): string[] {
+  const dim = dimField === "state" ? "Estado" : "Distrito";
+  return ["Incident ID", "Apertura", "Estatus", "Empresa", "Servicio", dim, "Asignado", "Grupo"];
+}
+
+function detailToRows(rows: OpenIncidentRow[], dimField: "state" | "district"): (string | number)[][] {
+  return rows.map((r) => [
+    r.incidentId,
+    formatHpsmExcel(r.openTime),
+    r.status,
+    r.company,
+    r.serviceId,
+    dimField === "state" ? r.state : r.district,
+    r.assignee ?? "",
+    r.group,
+  ]);
+}
 
 // Paleta de colores distinta por posición
 const PALETTE = [
@@ -15,29 +34,8 @@ const PALETTE = [
   "#4ade80", "#94a3b8",
 ];
 
-function csvCell(s: string): string {
-  return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
-}
-
 function escapeHtml(s: string): string {
   return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
-}
-
-function detailToCSV(rows: OpenIncidentRow[], dimLabel: string, dimField: "state" | "district"): string {
-  const header = ["IM", "Empresa", "Referencia/Servicio", "Apertura", dimLabel, "Asignado", "Estatus", "Grupo"].join(",");
-  const lines = rows.map((r) =>
-    [
-      csvCell(r.incidentId),
-      csvCell(r.company),
-      csvCell(r.serviceId),
-      csvCell(new Date(r.openTime).toLocaleString("es-MX", { hour12: false })),
-      csvCell(dimField === "state" ? r.state : r.district),
-      csvCell(r.assignee ?? ""),
-      csvCell(r.status),
-      csvCell(r.group),
-    ].join(",")
-  );
-  return [header, ...lines].join("\r\n");
 }
 
 function detailToHTML(rows: OpenIncidentRow[], title: string, dimLabel: string, dimField: "state" | "district"): string {
@@ -50,7 +48,7 @@ function detailToHTML(rows: OpenIncidentRow[], title: string, dimLabel: string, 
         td(r.incidentId),
         td(r.company),
         td(r.serviceId),
-        td(new Date(r.openTime).toLocaleString("es-MX", { hour12: false })),
+        td(formatHpsmExcel(r.openTime)),
         td(dimField === "state" ? r.state : r.district),
         td(r.assignee ?? "—"),
         td(r.status),
@@ -68,16 +66,22 @@ function detailToHTML(rows: OpenIncidentRow[], title: string, dimLabel: string, 
 async function fetchTopDetail(
   topName: string,
   dimensionField: "state" | "district",
-  group?: string
+  group?: string,
+  maxAgeHours?: number
 ): Promise<OpenIncidentRow[]> {
   const params = new URLSearchParams();
   if (group && group !== "ALL") params.set("group", group);
   params.set(dimensionField, topName);
   params.set("limit", "500");
+  params.set("collapse", "false"); // detalle a nivel sitio
+  if (maxAgeHours) params.set("maxAgeHours", String(maxAgeHours));
   const res = await fetch(`/api/incidents/open?${params}`);
   if (!res.ok) throw new Error("Error al obtener detalle");
   const json = await res.json();
-  return (json.data ?? []) as OpenIncidentRow[];
+  const data = (json.data ?? []) as OpenIncidentRow[];
+  // El detalle viene a nivel sitio; para la masiva dedup a 1 fila por incidente.
+  const seen = new Set<string>();
+  return data.filter((r) => (seen.has(r.incidentId) ? false : seen.add(r.incidentId)));
 }
 
 export function TopByDimension({
@@ -85,29 +89,30 @@ export function TopByDimension({
   dimensionLabel,
   dimensionField = "state",
   rows,
+  total,
   fileBase,
   group,
+  maxAgeHours,
   limit = 12,
 }: {
   title: string;
   dimensionLabel: string;
   dimensionField?: "state" | "district";
   rows: TopRow[];
+  total: number;
   fileBase: string;
   group?: string;
+  maxAgeHours?: number;
   limit?: number;
 }) {
-  const [metric, setMetric] = useState<Metric>("sites");
   const [copied, setCopied] = useState(false);
   const [loadingExport, setLoadingExport] = useState(false);
+  const [rowLoading, setRowLoading] = useState<string | null>(null);
 
-  const sorted = [...rows].sort((a, b) =>
-    metric === "sites" ? b.sites - a.sites : b.incidents - a.incidents
-  );
+  // 1 registro por incidente: ordenamos y graficamos por incidentes únicos.
+  const sorted = [...rows].sort((a, b) => b.incidents - a.incidents);
   const top = sorted.slice(0, limit);
-  const totalSites = rows.reduce((s, r) => s + r.sites, 0);
-  const totalInc = rows.reduce((s, r) => s + r.incidents, 0);
-  const max = Math.max(1, ...top.map((r) => (metric === "sites" ? r.sites : r.incidents)));
+  const max = Math.max(1, ...top.map((r) => r.incidents));
 
   const topEntry = sorted[0]; // el que más tiene
 
@@ -115,7 +120,7 @@ export function TopByDimension({
     if (!topEntry) return;
     setLoadingExport(true);
     try {
-      const detail = await fetchTopDetail(topEntry.name, dimensionField, group);
+      const detail = await fetchTopDetail(topEntry.name, dimensionField, group, maxAgeHours);
       const html = detailToHTML(
         detail,
         `${title} — ${topEntry.name} (${detail.length} incidentes)`,
@@ -123,7 +128,7 @@ export function TopByDimension({
         dimensionField
       );
       const plain = detail
-        .map((r) => `${r.incidentId}\t${r.company}\t${r.serviceId}\t${new Date(r.openTime).toLocaleString("es-MX")}\t${dimensionField === "state" ? r.state : r.district}\t${r.assignee ?? ""}\t${r.status}`)
+        .map((r) => `${r.incidentId}\t${r.company}\t${r.serviceId}\t${formatHpsmExcel(r.openTime)}\t${dimensionField === "state" ? r.state : r.district}\t${r.assignee ?? ""}\t${r.status}`)
         .join("\n");
       if (await copyHTMLTable(html, plain)) {
         setCopied(true);
@@ -134,36 +139,43 @@ export function TopByDimension({
     }
   }
 
+  // Descarga el Excel (todos los campos) de un estado/distrito específico
+  async function downloadDetail(name: string) {
+    setRowLoading(name);
+    try {
+      const detail = await fetchTopDetail(name, dimensionField, group, maxAgeHours);
+      await downloadXLSX(
+        `${fileBase}-${name.toLowerCase().replace(/\s+/g, "-")}.xlsx`,
+        name.slice(0, 28),
+        detailCols(dimensionField),
+        detailToRows(detail, dimensionField),
+      );
+    } finally {
+      setRowLoading(null);
+    }
+  }
+
   async function onExport() {
     if (!topEntry) return;
     setLoadingExport(true);
     try {
-      const detail = await fetchTopDetail(topEntry.name, dimensionField, group);
-      const csv = detailToCSV(detail, dimensionLabel, dimensionField);
-      downloadCSV(`${fileBase}-detalle-${topEntry.name.toLowerCase().replace(/\s+/g, "-")}.csv`, csv);
+      const detail = await fetchTopDetail(topEntry.name, dimensionField, group, maxAgeHours);
+      await downloadXLSX(
+        `${fileBase}-${topEntry.name.toLowerCase().replace(/\s+/g, "-")}.xlsx`,
+        topEntry.name.slice(0, 28),
+        detailCols(dimensionField),
+        detailToRows(detail, dimensionField),
+      );
     } finally {
       setLoadingExport(false);
     }
   }
 
-  const chip = (active: boolean) =>
-    cn(
-      "rounded-md px-2 py-0.5 text-xs font-medium transition-colors",
-      active ? "bg-accent/15 text-accent" : "text-text-muted hover:text-text-primary"
-    );
-
   return (
     <div className="rounded-xl border border-border/60 bg-surface/60 p-4 backdrop-blur-md">
       <div className="mb-3 flex items-center justify-between gap-2">
         <h3 className="text-sm font-semibold text-text-primary">{title}</h3>
-        <div className="flex items-center gap-1">
-          <button type="button" onClick={() => setMetric("sites")} className={chip(metric === "sites")}>
-            Sitios
-          </button>
-          <button type="button" onClick={() => setMetric("incidents")} className={chip(metric === "incidents")}>
-            Incidentes
-          </button>
-        </div>
+        <span className="font-mono text-xs text-text-muted">{total} incidentes</span>
       </div>
 
       <div className="space-y-1.5">
@@ -171,16 +183,29 @@ export function TopByDimension({
           <p className="py-6 text-center text-xs text-text-muted">Sin datos</p>
         )}
         {top.map((r, idx) => {
-          const v = metric === "sites" ? r.sites : r.incidents;
+          const v = r.incidents;
           const color = PALETTE[idx % PALETTE.length];
+          const isLoading = rowLoading === r.name;
           return (
-            <div key={r.name} className="flex items-center gap-2">
-              <span className="w-40 shrink-0 truncate text-xs text-text-primary" title={r.name}>
-                {r.name}
+            <button
+              key={r.name}
+              type="button"
+              onClick={() => downloadDetail(r.name)}
+              disabled={isLoading}
+              title={`Descargar CSV de ${r.name}`}
+              className="group flex w-full items-center gap-2 rounded px-1 py-0.5 transition-colors hover:bg-surface-elevated/50"
+            >
+              <span className="flex w-40 shrink-0 items-center gap-1 truncate text-left text-xs text-text-primary" title={r.name}>
+                {isLoading ? (
+                  <Loader2 className="h-3 w-3 shrink-0 animate-spin text-accent" />
+                ) : (
+                  <Download className="h-3 w-3 shrink-0 text-text-muted/0 transition-colors group-hover:text-accent" />
+                )}
+                <span className="truncate">{r.name}</span>
               </span>
               <div className="relative h-4 flex-1 overflow-hidden rounded bg-surface-elevated/60">
                 <div
-                  className="absolute inset-y-0 left-0 rounded transition-all duration-500"
+                  className="absolute inset-y-0 left-0 rounded transition-all duration-500 group-hover:opacity-90"
                   style={{ width: `${(v / max) * 100}%`, backgroundColor: color, opacity: 0.55 }}
                 />
               </div>
@@ -190,15 +215,17 @@ export function TopByDimension({
               >
                 {v}
               </span>
-            </div>
+            </button>
           );
         })}
       </div>
+      <p className="mt-2 text-[11px] text-text-muted/70">
+        Tip: haz click en cualquier barra para bajar el Excel de ese {dimensionLabel.toLowerCase()}.
+      </p>
 
       <div className="mt-3 flex items-center justify-between border-t border-border/50 pt-3">
         <div className="text-xs text-text-muted">
-          <span className="font-semibold text-text-primary">{totalSites}</span> sitios ·{" "}
-          <span className="font-semibold text-text-primary">{totalInc}</span> incidentes
+          <span className="font-semibold text-text-primary">{total}</span> incidentes
           {topEntry && (
             <span className="ml-2 text-text-muted/70">
               · detalle: <span className="text-text-primary">{topEntry.name}</span>

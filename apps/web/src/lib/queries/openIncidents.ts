@@ -10,6 +10,10 @@ export interface OpenFilters {
   status?: string;
   page?: number;
   limit?: number;
+  /** false = filas a nivel sitio (detalle). default true = 1 fila por incidente. */
+  collapse?: boolean;
+  /** Solo incidentes con antigüedad <= N horas (openTime >= ahora - N). */
+  maxAgeHours?: number;
 }
 
 /** Arma el filtro Prisma. El buscador `q` abarca todas las columnas visibles. */
@@ -20,6 +24,10 @@ export function buildOpenWhere(f: OpenFilters): Prisma.OpenIncidentWhereInput {
   if (f.district) and.push({ district: { equals: f.district, mode: "insensitive" } });
   if (f.assignee) and.push({ assignee: { contains: f.assignee, mode: "insensitive" } });
   if (f.status) and.push({ status: { contains: f.status, mode: "insensitive" } });
+  if (f.maxAgeHours && f.maxAgeHours > 0) {
+    and.push({ openTime: { gte: new Date(Date.now() - f.maxAgeHours * 3_600_000) } });
+  }
+  // `collapse` no es columna; no se agrega al where.
   if (f.q?.trim()) {
     const q = f.q.trim();
     and.push({
@@ -38,31 +46,93 @@ export function buildOpenWhere(f: OpenFilters): Prisma.OpenIncidentWhereInput {
   return and.length ? { AND: and } : {};
 }
 
-/** Lista paginada a nivel incidente×sitio + total de filas e incidentes únicos. */
+/**
+ * Lista de incidentes abiertos.
+ * - Por defecto colapsa a 1 fila por incidente (un IM puede abarcar varios
+ *   sitios); agrega `siteCount` y muestra "Varios (N)" en estado/distrito cuando
+ *   el incidente toca más de uno. La paginación es a nivel incidente.
+ * - Con `collapse:false` devuelve las filas a nivel sitio (para el detalle/exporte
+ *   de Top por estado/distrito).
+ */
 export async function getOpenIncidents(f: OpenFilters) {
   const page = Math.max(1, f.page ?? 1);
-  const limit = Math.min(200, Math.max(1, f.limit ?? 50));
   const where = buildOpenWhere(f);
 
-  const [rows, total, distinctIds] = await Promise.all([
-    db.openIncident.findMany({
-      where,
-      orderBy: [{ openTime: "desc" }],
-      skip: (page - 1) * limit,
-      take: limit,
-    }),
-    db.openIncident.count({ where }),
-    db.openIncident.findMany({ where, select: { incidentId: true }, distinct: ["incidentId"] }),
-  ]);
+  if (f.collapse === false) {
+    const limit = Math.min(500, Math.max(1, f.limit ?? 50));
+    const [rows, total, distinctIds] = await Promise.all([
+      db.openIncident.findMany({
+        where,
+        orderBy: [{ openTime: "desc" }],
+        skip: (page - 1) * limit,
+        take: limit,
+      }),
+      db.openIncident.count({ where }),
+      db.openIncident.findMany({ where, select: { incidentId: true }, distinct: ["incidentId"] }),
+    ]);
+    return {
+      data: rows.map((r) => ({ ...r, siteCount: 1 })),
+      meta: {
+        total,
+        totalSites: total,
+        uniqueIncidents: distinctIds.length,
+        page,
+        limit,
+        lastSync: rows[0]?.uploadedAt ?? null,
+      },
+    };
+  }
+
+  const limit = Math.min(200, Math.max(1, f.limit ?? 50));
+  // Dataset acotado (~2.5k filas máx): traemos y colapsamos en memoria.
+  const all = await db.openIncident.findMany({ where, orderBy: [{ openTime: "desc" }] });
+
+  const byIncident = new Map<
+    string,
+    (typeof all)[number] & { siteCount: number; _states: Set<string>; _districts: Set<string> }
+  >();
+  for (const r of all) {
+    const agg = byIncident.get(r.incidentId);
+    if (!agg) {
+      byIncident.set(r.incidentId, {
+        ...r,
+        siteCount: 1,
+        _states: new Set([r.state]),
+        _districts: new Set([r.district]),
+      });
+    } else {
+      agg.siteCount++;
+      agg._states.add(r.state);
+      agg._districts.add(r.district);
+    }
+  }
+
+  const incidents = [...byIncident.values()].map((a) => ({
+    id: a.id,
+    incidentId: a.incidentId,
+    openTime: a.openTime,
+    status: a.status,
+    company: a.company,
+    serviceId: a.serviceId,
+    state: a._states.size > 1 ? `Varios (${a._states.size})` : a.state,
+    district: a._districts.size > 1 ? `Varios (${a._districts.size})` : a.district,
+    assignee: a.assignee,
+    group: a.group,
+    uploadedAt: a.uploadedAt,
+    siteCount: a.siteCount,
+  }));
+
+  const pageRows = incidents.slice((page - 1) * limit, page * limit);
 
   return {
-    data: rows,
+    data: pageRows,
     meta: {
-      total,
-      uniqueIncidents: distinctIds.length,
+      total: incidents.length,
+      totalSites: all.length,
+      uniqueIncidents: incidents.length,
       page,
       limit,
-      lastSync: rows[0]?.uploadedAt ?? null,
+      lastSync: all[0]?.uploadedAt ?? null,
     },
   };
 }
@@ -78,8 +148,13 @@ interface TopRow {
 function topFrom(map: Map<string, { sites: number; ids: Set<string> }>): TopRow[] {
   return [...map.entries()]
     .map(([name, v]) => ({ name: name || "(sin dato)", sites: v.sites, incidents: v.ids.size }))
-    .sort((a, b) => b.sites - a.sites)
+    .sort((a, b) => b.incidents - a.incidents)
     .slice(0, 10);
+}
+
+/** Suma de incidentes (1 por incidente) sobre TODAS las entradas de la dimensión. */
+function colTotal(map: Map<string, { sites: number; ids: Set<string> }>): number {
+  return [...map.values()].reduce((s, v) => s + v.ids.size, 0);
 }
 
 /**
@@ -87,8 +162,11 @@ function topFrom(map: Map<string, { sites: number; ids: Set<string> }>): TopRow[
  * agrega en memoria (≈1k filas) para entregar de un jalón "sitios afectados" y
  * "incidentes únicos" por estado y por distrito (falla masiva).
  */
-export async function getOpenStats(group?: string) {
+export async function getOpenStats(group?: string, maxAgeHours?: number) {
   const where: Prisma.OpenIncidentWhereInput = group && group !== "ALL" ? { group } : {};
+  if (maxAgeHours && maxAgeHours > 0) {
+    where.openTime = { gte: new Date(Date.now() - maxAgeHours * 3_600_000) };
+  }
   const rows = await db.openIncident.findMany({
     where,
     select: { incidentId: true, state: true, district: true, group: true },
@@ -125,5 +203,8 @@ export async function getOpenStats(group?: string) {
       .sort((a, b) => b.incidents - a.incidents),
     topByState: topFrom(stateMap),
     topByDistrict: topFrom(distMap),
+    // Total de incidentes contado por cada columna (todas las entradas, no solo el top).
+    stateTotal: colTotal(stateMap),
+    districtTotal: colTotal(distMap),
   };
 }

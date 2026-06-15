@@ -1,10 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSessionFromRequest } from "@/lib/auth-session";
 import { db } from "@/lib/db";
+import { canAccessSettings } from "@/lib/permissions";
 
 export async function GET(req: NextRequest) {
   const session = getSessionFromRequest(req);
-  if (!session || session.role !== "NOC_ADMIN")
+  if (!session || !canAccessSettings(session.role))
     return NextResponse.json({ error: "No autorizado" }, { status: 401 });
 
   const { searchParams } = new URL(req.url);

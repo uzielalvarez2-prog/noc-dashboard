@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getSessionFromRequest } from "@/lib/auth-session";
 import { db } from "@/lib/db";
 import { z } from "zod";
+import { canAccessSettings } from "@/lib/permissions";
 
 const PatchSchema = z.object({
   isActive: z.boolean().optional(),
@@ -14,7 +15,7 @@ type Params = { params: Promise<{ id: string }> };
 export async function PATCH(req: NextRequest, { params }: Params) {
   const session = getSessionFromRequest(req);
   if (!session) return NextResponse.json({ error: "No autorizado" }, { status: 401 });
-  if (session.role !== "NOC_ADMIN") {
+  if (!canAccessSettings(session.role)) {
     return NextResponse.json({ error: "Sin permiso" }, { status: 403 });
   }
 
@@ -47,7 +48,7 @@ export async function PATCH(req: NextRequest, { params }: Params) {
 export async function DELETE(req: NextRequest, { params }: Params) {
   const session = getSessionFromRequest(req);
   if (!session) return NextResponse.json({ error: "No autorizado" }, { status: 401 });
-  if (session.role !== "NOC_ADMIN") {
+  if (!canAccessSettings(session.role)) {
     return NextResponse.json({ error: "Sin permiso" }, { status: 403 });
   }
 

@@ -1,10 +1,11 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { useQuery, keepPreviousData } from "@tanstack/react-query";
-import { Search, ChevronLeft, ChevronRight, RefreshCw } from "lucide-react";
+import { useQuery, useMutation, useQueryClient, keepPreviousData } from "@tanstack/react-query";
+import { Search, ChevronLeft, ChevronRight, RefreshCw, Star } from "lucide-react";
 import type { OpenListResponse } from "@/types/open";
-import { cn, formatHpsm } from "@/lib/utils";
+import { fetchEscalated, type EscalatedResponse } from "@/components/dashboard/EscalatedPanel";
+import { cn, formatDate, formatHpsm } from "@/lib/utils";
 
 const COLUMNS = [
   { key: "incidentId", label: "Incident ID" },
@@ -12,6 +13,7 @@ const COLUMNS = [
   { key: "serviceId", label: "Servicio" },
   { key: "state", label: "Estado" },
   { key: "district", label: "Distrito" },
+  { key: "siteCount", label: "# Sitios" },
   { key: "assignee", label: "Asignado" },
   { key: "status", label: "Estatus" },
   { key: "group", label: "Grupo" },
@@ -53,6 +55,26 @@ export function OpenIncidentTable({ group }: { group: string }) {
   const [q, setQ] = useState("");
   const [page, setPage] = useState(1);
   const limit = 50;
+  const qc = useQueryClient();
+
+  // Marcas de atención especial (escalados) — compartidas con el panel del Overview
+  const { data: escalated } = useQuery<EscalatedResponse>({
+    queryKey: ["escalated"],
+    queryFn: fetchEscalated,
+    refetchInterval: 60_000,
+  });
+  const markedSet = new Set(escalated?.marked ?? []);
+
+  const toggleEscalated = useMutation({
+    mutationFn: async ({ incidentId, value }: { incidentId: string; value: boolean }) => {
+      await fetch("/api/incidents/escalated", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ incidentId, escalated: value }),
+      });
+    },
+    onSettled: () => qc.invalidateQueries({ queryKey: ["escalated"] }),
+  });
 
   // Debounce del buscador para no pegarle al servidor en cada tecla.
   useEffect(() => {
@@ -82,8 +104,9 @@ export function OpenIncidentTable({ group }: { group: string }) {
   });
 
   const rows = data?.data ?? [];
-  const total = data?.meta.total ?? 0;
+  const total = data?.meta.total ?? 0; // ahora cuenta incidentes (1 fila por IM)
   const unique = data?.meta.uniqueIncidents ?? 0;
+  const totalSites = data?.meta.totalSites ?? 0;
   const totalPages = Math.max(1, Math.ceil(total / limit));
   const lastSync = data?.meta.lastSync;
 
@@ -96,7 +119,7 @@ export function OpenIncidentTable({ group }: { group: string }) {
           <thead className="sticky top-0 z-20">
             <tr>
               <th
-                colSpan={COLUMNS.length + 1}
+                colSpan={COLUMNS.length + 2}
                 className="border-b border-border/60 bg-surface/80 p-2 backdrop-blur-md"
               >
                 <div className="flex items-center gap-3">
@@ -110,7 +133,7 @@ export function OpenIncidentTable({ group }: { group: string }) {
                     />
                   </div>
                   <span className="hidden whitespace-nowrap font-mono text-xs font-normal text-text-muted sm:block">
-                    {unique} inc · {total} sitios
+                    {unique} inc · {totalSites} sitios
                   </span>
                   <button
                     type="button"
@@ -124,6 +147,12 @@ export function OpenIncidentTable({ group }: { group: string }) {
               </th>
             </tr>
             <tr className="bg-surface-elevated/80 backdrop-blur-md">
+              <th
+                title="Marcar para atención especial"
+                className="w-8 border-b border-border/60 px-2 py-2 text-center"
+              >
+                <Star className="mx-auto h-3.5 w-3.5 text-warning" />
+              </th>
               {COLUMNS.map((c) => (
                 <th
                   key={c.key}
@@ -140,13 +169,13 @@ export function OpenIncidentTable({ group }: { group: string }) {
           <tbody>
             {isLoading ? (
               <tr>
-                <td colSpan={COLUMNS.length + 1} className="py-12 text-center text-sm text-text-muted">
+                <td colSpan={COLUMNS.length + 2} className="py-12 text-center text-sm text-text-muted">
                   Cargando…
                 </td>
               </tr>
             ) : rows.length === 0 ? (
               <tr>
-                <td colSpan={COLUMNS.length + 1} className="py-12 text-center text-sm text-text-muted">
+                <td colSpan={COLUMNS.length + 2} className="py-12 text-center text-sm text-text-muted">
                   {q ? "Sin resultados para tu búsqueda" : "Sube un CSV de abiertos para empezar"}
                 </td>
               </tr>
@@ -154,8 +183,27 @@ export function OpenIncidentTable({ group }: { group: string }) {
               rows.map((r) => (
                 <tr
                   key={r.id}
-                  className="border-b border-border/40 transition-colors hover:bg-surface-elevated/40"
+                  className={cn(
+                    "border-b border-border/40 transition-colors",
+                    markedSet.has(r.incidentId)
+                      ? "bg-warning/10 hover:bg-warning/15"
+                      : "hover:bg-surface-elevated/40"
+                  )}
                 >
+                  <td className="px-2 py-2 text-center">
+                    <input
+                      type="checkbox"
+                      title="Atención especial"
+                      checked={markedSet.has(r.incidentId)}
+                      onChange={(e) =>
+                        toggleEscalated.mutate({
+                          incidentId: r.incidentId,
+                          value: e.target.checked,
+                        })
+                      }
+                      className="h-3.5 w-3.5 cursor-pointer accent-[#f59e0b]"
+                    />
+                  </td>
                   <td className="px-3 py-2 font-mono text-xs text-text-muted">{r.incidentId}</td>
                   <td className="px-3 py-2 text-xs text-text-primary">
                     <span className="block max-w-[12rem] truncate" title={r.company}>
@@ -165,6 +213,15 @@ export function OpenIncidentTable({ group }: { group: string }) {
                   <td className="px-3 py-2 font-mono text-xs text-text-muted">{r.serviceId}</td>
                   <td className="px-3 py-2 text-xs text-text-primary">{r.state}</td>
                   <td className="px-3 py-2 text-xs text-text-primary">{r.district}</td>
+                  <td className="px-3 py-2 text-center font-mono text-xs">
+                    {r.siteCount > 1 ? (
+                      <span className="rounded bg-accent/15 px-1.5 py-0.5 font-semibold text-accent">
+                        {r.siteCount}
+                      </span>
+                    ) : (
+                      <span className="text-text-muted">1</span>
+                    )}
+                  </td>
                   <td className="px-3 py-2 font-mono text-xs text-text-muted">{r.assignee ?? "—"}</td>
                   <td className="px-3 py-2 text-xs">
                     <StatusBadge status={r.status} />
@@ -183,9 +240,10 @@ export function OpenIncidentTable({ group }: { group: string }) {
       <div className="flex items-center justify-between border-t border-border/60 bg-surface/60 px-3 py-2 text-xs text-text-muted backdrop-blur-md">
         <span>
           {total > 0
-            ? `${(page - 1) * limit + 1}–${Math.min(page * limit, total)} de ${total} sitios`
-            : "0 sitios"}
-          {lastSync && <span className="ml-2">· última carga {formatHpsm(lastSync)}</span>}
+            ? `${(page - 1) * limit + 1}–${Math.min(page * limit, total)} de ${total} incidentes (${totalSites} sitios)`
+            : "0 incidentes"}
+          {/* uploadedAt sí es UTC real (lo pone la DB), no "reloj de pared" HPSM */}
+          {lastSync && <span className="ml-2">· última carga {formatDate(lastSync)}</span>}
         </span>
         <div className="flex items-center gap-1">
           <button

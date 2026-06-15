@@ -13,7 +13,7 @@ async function main() {
   const passwordHash = await bcrypt.hash("noc-admin-2026", 12);
   const admin = await db.user.upsert({
     where: { email: "admin@noc.local" },
-    update: { passwordHash, name: "NOC Admin", role: "NOC_ADMIN" },
+    update: { passwordHash, name: "NOC Admin", role: "ADMIN" },
     create: {
       email: "admin@noc.local",
       passwordHash,
@@ -21,7 +21,7 @@ async function main() {
       lastName: "",
       username: "admin",
       expediente: "",
-      role: "NOC_ADMIN",
+      role: "ADMIN",
     },
   });
   console.log("Admin OK:", admin.email, "| usuarios totales:", await db.user.count());

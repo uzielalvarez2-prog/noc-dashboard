@@ -1,8 +1,8 @@
 import { redirect } from "next/navigation";
 import { getServerSession } from "@/lib/auth-session";
+import { canAccessSettings } from "@/lib/permissions";
 import { AlertRulesPanel } from "@/components/settings/AlertRulesPanel";
 import { WorkerStatusCard } from "@/components/settings/WorkerStatusCard";
-import { CSVUpload } from "@/components/settings/CSVUpload";
 import { UsersPanel } from "@/components/settings/UsersPanel";
 import { AuditLogPanel } from "@/components/settings/AuditLogPanel";
 
@@ -10,7 +10,7 @@ export const dynamic = "force-dynamic";
 
 export default async function SettingsPage() {
   const session = await getServerSession();
-  if (!session || session.role !== "NOC_ADMIN") {
+  if (!session || !canAccessSettings(session.role)) {
     redirect("/");
   }
 
@@ -19,12 +19,11 @@ export default async function SettingsPage() {
       <div>
         <h1 className="text-2xl font-bold text-text-primary">Configuración</h1>
         <p className="mt-1 text-sm text-text-muted">
-          Gestión de datos, alertas y estado del sistema
+          Gestión de usuarios, alertas y estado del sistema
         </p>
       </div>
 
       <WorkerStatusCard />
-      <CSVUpload />
       <AlertRulesPanel />
 
       <div className="border-t border-border pt-8 space-y-8">

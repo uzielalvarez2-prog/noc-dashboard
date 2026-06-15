@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getSessionFromRequest } from "@/lib/auth-session";
 import { db } from "@/lib/db";
 import { z } from "zod";
+import { canAccessSettings } from "@/lib/permissions";
 
 const CreateAlertRuleSchema = z.object({
   name: z.string().min(1),
@@ -14,7 +15,7 @@ const CreateAlertRuleSchema = z.object({
 export async function GET(req: NextRequest) {
   const session = getSessionFromRequest(req);
   if (!session) return NextResponse.json({ error: "No autorizado" }, { status: 401 });
-  if (session.role !== "NOC_ADMIN") {
+  if (!canAccessSettings(session.role)) {
     return NextResponse.json({ error: "Sin permiso" }, { status: 403 });
   }
 
@@ -28,7 +29,7 @@ export async function GET(req: NextRequest) {
 export async function POST(req: NextRequest) {
   const session = getSessionFromRequest(req);
   if (!session) return NextResponse.json({ error: "No autorizado" }, { status: 401 });
-  if (session.role !== "NOC_ADMIN") {
+  if (!canAccessSettings(session.role)) {
     return NextResponse.json({ error: "Sin permiso" }, { status: 403 });
   }
 

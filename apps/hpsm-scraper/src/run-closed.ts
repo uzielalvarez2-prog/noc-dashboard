@@ -15,7 +15,7 @@ async function run(): Promise<void> {
   await downloadClosed();
 
   logger.info("Subiendo incidentes cerrados al dashboard (PEXA)...");
-  await uploadCsv(dest, "PEXA");
+  await uploadCsv(dest, config.closed.group, "closed");
 
   logger.info("=== run-closed: completado ===");
 }

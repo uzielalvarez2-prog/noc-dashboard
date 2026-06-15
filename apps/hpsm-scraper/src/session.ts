@@ -62,7 +62,10 @@ export async function openHpsmSession(): Promise<HpsmSession> {
     await page.locator("#LoginUsername").waitFor({ state: "visible", timeout: 30_000 });
     await page.locator("#LoginUsername").fill(config.hpsm.user);
     await page.locator("#LoginPassword").fill(config.hpsm.password);
-    await Promise.all([page.waitForLoadState("networkidle"), page.locator("#loginBtn").click()]);
+    await page.locator("#loginBtn").click();
+    // Esperar a que loginBtn desaparezca — señal de que HPSM aceptó el login y está redirigiendo
+    await page.locator("#loginBtn").waitFor({ state: "hidden", timeout: 30_000 }).catch(() => {});
+    await page.waitForTimeout(2_000);
 
     const limitError = await page.locator("text=Maximum active logins").first().isVisible().catch(() => false);
     if (limitError) {
@@ -85,18 +88,15 @@ export async function openHpsmSession(): Promise<HpsmSession> {
     close: async () => {
       // Logout de HPSM — libera la sesión del servidor y evita acumular logins activos
       try {
-        const logoutUrl = await page.evaluate(() =>
+        // Intentar leer la URL de logout desde cwc; si no está, usar la ruta conocida como fallback
+        const logoutPath = await page.evaluate(() =>
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
           (window as any).cwc?.logoutCleanupJsp as string | undefined ?? null
-        ).catch(() => null);
-        if (logoutUrl) {
-          logger.info(`Logout HPSM: ${logoutUrl}`);
-          await page.goto(logoutUrl, { timeout: 10_000, waitUntil: "domcontentloaded" }).catch(() => {});
-        } else {
-          logger.warn("logoutCleanupJsp no encontrado — sesión HPSM puede quedar activa");
-        }
+        ).catch(() => null) ?? "/sm/cwc/logoutcleanup.jsp?lang=en";
+        const logoutUrl = new URL(logoutPath, config.hpsm.url).href;
+        logger.info(`Logout HPSM: ${logoutUrl}`);
+        await page.goto(logoutUrl, { timeout: 10_000, waitUntil: "domcontentloaded" }).catch(() => {});
       } catch { /* ignorar */ }
-      // No guardamos cookies — la sesión ya fue cerrada en el servidor
       await browser.close();
       logger.info("Sesión cerrada");
     },
@@ -110,11 +110,17 @@ export async function openHpsmSession(): Promise<HpsmSession> {
 /**
  * @param contentFrame  Frame donde vive la lista de resultados. Si se omite se
  *                      busca automáticamente en todos los frames de la página.
+ * @param onlyVisibleMore  Si hay varios botones "More" (un tab por panel abierto,
+ *                      p.ej. "To Do Queue" + el queue), clickear el ÚLTIMO visible
+ *                      en lugar del primero del DOM. Los tabs inactivos quedan con
+ *                      display:none pero su More sigue siendo clickeable por JS y
+ *                      exportaría la vista equivocada.
  */
 export async function exportCurrentViewToCsv(
   page: Page,
   destPath: string,
   contentFrame?: Frame,
+  onlyVisibleMore = false,
 ): Promise<void> {
   // Buscar el botón "More" en el frame indicado o en todos los frames
   const framesToSearch = contentFrame
@@ -124,7 +130,20 @@ export async function exportCurrentViewToCsv(
   let moreClicked = false;
   for (const frame of framesToSearch) {
     try {
-      const moreText = frame.locator(':text-is("More")').first();
+      const moreTexts = frame.locator(':text-is("More")');
+      let moreText = moreTexts.first();
+      if (onlyVisibleMore) {
+        const n = await moreTexts.count();
+        let visible: typeof moreText | null = null;
+        for (let i = n - 1; i >= 0; i--) {
+          if (await moreTexts.nth(i).isVisible().catch(() => false)) {
+            visible = moreTexts.nth(i);
+            break;
+          }
+        }
+        if (!visible) throw new Error("sin More visible en este frame");
+        moreText = visible;
+      }
       const moreBtn = moreText.locator(
         'xpath=ancestor::*[contains(concat(" ", normalize-space(@class), " "), " x-btn ")][1]',
       );

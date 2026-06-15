@@ -22,9 +22,9 @@ interface UserFormDialogProps {
 }
 
 const ROLES = [
-  { value: "NOC_OPERATOR", label: "Operador NOC" },
-  { value: "NOC_ADMIN",    label: "Administrador NOC" },
-  { value: "ENGINEER",     label: "Ingeniero" },
+  { value: "IDS",        label: "IDS — Ingeniero de Diagnóstico y Solución" },
+  { value: "SUPERVISOR", label: "Supervisor" },
+  { value: "ADMIN",      label: "Administrador" },
 ];
 
 export function UserFormDialog({ open, onClose, onSuccess, user }: UserFormDialogProps) {
@@ -32,7 +32,7 @@ export function UserFormDialog({ open, onClose, onSuccess, user }: UserFormDialo
 
   const [name,     setName]     = useState(user?.name  ?? "");
   const [email,    setEmail]    = useState(user?.email ?? "");
-  const [role,     setRole]     = useState(user?.role  ?? "NOC_OPERATOR");
+  const [role,     setRole]     = useState(user?.role  ?? "IDS");
   const [password, setPassword] = useState("");
   const [loading,  setLoading]  = useState(false);
   const [error,    setError]    = useState<string | null>(null);
@@ -41,7 +41,7 @@ export function UserFormDialog({ open, onClose, onSuccess, user }: UserFormDialo
   useEffect(() => {
     setName(user?.name  ?? "");
     setEmail(user?.email ?? "");
-    setRole(user?.role  ?? "NOC_OPERATOR");
+    setRole(user?.role  ?? "IDS");
     setPassword("");
     setError(null);
   }, [user, open]);
@@ -112,7 +112,7 @@ export function UserFormDialog({ open, onClose, onSuccess, user }: UserFormDialo
 
           <div className="space-y-1">
             <label className="text-xs text-text-muted">Rol</label>
-            <Select value={role} onValueChange={(v) => setRole(v ?? "NOC_OPERATOR")}>
+            <Select value={role} onValueChange={(v) => setRole(v ?? "IDS")}>
               <SelectTrigger className="border-border bg-surface-elevated text-text-primary">
                 <SelectValue />
               </SelectTrigger>

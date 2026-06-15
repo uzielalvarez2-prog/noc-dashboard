@@ -5,11 +5,11 @@ import { useQuery } from "@tanstack/react-query";
 import {
   BarChart,
   Bar,
-  Cell,
   XAxis,
   YAxis,
   CartesianGrid,
   Tooltip,
+  Legend,
   LabelList,
   ResponsiveContainer,
 } from "recharts";
@@ -17,6 +17,8 @@ import { Camera, Check } from "lucide-react";
 
 interface DayPoint {
   day: string;
+  PEXA: number;
+  CECOR: number;
   total: number;
 }
 
@@ -26,21 +28,7 @@ async function fetchByDay(): Promise<DayPoint[]> {
   return res.json();
 }
 
-// Colores suaves y alegres — uno por barra
-const BAR_COLORS = [
-  "#60a5fa", // azul
-  "#34d399", // esmeralda
-  "#fbbf24", // ámbar
-  "#a78bfa", // violeta
-  "#f87171", // rojo suave
-  "#2dd4bf", // teal
-  "#fb923c", // naranja
-  "#4ade80", // verde
-  "#e879f9", // fucsia
-  "#facc15", // amarillo
-  "#38bdf8", // cielo
-  "#c084fc", // púrpura
-];
+const COLORS = { PEXA: "#3b82f6", CECOR: "#f59e0b" };
 
 const TOOLTIP_STYLE = {
   contentStyle: {
@@ -70,6 +58,8 @@ export function OpenByDayChart({ initial }: Props) {
 
   const chartData = data ?? initial;
   const grandTotal = chartData.reduce((s, d) => s + d.total, 0);
+  const totalPexa = chartData.reduce((s, d) => s + d.PEXA, 0);
+  const totalCecor = chartData.reduce((s, d) => s + d.CECOR, 0);
 
   async function copyAsImage() {
     const container = chartRef.current;
@@ -138,13 +128,23 @@ export function OpenByDayChart({ initial }: Props) {
 
   return (
     <div className="rounded-lg border border-border bg-surface p-5">
-      <div className="mb-4 flex items-center justify-between">
-        <div className="flex items-baseline gap-3">
+      <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
+        <div className="flex flex-wrap items-baseline gap-3">
           <h2 className="text-base font-semibold text-text-primary">
             Incidentes por día
           </h2>
-          <span className="text-2xl font-bold text-info">{grandTotal}</span>
-          <span className="text-xs text-text-muted">total</span>
+          <span className="font-mono text-xs">
+            <span className="text-lg font-bold text-accent">{totalPexa}</span>{" "}
+            <span className="text-text-muted">PEXA</span>
+          </span>
+          <span className="font-mono text-xs">
+            <span className="text-lg font-bold text-warning">{totalCecor}</span>{" "}
+            <span className="text-text-muted">CECOR</span>
+          </span>
+          <span className="font-mono text-xs">
+            <span className="text-lg font-bold text-text-primary">{grandTotal}</span>{" "}
+            <span className="text-text-muted">total</span>
+          </span>
         </div>
         <button
           type="button"
@@ -161,18 +161,23 @@ export function OpenByDayChart({ initial }: Props) {
         </button>
       </div>
 
-      <div ref={chartRef} className="h-56">
+      <div ref={chartRef} className="mx-auto h-56 max-w-2xl">
         <ResponsiveContainer width="100%" height="100%">
           <BarChart
             data={chartData}
-            margin={{ top: 20, right: 8, bottom: 0, left: -8 }}
+            margin={{ top: 20, right: 8, bottom: 24, left: -8 }}
+            barCategoryGap="30%"
           >
             <CartesianGrid strokeDasharray="3 3" stroke="#1e3048" />
             <XAxis
               dataKey="day"
-              tick={{ fill: "#64748b", fontSize: 11 }}
+              tick={{ fill: "#64748b", fontSize: 10 }}
               tickLine={false}
               axisLine={{ stroke: "#1e3048" }}
+              interval={0}
+              angle={-40}
+              textAnchor="end"
+              height={50}
             />
             <YAxis
               tick={{ fill: "#64748b", fontSize: 11 }}
@@ -181,14 +186,9 @@ export function OpenByDayChart({ initial }: Props) {
               allowDecimals={false}
             />
             <Tooltip {...TOOLTIP_STYLE} />
-            <Bar dataKey="total" name="Incidentes" radius={[4, 4, 0, 0]}>
-              {chartData.map((_, idx) => (
-                <Cell
-                  key={idx}
-                  fill={BAR_COLORS[idx % BAR_COLORS.length]}
-                  fillOpacity={0.85}
-                />
-              ))}
+            <Legend wrapperStyle={{ fontSize: "12px", paddingTop: "4px" }} />
+            <Bar dataKey="PEXA" name="PEXA" stackId="dia" fill={COLORS.PEXA} fillOpacity={0.85} maxBarSize={36} />
+            <Bar dataKey="CECOR" name="CECOR" stackId="dia" fill={COLORS.CECOR} fillOpacity={0.85} radius={[4, 4, 0, 0]} maxBarSize={36}>
               <LabelList
                 dataKey="total"
                 position="top"

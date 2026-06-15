@@ -1,4 +1,6 @@
 import type { Incident } from "@/types";
+import { downloadXLSX } from "@/lib/excelExport";
+import { formatDateExcel } from "@/lib/utils";
 
 const SEV_LABELS: Record<string, string> = {
   CRITICAL: "CRÍTICO",
@@ -15,15 +17,7 @@ const STATUS_LABELS: Record<string, string> = {
 };
 
 function fmt(d: Date | string) {
-  return new Date(d).toLocaleString("es-MX", {
-    timeZone: "America/Mexico_City",
-    day: "2-digit",
-    month: "2-digit",
-    year: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-    hour12: false,
-  });
+  return formatDateExcel(d);
 }
 
 export function exportIncidentsCSV(incidents: Incident[]) {
@@ -42,7 +36,7 @@ export function exportIncidentsCSV(incidents: Incident[]) {
 
   const rows = incidents.map((inc) => [
     inc.id,
-    `"${inc.title.replace(/"/g, '""')}"`,
+    inc.title,
     SEV_LABELS[inc.severity] ?? inc.severity,
     STATUS_LABELS[inc.status] ?? inc.status,
     inc.assignedTo ?? "",
@@ -53,14 +47,10 @@ export function exportIncidentsCSV(incidents: Incident[]) {
     inc.source,
   ]);
 
-  const csv = [headers.join(","), ...rows.map((r) => r.join(","))].join("\n");
-  const blob = new Blob(["﻿" + csv], { type: "text/csv;charset=utf-8;" });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = `incidentes_${new Date().toISOString().slice(0, 10)}.csv`;
-  document.body.appendChild(a);
-  a.click();
-  document.body.removeChild(a);
-  URL.revokeObjectURL(url);
+  downloadXLSX(
+    `incidentes_${new Date().toISOString().slice(0, 10)}.xlsx`,
+    "Incidentes",
+    headers,
+    rows,
+  );
 }

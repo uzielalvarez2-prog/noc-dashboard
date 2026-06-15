@@ -91,11 +91,23 @@ async function setColumns(
   if (!colFrame) throw new Error("choose.columns form no encontrado en 30s");
   logger.info(`Columns form en: ${colFrame.url()}`);
 
-  for (let i = 0; i < 8; i++) {
-    await colFrame.locator(`[name="var/L.current/L.current[${i + 1}]"]`)
-      .fill(columns[i] ?? "", { force: true }).catch(() => {});
-    await page.waitForTimeout(200);
-  }
+  // Llenar via ExtJS API — pressSequentially no actualiza el modelo interno de Ext
+  await colFrame.evaluate((cols: string[]) => {
+    const Ext = (window as any).Ext as any;
+    for (let i = 0; i < 8; i++) {
+      const name = `var/L.current/L.current[${i + 1}]`;
+      const val = cols[i] ?? "";
+      if (Ext?.ComponentQuery) {
+        const comps = Ext.ComponentQuery.query(`[name="${name}"]`) as any[];
+        if (comps.length > 0) { comps[0].setValue(val); continue; }
+      }
+      const el = document.querySelector<HTMLInputElement>(`[name="${name}"]`);
+      if (!el) continue;
+      el.value = val;
+      el.dispatchEvent(new Event("input", { bubbles: true }));
+      el.dispatchEvent(new Event("change", { bubbles: true }));
+    }
+  }, columns);
   await page.waitForTimeout(1_000);
 
   let proceedClicked = false;
@@ -281,12 +293,10 @@ async function main(): Promise<void> {
 
     await page.screenshot({ path: "debug-closed-step3-results.png", fullPage: true });
 
-    // ── 5.5. Fijar columnas para closed incidents ─────────────────────────────
-    logger.info("Configurando columnas para closed incidents...");
-    const freshFrame = await setColumns(page, listDetailFrame, CLOSED_COLUMNS);
-
     // ── 6. More → Export en el frame de resultados ────────────────────────────
-    await exportCurrentViewToCsv(page, dest, freshFrame);
+    // Las columnas de cerrados ya son correctas en la cuenta HPSM del scraper,
+    // no se necesita Modify Columns.
+    await exportCurrentViewToCsv(page, dest, listDetailFrame);
     logger.info("Descarga de incidentes cerrados completada");
   } finally {
     await session.close();

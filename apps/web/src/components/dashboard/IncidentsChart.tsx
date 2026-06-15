@@ -14,10 +14,8 @@ import {
 
 interface TrendPoint {
   hour: string;
-  CRITICAL: number;
-  HIGH: number;
-  MEDIUM: number;
-  LOW: number;
+  PEXA: number;
+  CECOR: number;
 }
 
 interface KPIData {
@@ -31,10 +29,8 @@ async function fetchKPIs(): Promise<KPIData> {
 }
 
 const COLORS = {
-  CRITICAL: "#ef4444",
-  HIGH: "#f59e0b",
-  MEDIUM: "#38bdf8",
-  LOW: "#64748b",
+  PEXA: "#3b82f6",
+  CECOR: "#f59e0b",
 };
 
 interface IncidentsChartProps {
@@ -61,12 +57,30 @@ export function IncidentsChart({ initial }: IncidentsChartProps) {
   });
 
   const chartData = data?.trend ?? initial;
+  const totalPexa = chartData.reduce((s, p) => s + p.PEXA, 0);
+  const totalCecor = chartData.reduce((s, p) => s + p.CECOR, 0);
 
   return (
     <div className="rounded-lg border border-border bg-surface p-5">
-      <h2 className="mb-4 text-base font-semibold text-text-primary">
-        Incidentes por hora — últimas 24h
-      </h2>
+      <div className="mb-4 flex flex-wrap items-baseline justify-between gap-2">
+        <h2 className="text-base font-semibold text-text-primary">
+          Abiertos por hora — últimas 24h
+        </h2>
+        <div className="flex items-baseline gap-3 font-mono text-xs">
+          <span>
+            <span className="text-lg font-bold text-accent">{totalPexa}</span>{" "}
+            <span className="text-text-muted">PEXA</span>
+          </span>
+          <span>
+            <span className="text-lg font-bold text-warning">{totalCecor}</span>{" "}
+            <span className="text-text-muted">CECOR</span>
+          </span>
+          <span>
+            <span className="text-lg font-bold text-text-primary">{totalPexa + totalCecor}</span>{" "}
+            <span className="text-text-muted">total 24h</span>
+          </span>
+        </div>
+      </div>
       <div className="h-56">
         <ResponsiveContainer width="100%" height="100%">
           <AreaChart
@@ -83,7 +97,7 @@ export function IncidentsChart({ initial }: IncidentsChartProps) {
                   x2="0"
                   y2="1"
                 >
-                  <stop offset="5%" stopColor={COLORS[key]} stopOpacity={0.25} />
+                  <stop offset="5%" stopColor={COLORS[key]} stopOpacity={0.3} />
                   <stop offset="95%" stopColor={COLORS[key]} stopOpacity={0} />
                 </linearGradient>
               ))}

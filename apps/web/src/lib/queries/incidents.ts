@@ -54,7 +54,10 @@ export async function getKPIs() {
 
   const [openRows, closedToday, uploadedAtRow] = await Promise.all([
     db.openIncident.findMany({
-      select: { incidentId: true, openTime: true, status: true, group: true, assignee: true },
+      select: {
+        incidentId: true, openTime: true, status: true, group: true, assignee: true,
+        company: true, serviceId: true, state: true, district: true,
+      },
       orderBy: { openTime: "asc" },
     }),
     db.closedIncident.count({ where: { closeTime: { gte: todayStart } } }),
@@ -72,26 +75,40 @@ export async function getKPIs() {
   }
   const incidents = [...incidentMap.values()];
 
-  const breached = incidents.filter((r) => r.openTime <= slaBreachThreshold);
+  // Los RESUELTOS siguen en la cola pero ya no requieren atención
+  const isActive = (s: string) => !s.toUpperCase().includes("RESOLVED");
+
+  const breached = incidents.filter(
+    (r) => isActive(r.status) && r.openTime <= slaBreachThreshold
+  );
   const atRisk = incidents.filter(
-    (r) => r.openTime > slaBreachThreshold && r.openTime <= slaRiskThreshold
+    (r) =>
+      isActive(r.status) &&
+      r.openTime > slaBreachThreshold &&
+      r.openTime <= slaRiskThreshold
   );
 
-  const criticalIncidents = breached.slice(0, 10).map((r) => ({
-    id: r.incidentId,
-    title: `${r.incidentId} — ${r.group}`,
-    group: r.group,
-    severity: "HIGH" as const,
-    status: r.status,
-    assignedTo: r.assignee,
-    slaDeadline: new Date(r.openTime.getTime() + SLA_MINS * 60_000).toISOString(),
-    slaBreached: true,
-    openTime: r.openTime.toISOString(),
-  }));
+  // Top 15 con MÁS tiempo abierto (los más críticos primero)
+  const criticalIncidents = [...breached]
+    .sort((a, b) => a.openTime.getTime() - b.openTime.getTime())
+    .slice(0, 15)
+    .map((r) => ({
+      id: r.incidentId,
+      group: r.group,
+      status: r.status,
+      assignedTo: r.assignee,
+      company: r.company,
+      serviceId: r.serviceId,
+      state: r.state,
+      district: r.district,
+      openTime: r.openTime.toISOString(),
+    }));
 
   return {
     totalOpen: incidents.length,
-    criticalActive: breached.length,
+    openPexa: incidents.filter((r) => r.group === "PEXA").length,
+    openCecor: incidents.filter((r) => r.group === "CECOR").length,
+    criticalActive: breached.filter((r) => r.group === "PEXA").length,
     slaAtRisk: atRisk.length,
     closedToday,
     criticalIncidents,
@@ -101,65 +118,99 @@ export async function getKPIs() {
 
 export interface TrendPoint {
   hour: string;
-  CRITICAL: number;
-  HIGH: number;
-  MEDIUM: number;
-  LOW: number;
+  PEXA: number;
+  CECOR: number;
 }
 
-/** Devuelve conteos de incidentes por dia — solo dias con datos (hasta 30 dias atras). */
-export async function getOpenByDay(): Promise<{ day: string; total: number }[]> {
+/**
+ * Conteo por día de los incidentes abiertos ACTUALES (únicos, no filas por
+ * sitio) según cuándo cayeron, separado por grupo — solo días con datos,
+ * hasta 30 días atrás.
+ */
+export async function getOpenByDay(): Promise<
+  { day: string; PEXA: number; CECOR: number; total: number }[]
+> {
+  const since = new Date();
+  since.setDate(since.getDate() - 29);
+  since.setHours(0, 0, 0, 0);
+
+  const rows = await db.openIncident.findMany({
+    where: { openTime: { gte: since } },
+    select: { incidentId: true, openTime: true, group: true },
+  });
+
+  // Un incidente abarca varios sitios (filas); usar su primer openTime + grupo
+  const firstOpen = new Map<string, { openTime: Date; group: string }>();
+  for (const r of rows) {
+    const prev = firstOpen.get(r.incidentId);
+    if (!prev || r.openTime < prev.openTime)
+      firstOpen.set(r.incidentId, { openTime: r.openTime, group: r.group });
+  }
+
+  const counts = new Map<string, { PEXA: number; CECOR: number }>();
+  for (const { openTime, group } of firstOpen.values()) {
+    const key = openTime.toISOString().slice(0, 10);
+    let c = counts.get(key);
+    if (!c) counts.set(key, (c = { PEXA: 0, CECOR: 0 }));
+    if (group === "CECOR") c.CECOR++;
+    else c.PEXA++;
+  }
+
   const result = [];
   for (let i = 29; i >= 0; i--) {
-    const start = new Date();
-    start.setDate(start.getDate() - i);
-    start.setHours(0, 0, 0, 0);
-    const end = new Date(start);
-    end.setHours(23, 59, 59, 999);
-
-    const total = await db.incident.count({
-      where: { createdAt: { gte: start, lte: end }, status: { in: ["OPEN", "IN_PROGRESS"] } },
-    });
-    if (total > 0) {
+    const d = new Date();
+    d.setDate(d.getDate() - i);
+    d.setHours(12, 0, 0, 0);
+    const c = counts.get(d.toISOString().slice(0, 10));
+    if (c && c.PEXA + c.CECOR > 0) {
       result.push({
-        day: start.toLocaleDateString("es-MX", { weekday: "short", day: "2-digit" }),
-        total,
+        day: d.toLocaleDateString("es-MX", { weekday: "short", day: "2-digit" }),
+        PEXA: c.PEXA,
+        CECOR: c.CECOR,
+        total: c.PEXA + c.CECOR,
       });
     }
   }
   return result;
 }
 
-/** Devuelve conteos por hora en las últimas 24h para el chart de tendencia. */
+/** Conteos por hora (incidentes únicos) en las últimas 24h — PEXA vs CECOR. */
 export async function getIncidentTrend(): Promise<TrendPoint[]> {
   const now = new Date();
   const since = new Date(now.getTime() - 24 * 3600000);
 
-  const incidents = await db.incident.findMany({
-    where: { createdAt: { gte: since } },
-    select: { createdAt: true, severity: true },
+  const rows = await db.openIncident.findMany({
+    where: { openTime: { gte: since } },
+    select: { incidentId: true, openTime: true, group: true },
   });
 
-  const buckets: Record<string, Record<string, number>> = {};
+  // Deduplicar: un incidente abarca varios sitios (filas)
+  const uniq = new Map<string, { openTime: Date; group: string }>();
+  for (const r of rows) {
+    const prev = uniq.get(r.incidentId);
+    if (!prev || r.openTime < prev.openTime)
+      uniq.set(r.incidentId, { openTime: r.openTime, group: r.group });
+  }
+
+  const buckets: Record<string, { PEXA: number; CECOR: number }> = {};
   for (let i = 0; i < 24; i++) {
     const h = new Date(since.getTime() + i * 3600000);
     const label = `${String(h.getHours()).padStart(2, "0")}:00`;
-    buckets[label] = { CRITICAL: 0, HIGH: 0, MEDIUM: 0, LOW: 0 };
+    buckets[label] = { PEXA: 0, CECOR: 0 };
   }
 
-  for (const inc of incidents) {
-    const h = new Date(inc.createdAt);
+  for (const inc of uniq.values()) {
+    const h = new Date(inc.openTime);
     const label = `${String(h.getHours()).padStart(2, "0")}:00`;
     if (buckets[label]) {
-      buckets[label][inc.severity] = (buckets[label][inc.severity] ?? 0) + 1;
+      if (inc.group === "CECOR") buckets[label].CECOR++;
+      else buckets[label].PEXA++;
     }
   }
 
   return Object.entries(buckets).map(([hour, counts]) => ({
     hour,
-    CRITICAL: counts.CRITICAL ?? 0,
-    HIGH: counts.HIGH ?? 0,
-    MEDIUM: counts.MEDIUM ?? 0,
-    LOW: counts.LOW ?? 0,
+    PEXA: counts.PEXA,
+    CECOR: counts.CECOR,
   }));
 }

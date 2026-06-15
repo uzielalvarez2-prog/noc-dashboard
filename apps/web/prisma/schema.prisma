@@ -42,7 +42,7 @@ model User {
   lastName     String     @default("")
   username     String     @default("")
   expediente   String     @default("")
-  role         UserRole   @default(NOC_OPERATOR)
+  role         UserRole   @default(IDS)
   createdAt    DateTime   @default(now())
   auditLogs    AuditLog[]
 }
@@ -125,6 +125,17 @@ model ClosedIncident {
   @@index([closeTime])
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// ESCALADOS: incidentes marcados manualmente para atención especial. Vive aparte
+// de OpenIncident porque ese snapshot se reemplaza completo cada 5 min; la marca
+// debe sobrevivir. Se cruza por incidentId al consultar.
+// ─────────────────────────────────────────────────────────────────────────────
+model EscalatedIncident {
+  incidentId String   @id
+  markedBy   String
+  createdAt  DateTime @default(now())
+}
+
 enum Severity {
   CRITICAL
   HIGH
@@ -140,9 +151,9 @@ enum IncidentStatus {
 }
 
 enum UserRole {
-  NOC_OPERATOR
-  NOC_ADMIN
-  ENGINEER
+  IDS         // Ingeniero de Diagnóstico y Solución — ve y descarga todo, importa CSV, sin configuración
+  SUPERVISOR  // IDS + configuración: gestión de usuarios y reglas de alerta
+  ADMIN       // Acceso total (rol protegido: siempre debe existir al menos uno)
 }
 
 enum AlertTrigger {

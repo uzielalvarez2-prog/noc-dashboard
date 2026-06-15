@@ -6,7 +6,7 @@
 
 $dir = "C:\Users\Admin\noc-dashboard\apps\hpsm-scraper\scripts"
 $ps  = "$env:SystemRoot\System32\WindowsPowerShell\v1.0\powershell.exe"
-$flg = "-NonInteractive -ExecutionPolicy Bypass -File"
+$flg = "-NonInteractive -WindowStyle Hidden -ExecutionPolicy Bypass -File"
 
 # -------------------------------------------------------
 # 1. NOC-RunOpen — diario, cada 8 min de 06:00 a 23:00
@@ -31,6 +31,19 @@ $out = schtasks /Create /TN "NOC-RunClosed-2230" /TR "$ps $flg $dir\run-closed-2
     /SC DAILY /ST 22:30 /F 2>&1
 if ($LASTEXITCODE -eq 0) { Write-Host "OK   NOC-RunClosed-2230 (diario 22:30)" }
 else                      { Write-Host "ERR  NOC-RunClosed-2230: $out" }
+
+# -------------------------------------------------------
+# 4. Ajustes de las tareas de cerrados: despertar la PC si está
+#    dormida a la hora del trigger y no bloquear por batería.
+#    (schtasks no puede configurar esto; se aplica después de crear.)
+#    NOC-RunOpen NO lleva WakeToRun: despertaría la PC cada 8 min.
+# -------------------------------------------------------
+$settings = New-ScheduledTaskSettingsSet -WakeToRun -AllowStartIfOnBatteries `
+    -DontStopIfGoingOnBatteries -ExecutionTimeLimit (New-TimeSpan -Hours 1)
+foreach ($t in "NOC-RunClosed-15", "NOC-RunClosed-2230") {
+    Set-ScheduledTask -TaskName $t -Settings $settings | Out-Null
+    Write-Host "OK   $t (WakeToRun + bateria)"
+}
 
 Write-Host ""
 Write-Host "Verificar con:"

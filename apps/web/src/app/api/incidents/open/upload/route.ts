@@ -43,7 +43,7 @@ export async function POST(req: NextRequest) {
     // El scraper exporta "Region" (región Telmex) y "Divisional"; los nombres
     // "Site Name State/District" se aceptan por compatibilidad con CSVs manuales.
     const cState = pickCol(headers, ["Site Name State", "Site State", "Region", "Site Name"]);
-    const cAssignee = pickCol(headers, ["Assignee", "Opened by"]);
+    const cAssignee = pickCol(headers, ["Assigned To", "Assignee", "Opened by"]);
     const cDistrict = pickCol(headers, ["Site Name District", "Site District", "Divisional"]);
     const cGroup = pickCol(headers, ["Assignment Group"]);
 

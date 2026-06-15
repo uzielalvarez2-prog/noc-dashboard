@@ -3,12 +3,13 @@ import { getSessionFromRequest } from "@/lib/auth-session";
 import { db } from "@/lib/db";
 import bcrypt from "bcryptjs";
 import type { UserRole } from "@/types";
+import { ROLES, canAccessSettings } from "@/lib/permissions";
 
-const VALID_ROLES: UserRole[] = ["NOC_OPERATOR", "NOC_ADMIN", "ENGINEER"];
+const VALID_ROLES: UserRole[] = ROLES;
 
 function adminOnly(req: NextRequest) {
   const s = getSessionFromRequest(req);
-  if (!s || s.role !== "NOC_ADMIN") return null;
+  if (!s || !canAccessSettings(s.role)) return null;
   return s;
 }
 

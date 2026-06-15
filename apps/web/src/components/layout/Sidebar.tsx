@@ -2,13 +2,16 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { useEffect, useState } from "react";
 import { cn } from "@/lib/utils";
+import { canAccessSettings } from "@/lib/permissions";
 import {
   LayoutDashboard,
   AlertTriangle,
   BarChart2,
   Users,
   Settings,
+  Upload,
   ChevronLeft,
   ChevronRight,
 } from "lucide-react";
@@ -18,7 +21,8 @@ const NAV_ITEMS = [
   { href: "/incidents", label: "Incidentes", icon: AlertTriangle },
   { href: "/sla", label: "SLA", icon: BarChart2 },
   { href: "/operators", label: "Operadores", icon: Users },
-  { href: "/settings", label: "Configuración", icon: Settings },
+  { href: "/import", label: "Importar CSV", icon: Upload },
+  { href: "/settings", label: "Configuración", icon: Settings, settingsOnly: true },
 ];
 
 interface SidebarProps {
@@ -28,6 +32,18 @@ interface SidebarProps {
 
 export function Sidebar({ collapsed, onToggle }: SidebarProps) {
   const pathname = usePathname();
+  const [role, setRole] = useState<string | undefined>();
+
+  useEffect(() => {
+    fetch("/api/auth/me")
+      .then((r) => r.json())
+      .then((d) => setRole(d.role))
+      .catch(() => {});
+  }, []);
+
+  const items = NAV_ITEMS.filter(
+    (item) => !item.settingsOnly || canAccessSettings(role)
+  );
 
   return (
     <aside
@@ -50,7 +66,7 @@ export function Sidebar({ collapsed, onToggle }: SidebarProps) {
 
       {/* Nav */}
       <nav className="flex flex-1 flex-col gap-1 p-2">
-        {NAV_ITEMS.map(({ href, label, icon: Icon }) => {
+        {items.map(({ href, label, icon: Icon }) => {
           const isActive =
             href === "/" ? pathname === "/" : pathname.startsWith(href);
           return (

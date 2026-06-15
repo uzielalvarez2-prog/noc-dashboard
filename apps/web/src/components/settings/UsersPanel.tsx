@@ -15,15 +15,15 @@ interface User {
 }
 
 const ROLE_LABELS: Record<string, string> = {
-  NOC_ADMIN:    "Admin",
-  NOC_OPERATOR: "Operador",
-  ENGINEER:     "Ingeniero",
+  ADMIN:      "Admin",
+  SUPERVISOR: "Supervisor",
+  IDS:        "IDS",
 };
 
 const ROLE_COLORS: Record<string, string> = {
-  NOC_ADMIN:    "text-warning border-warning/30 bg-warning/10",
-  NOC_OPERATOR: "text-accent border-accent/30 bg-accent/10",
-  ENGINEER:     "text-success border-success/30 bg-success/10",
+  ADMIN:      "text-warning border-warning/30 bg-warning/10",
+  SUPERVISOR: "text-success border-success/30 bg-success/10",
+  IDS:        "text-accent border-accent/30 bg-accent/10",
 };
 
 async function fetchUsers(): Promise<{ users: User[] }> {
