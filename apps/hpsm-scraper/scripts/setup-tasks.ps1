@@ -17,11 +17,11 @@ if ($LASTEXITCODE -eq 0) { Write-Host "OK   NOC-RunOpen (diario, cada 8 min, 06:
 else                      { Write-Host "ERR  NOC-RunOpen: $out" }
 
 # -------------------------------------------------------
-# 2. NOC-RunClosed-15 — diario a las 15:00
+# 2. NOC-RunClosed-15 — diario a las 14:00
 # -------------------------------------------------------
 $out = schtasks /Create /TN "NOC-RunClosed-15" /TR "$ps $flg $dir\run-closed-15.ps1" `
-    /SC DAILY /ST 15:00 /F 2>&1
-if ($LASTEXITCODE -eq 0) { Write-Host "OK   NOC-RunClosed-15 (diario 15:00)" }
+    /SC DAILY /ST 14:00 /F 2>&1
+if ($LASTEXITCODE -eq 0) { Write-Host "OK   NOC-RunClosed-15 (diario 14:00)" }
 else                      { Write-Host "ERR  NOC-RunClosed-15: $out" }
 
 # -------------------------------------------------------
