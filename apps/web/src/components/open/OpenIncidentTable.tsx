@@ -17,6 +17,7 @@ const COLUMNS = [
   { key: "assignee", label: "Asignado" },
   { key: "status", label: "Estatus" },
   { key: "group", label: "Grupo" },
+  { key: "siteCount", label: "# Sitios" },
 ] as const;
 
 async function fetchOpen(qs: string): Promise<OpenListResponse> {
@@ -93,7 +94,8 @@ export function OpenIncidentTable({ group }: { group: string }) {
   const params = new URLSearchParams();
   if (q) params.set("q", q);
   if (group !== "ALL") params.set("group", group);
-  params.set("collapse", "false"); // 1 fila por sitio: Estado/Distrito reales, sin "Varios"
+  // 1 fila por incidente (collapse default): un IM que toca varios sitios se
+  // muestra una sola vez con "Varios (N)" en Estado/Distrito y su # de sitios.
   params.set("page", String(page));
   params.set("limit", String(limit));
   const qs = params.toString();
@@ -127,7 +129,12 @@ export function OpenIncidentTable({ group }: { group: string }) {
         if (res.data.length === 0 || all.length >= res.meta.total) break;
         p++;
       }
-      const headers = [...COLUMNS.map((c) => c.label), "Apertura"];
+      // Export a nivel sitio (1 fila por sitio) = mejor base para tabla dinámica.
+      // "# Sitios" se omite (no aplica al detalle por sitio).
+      const headers = [
+        ...COLUMNS.filter((c) => c.key !== "siteCount").map((c) => c.label),
+        "Apertura",
+      ];
       const exportRows = all.map((r) => [
         r.incidentId,
         r.company,
@@ -278,6 +285,13 @@ export function OpenIncidentTable({ group }: { group: string }) {
                   <td className="px-3 py-2">
                     <GroupBadge group={r.group} />
                   </td>
+                  <td className="px-3 py-2 text-center font-mono text-xs text-text-muted">
+                    {r.siteCount > 1 ? (
+                      <span className="rounded bg-accent/15 px-1.5 py-0.5 text-accent">{r.siteCount}</span>
+                    ) : (
+                      r.siteCount
+                    )}
+                  </td>
                   <td className="px-3 py-2 font-mono text-xs text-text-muted">{formatHpsm(r.openTime)}</td>
                 </tr>
               ))
@@ -289,8 +303,8 @@ export function OpenIncidentTable({ group }: { group: string }) {
       <div className="flex items-center justify-between border-t border-border/60 bg-surface/60 px-3 py-2 text-xs text-text-muted backdrop-blur-md">
         <span>
           {total > 0
-            ? `${(page - 1) * limit + 1}–${Math.min(page * limit, total)} de ${total} sitios · ${unique} incidentes`
-            : "0 sitios"}
+            ? `${(page - 1) * limit + 1}–${Math.min(page * limit, total)} de ${total} incidentes · ${totalSites} sitios`
+            : "0 incidentes"}
           {/* uploadedAt sí es UTC real (lo pone la DB), no "reloj de pared" HPSM */}
           {lastSync && <span className="ml-2">· última carga {formatDate(lastSync)}</span>}
         </span>
