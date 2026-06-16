@@ -13,7 +13,6 @@ const COLUMNS = [
   { key: "serviceId", label: "Servicio" },
   { key: "state", label: "Estado" },
   { key: "district", label: "Distrito" },
-  { key: "siteCount", label: "# Sitios" },
   { key: "assignee", label: "Asignado" },
   { key: "status", label: "Estatus" },
   { key: "group", label: "Grupo" },
@@ -50,7 +49,13 @@ function GroupBadge({ group }: { group: string }) {
   );
 }
 
-export function OpenIncidentTable({ group }: { group: string }) {
+export function OpenIncidentTable({
+  group,
+  maxAgeHours,
+}: {
+  group: string;
+  maxAgeHours?: number;
+}) {
   const [search, setSearch] = useState("");
   const [q, setQ] = useState("");
   const [page, setPage] = useState(1);
@@ -87,11 +92,13 @@ export function OpenIncidentTable({ group }: { group: string }) {
 
   useEffect(() => {
     setPage(1);
-  }, [group]);
+  }, [group, maxAgeHours]);
 
   const params = new URLSearchParams();
   if (q) params.set("q", q);
   if (group !== "ALL") params.set("group", group);
+  params.set("collapse", "false"); // 1 fila por sitio: Estado/Distrito reales, sin "Varios"
+  if (maxAgeHours) params.set("maxAgeHours", String(maxAgeHours));
   params.set("page", String(page));
   params.set("limit", String(limit));
   const qs = params.toString();
@@ -213,15 +220,6 @@ export function OpenIncidentTable({ group }: { group: string }) {
                   <td className="px-3 py-2 font-mono text-xs text-text-muted">{r.serviceId}</td>
                   <td className="px-3 py-2 text-xs text-text-primary">{r.state}</td>
                   <td className="px-3 py-2 text-xs text-text-primary">{r.district}</td>
-                  <td className="px-3 py-2 text-center font-mono text-xs">
-                    {r.siteCount > 1 ? (
-                      <span className="rounded bg-accent/15 px-1.5 py-0.5 font-semibold text-accent">
-                        {r.siteCount}
-                      </span>
-                    ) : (
-                      <span className="text-text-muted">1</span>
-                    )}
-                  </td>
                   <td className="px-3 py-2 font-mono text-xs text-text-muted">{r.assignee ?? "—"}</td>
                   <td className="px-3 py-2 text-xs">
                     <StatusBadge status={r.status} />
@@ -240,8 +238,8 @@ export function OpenIncidentTable({ group }: { group: string }) {
       <div className="flex items-center justify-between border-t border-border/60 bg-surface/60 px-3 py-2 text-xs text-text-muted backdrop-blur-md">
         <span>
           {total > 0
-            ? `${(page - 1) * limit + 1}–${Math.min(page * limit, total)} de ${total} incidentes (${totalSites} sitios)`
-            : "0 incidentes"}
+            ? `${(page - 1) * limit + 1}–${Math.min(page * limit, total)} de ${total} sitios · ${unique} incidentes`
+            : "0 sitios"}
           {/* uploadedAt sí es UTC real (lo pone la DB), no "reloj de pared" HPSM */}
           {lastSync && <span className="ml-2">· última carga {formatDate(lastSync)}</span>}
         </span>

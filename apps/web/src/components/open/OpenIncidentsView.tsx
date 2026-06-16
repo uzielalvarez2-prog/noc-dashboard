@@ -105,7 +105,7 @@ export function OpenIncidentsView() {
 
       <TopCriticalTable />
 
-      <OpenIncidentTable group={group} />
+      <OpenIncidentTable group={group} maxAgeHours={maxAgeHours} />
     </div>
   );
 }

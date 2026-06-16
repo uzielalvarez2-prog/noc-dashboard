@@ -16,6 +16,36 @@ export interface OpenFilters {
   maxAgeHours?: number;
 }
 
+/**
+ * "Ahora" en la MISMA escala que `openTime` de HPSM. Las fechas HPSM se guardan
+ * como reloj de pared de México pero etiquetadas como UTC (ver parseHpsmDate),
+ * así que para medir antigüedad tomamos la hora de pared de México actual y la
+ * reinterpretamos como UTC. Robusto a cualquier offset/DST (no hardcodea -6h).
+ * Sin esto, comparar contra Date.now() (UTC real) recorre el corte ~6h y el
+ * filtro "última hora" deja las tablas vacías.
+ */
+function hpsmNow(): Date {
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "America/Mexico_City",
+    hourCycle: "h23",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+  }).formatToParts(new Date());
+  const p = (t: string) => Number(parts.find((x) => x.type === t)!.value);
+  return new Date(
+    Date.UTC(p("year"), p("month") - 1, p("day"), p("hour"), p("minute"), p("second")),
+  );
+}
+
+/** Corte de antigüedad (openTime >= ahora - maxAgeHours) en la escala de HPSM. */
+function hpsmCutoff(maxAgeHours: number): Date {
+  return new Date(hpsmNow().getTime() - maxAgeHours * 3_600_000);
+}
+
 /** Arma el filtro Prisma. El buscador `q` abarca todas las columnas visibles. */
 export function buildOpenWhere(f: OpenFilters): Prisma.OpenIncidentWhereInput {
   const and: Prisma.OpenIncidentWhereInput[] = [];
@@ -25,7 +55,7 @@ export function buildOpenWhere(f: OpenFilters): Prisma.OpenIncidentWhereInput {
   if (f.assignee) and.push({ assignee: { contains: f.assignee, mode: "insensitive" } });
   if (f.status) and.push({ status: { contains: f.status, mode: "insensitive" } });
   if (f.maxAgeHours && f.maxAgeHours > 0) {
-    and.push({ openTime: { gte: new Date(Date.now() - f.maxAgeHours * 3_600_000) } });
+    and.push({ openTime: { gte: hpsmCutoff(f.maxAgeHours) } });
   }
   // `collapse` no es columna; no se agrega al where.
   if (f.q?.trim()) {
@@ -165,7 +195,7 @@ function colTotal(map: Map<string, { sites: number; ids: Set<string> }>): number
 export async function getOpenStats(group?: string, maxAgeHours?: number) {
   const where: Prisma.OpenIncidentWhereInput = group && group !== "ALL" ? { group } : {};
   if (maxAgeHours && maxAgeHours > 0) {
-    where.openTime = { gte: new Date(Date.now() - maxAgeHours * 3_600_000) };
+    where.openTime = { gte: hpsmCutoff(maxAgeHours) };
   }
   const rows = await db.openIncident.findMany({
     where,
