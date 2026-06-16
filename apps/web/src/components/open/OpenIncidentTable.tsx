@@ -275,7 +275,11 @@ export function OpenIncidentTable({ group }: { group: string }) {
                       {r.company}
                     </span>
                   </td>
-                  <td className="px-3 py-2 font-mono text-xs text-text-muted">{r.serviceId}</td>
+                  <td className="px-3 py-2 font-mono text-xs text-text-muted">
+                    <span className="block max-w-[11rem] truncate" title={r.serviceId}>
+                      {r.serviceId}
+                    </span>
+                  </td>
                   <td className="px-3 py-2 text-xs text-text-primary">{r.state}</td>
                   <td className="px-3 py-2 text-xs text-text-primary">{r.district}</td>
                   <td className="px-3 py-2 font-mono text-xs text-text-muted">{r.assignee ?? "—"}</td>
