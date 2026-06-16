@@ -178,8 +178,7 @@ interface TopRow {
 function topFrom(map: Map<string, { sites: number; ids: Set<string> }>): TopRow[] {
   return [...map.entries()]
     .map(([name, v]) => ({ name: name || "(sin dato)", sites: v.sites, incidents: v.ids.size }))
-    .sort((a, b) => b.incidents - a.incidents)
-    .slice(0, 10);
+    .sort((a, b) => b.incidents - a.incidents);
 }
 
 /** Suma de incidentes (1 por incidente) sobre TODAS las entradas de la dimensión. */

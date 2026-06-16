@@ -109,9 +109,8 @@ export function TopByDimension({
   const [loadingExport, setLoadingExport] = useState(false);
   const [rowLoading, setRowLoading] = useState<string | null>(null);
 
-  // 1 registro por incidente: ordenamos y graficamos por incidentes únicos.
   const sorted = [...rows].sort((a, b) => b.incidents - a.incidents);
-  const top = sorted.slice(0, limit);
+  const top = sorted;
   const max = Math.max(1, ...top.map((r) => r.incidents));
 
   const topEntry = sorted[0]; // el que más tiene
@@ -178,7 +177,7 @@ export function TopByDimension({
         <span className="font-mono text-xs text-text-muted">{total} incidentes</span>
       </div>
 
-      <div className="space-y-1.5">
+      <div className="max-h-64 space-y-1.5 overflow-y-auto pr-1">
         {top.length === 0 && (
           <p className="py-6 text-center text-xs text-text-muted">Sin datos</p>
         )}

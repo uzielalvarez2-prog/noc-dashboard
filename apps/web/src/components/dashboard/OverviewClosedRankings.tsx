@@ -61,14 +61,14 @@ export function OverviewClosedRankings() {
       </div>
       <div className="grid gap-4 lg:grid-cols-2">
         <ClosedRanking
-          title="Top por Analista"
+          title="Analistas"
           dimensionLabel="Analista"
           rows={stats?.byUser ?? []}
           fileBase="cerrados-analista-overview"
           variant="analyst"
         />
         <ClosedRanking
-          title="Top por Causa"
+          title="Por Causa"
           dimensionLabel="Causa"
           rows={stats?.byCause ?? []}
           fileBase="cerrados-causa-overview"

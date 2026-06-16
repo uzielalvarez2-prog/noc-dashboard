@@ -70,7 +70,7 @@ export function ClosedRanking({
   const [imgCopied, setImgCopied] = useState(false);
 
   const sorted = [...rows].sort((a, b) => b.count - a.count);
-  const top = sorted.slice(0, limit);
+  const top = sorted;
   const total = rows.reduce((s, r) => s + r.count, 0);
   const max = Math.max(1, ...top.map((r) => r.count));
 
@@ -187,7 +187,7 @@ export function ClosedRanking({
         )}
       </div>
 
-      <div className="space-y-1.5">
+      <div className="max-h-64 space-y-1.5 overflow-y-auto pr-1">
         {top.length === 0 && (
           <p className="py-6 text-center text-xs text-text-muted">Sin datos — sube un CSV de cerrados</p>
         )}

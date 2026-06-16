@@ -82,22 +82,22 @@ export function OpenIncidentsView() {
 
       <div className="grid gap-4 lg:grid-cols-2">
         <TopByDimension
-          title="Top por Estado"
+          title="IM-Estado"
           dimensionLabel="Estado"
           dimensionField="state"
           rows={topStats?.topByState ?? []}
           total={topStats?.stateTotal ?? 0}
-          fileBase={`top-estado-${group.toLowerCase()}${recentOnly ? "-1h" : ""}`}
+          fileBase={`im-estado-${group.toLowerCase()}${recentOnly ? "-1h" : ""}`}
           group={group}
           maxAgeHours={maxAgeHours}
         />
         <TopByDimension
-          title="Top por Distrito"
+          title="IM-Distrito"
           dimensionLabel="Distrito"
           dimensionField="district"
           rows={topStats?.topByDistrict ?? []}
           total={topStats?.districtTotal ?? 0}
-          fileBase={`top-distrito-${group.toLowerCase()}${recentOnly ? "-1h" : ""}`}
+          fileBase={`im-distrito-${group.toLowerCase()}${recentOnly ? "-1h" : ""}`}
           group={group}
           maxAgeHours={maxAgeHours}
         />
