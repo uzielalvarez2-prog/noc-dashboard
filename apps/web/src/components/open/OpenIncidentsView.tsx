@@ -105,7 +105,9 @@ export function OpenIncidentsView() {
 
       <TopCriticalTable />
 
-      <OpenIncidentTable group={group} maxAgeHours={maxAgeHours} />
+      {/* La tabla de incidentes SIEMPRE muestra todo (no se filtra por ≤1h);
+          el toggle "Última hora" es exclusivo del Top por Estado/Distrito. */}
+      <OpenIncidentTable group={group} />
     </div>
   );
 }

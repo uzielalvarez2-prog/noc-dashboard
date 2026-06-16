@@ -2,10 +2,11 @@
 
 import { useState, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient, keepPreviousData } from "@tanstack/react-query";
-import { Search, ChevronLeft, ChevronRight, RefreshCw, Star } from "lucide-react";
+import { Search, ChevronLeft, ChevronRight, RefreshCw, Star, Download } from "lucide-react";
 import type { OpenListResponse } from "@/types/open";
 import { fetchEscalated, type EscalatedResponse } from "@/components/dashboard/EscalatedPanel";
 import { cn, formatDate, formatHpsm } from "@/lib/utils";
+import { downloadXLSX } from "@/lib/excelExport";
 
 const COLUMNS = [
   { key: "incidentId", label: "Incident ID" },
@@ -49,16 +50,11 @@ function GroupBadge({ group }: { group: string }) {
   );
 }
 
-export function OpenIncidentTable({
-  group,
-  maxAgeHours,
-}: {
-  group: string;
-  maxAgeHours?: number;
-}) {
+export function OpenIncidentTable({ group }: { group: string }) {
   const [search, setSearch] = useState("");
   const [q, setQ] = useState("");
   const [page, setPage] = useState(1);
+  const [exporting, setExporting] = useState(false);
   const limit = 50;
   const qc = useQueryClient();
 
@@ -92,13 +88,12 @@ export function OpenIncidentTable({
 
   useEffect(() => {
     setPage(1);
-  }, [group, maxAgeHours]);
+  }, [group]);
 
   const params = new URLSearchParams();
   if (q) params.set("q", q);
   if (group !== "ALL") params.set("group", group);
   params.set("collapse", "false"); // 1 fila por sitio: Estado/Distrito reales, sin "Varios"
-  if (maxAgeHours) params.set("maxAgeHours", String(maxAgeHours));
   params.set("page", String(page));
   params.set("limit", String(limit));
   const qs = params.toString();
@@ -109,6 +104,52 @@ export function OpenIncidentTable({
     refetchInterval: 240_000, // refresco cada 4 min
     placeholderData: keepPreviousData,
   });
+
+  // Descarga TODO lo que coincide con el filtro/búsqueda actual (no solo la
+  // página visible), paginando contra el API hasta juntar el total. El .xlsx
+  // sale como Tabla de Excel, listo para "Insertar > Tabla dinámica".
+  async function handleExport() {
+    setExporting(true);
+    try {
+      const base = new URLSearchParams();
+      if (q) base.set("q", q);
+      if (group !== "ALL") base.set("group", group);
+      base.set("collapse", "false");
+      const all: OpenListResponse["data"] = [];
+      const pageSize = 500;
+      let p = 1;
+      for (;;) {
+        const sp = new URLSearchParams(base);
+        sp.set("page", String(p));
+        sp.set("limit", String(pageSize));
+        const res = await fetchOpen(sp.toString());
+        all.push(...res.data);
+        if (res.data.length === 0 || all.length >= res.meta.total) break;
+        p++;
+      }
+      const headers = [...COLUMNS.map((c) => c.label), "Apertura"];
+      const exportRows = all.map((r) => [
+        r.incidentId,
+        r.company,
+        r.serviceId,
+        r.state,
+        r.district,
+        r.assignee ?? "",
+        r.status,
+        r.group,
+        formatHpsm(r.openTime),
+      ]);
+      const stamp = new Date().toISOString().slice(0, 10);
+      await downloadXLSX(
+        `incidentes-abiertos-${group.toLowerCase()}-${stamp}`,
+        "Abiertos",
+        headers,
+        exportRows,
+      );
+    } finally {
+      setExporting(false);
+    }
+  }
 
   const rows = data?.data ?? [];
   const total = data?.meta.total ?? 0; // ahora cuenta incidentes (1 fila por IM)
@@ -142,6 +183,16 @@ export function OpenIncidentTable({
                   <span className="hidden whitespace-nowrap font-mono text-xs font-normal text-text-muted sm:block">
                     {unique} inc · {totalSites} sitios
                   </span>
+                  <button
+                    type="button"
+                    onClick={handleExport}
+                    disabled={exporting}
+                    title="Descargar Excel (tabla dinámica)"
+                    className="flex items-center gap-1.5 rounded-md border border-border bg-surface px-2.5 py-2 text-xs font-medium text-text-muted hover:text-text-primary disabled:opacity-50"
+                  >
+                    <Download className={cn("h-3.5 w-3.5", exporting && "animate-pulse")} />
+                    <span className="hidden sm:inline">{exporting ? "Generando…" : "Excel"}</span>
+                  </button>
                   <button
                     type="button"
                     onClick={() => refetch()}
