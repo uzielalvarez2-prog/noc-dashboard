@@ -102,18 +102,61 @@ export function EscalatedPanel() {
   }
 
   return (
-    <div className="flex flex-col rounded-lg border border-critical/50 bg-surface shadow-[0_0_20px_-6px] shadow-critical/40">
-      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-critical/40 bg-critical/10 px-4 py-3">
+    <>
+    <style>{`
+      @keyframes edc-flash {
+        0%, 49%  { color: #ef4444; }
+        50%, 100% { color: #f59e0b; }
+      }
+      @keyframes edc-ping {
+        0%        { transform: scale(1);   opacity: 1;   background-color: rgba(239,68,68,0.45); }
+        49%       { transform: scale(1.9); opacity: 0;   background-color: rgba(239,68,68,0.1); }
+        50%       { transform: scale(1);   opacity: 1;   background-color: rgba(245,158,11,0.45); }
+        100%      { transform: scale(1.9); opacity: 0;   background-color: rgba(245,158,11,0.1); }
+      }
+      @keyframes edc-glow {
+        0%, 49%  { box-shadow: 0 0 24px -4px rgba(239,68,68,0.55); border-color: rgba(239,68,68,0.5); }
+        50%, 100% { box-shadow: 0 0 24px -4px rgba(245,158,11,0.55); border-color: rgba(245,158,11,0.5); }
+      }
+      @keyframes edc-header {
+        0%, 49%  { background-color: rgba(239,68,68,0.10); border-color: rgba(239,68,68,0.35); }
+        50%, 100% { background-color: rgba(245,158,11,0.10); border-color: rgba(245,158,11,0.35); }
+      }
+      @keyframes edc-badge {
+        0%, 49%  { background-color: #ef4444; }
+        50%, 100% { background-color: #f59e0b; }
+      }
+    `}</style>
+    <div
+      className="flex flex-col rounded-lg border bg-surface"
+      style={{ animation: 'edc-glow 1s step-start infinite' }}
+    >
+      <div
+        className="flex flex-wrap items-center justify-between gap-2 border-b px-4 py-3"
+        style={{ animation: 'edc-header 1s step-start infinite' }}
+      >
         <div className="flex items-center gap-2">
           <span className="relative flex h-5 w-5 items-center justify-center">
-            <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-critical/40" />
-            <Siren className="relative h-4 w-4 animate-pulse text-critical" />
+            <span
+              className="absolute inline-flex h-full w-full rounded-full"
+              style={{ animation: 'edc-ping 1s step-start infinite' }}
+            />
+            <Siren
+              className="relative h-4 w-4"
+              style={{ animation: 'edc-flash 1s step-start infinite' }}
+            />
           </span>
-          <h2 className="text-sm font-bold uppercase tracking-wide text-critical">
-            Atención especial — escalados
+          <h2
+            className="text-sm font-bold uppercase tracking-wide"
+            style={{ animation: 'edc-flash 1s step-start infinite' }}
+          >
+            Escalados - EDC
           </h2>
           {items.length > 0 && (
-            <span className="rounded-full bg-critical px-2 py-0.5 font-mono text-xs font-bold text-white">
+            <span
+              className="rounded-full px-2 py-0.5 font-mono text-xs font-bold text-white"
+              style={{ animation: 'edc-badge 1s step-start infinite' }}
+            >
               {items.length}
             </span>
           )}
@@ -193,5 +236,6 @@ export function EscalatedPanel() {
         </div>
       )}
     </div>
+    </>
   );
 }
