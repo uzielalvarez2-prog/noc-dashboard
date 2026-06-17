@@ -133,6 +133,7 @@ model ClosedIncident {
 model EscalatedIncident {
   incidentId String   @id
   markedBy   String
+  note       String?
   createdAt  DateTime @default(now())
 }
 

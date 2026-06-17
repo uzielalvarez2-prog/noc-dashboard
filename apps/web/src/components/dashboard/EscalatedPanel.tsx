@@ -1,7 +1,8 @@
 "use client";
 
+import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Siren, X, Download } from "lucide-react";
+import { Siren, X, Download, ChevronDown, Check } from "lucide-react";
 import { cn, formatHpsm, formatHpsmExcel } from "@/lib/utils";
 import { downloadXLSX } from "@/lib/excelExport";
 
@@ -18,6 +19,7 @@ export interface EscalatedItem {
   stillOpen: boolean;
   markedBy: string;
   markedAt: string;
+  note: string | null;
 }
 
 export interface EscalatedResponse {
@@ -66,6 +68,8 @@ const COLS = [
 
 export function EscalatedPanel() {
   const qc = useQueryClient();
+  const [expanded, setExpanded] = useState<Set<string>>(new Set());
+  const [editingNote, setEditingNote] = useState<Record<string, string>>({});
 
   const { data } = useQuery<EscalatedResponse>({
     queryKey: ["escalated"],
@@ -84,7 +88,37 @@ export function EscalatedPanel() {
     onSettled: () => qc.invalidateQueries({ queryKey: ["escalated"] }),
   });
 
+  const saveNote = useMutation({
+    mutationFn: async ({ incidentId, note }: { incidentId: string; note: string }) => {
+      await fetch("/api/incidents/escalated", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ incidentId, escalated: true, note }),
+      });
+    },
+    onSettled: () => qc.invalidateQueries({ queryKey: ["escalated"] }),
+  });
+
   const items = data?.items ?? [];
+
+  const toggleExpanded = (id: string) => {
+    const newSet = new Set(expanded);
+    if (newSet.has(id)) {
+      newSet.delete(id);
+    } else {
+      newSet.add(id);
+      // Pre-fill edit field with current note
+      if (!editingNote[id]) {
+        setEditingNote((prev) => ({ ...prev, [id]: items.find((it) => it.incidentId === id)?.note ?? "" }));
+      }
+    }
+    setExpanded(newSet);
+  };
+
+  const handleSaveNote = async (incidentId: string) => {
+    const note = editingNote[incidentId] ?? "";
+    await saveNote.mutateAsync({ incidentId, note });
+  };
 
   function onExport() {
     const rows = items.map((it) => [
@@ -182,6 +216,7 @@ export function EscalatedPanel() {
           <table className="w-full border-collapse text-xs">
             <thead className="sticky top-0 z-10 bg-surface-elevated">
               <tr className="border-b border-border">
+                <th className="px-2 py-2 w-6" />
                 {COLS.map((h) => (
                   <th
                     key={h}
@@ -194,9 +229,9 @@ export function EscalatedPanel() {
               </tr>
             </thead>
             <tbody>
-              {items.map((it) => (
+              {items.flatMap((it) => [
                 <tr
-                  key={it.incidentId}
+                  key={`row-${it.incidentId}`}
                   className={cn(
                     "border-b border-border/50 transition-colors",
                     it.stillOpen
@@ -204,6 +239,17 @@ export function EscalatedPanel() {
                       : "opacity-60 hover:opacity-80"
                   )}
                 >
+                  <td className="px-2 py-2">
+                    <button
+                      type="button"
+                      onClick={() => toggleExpanded(it.incidentId)}
+                      className="rounded p-0.5 text-text-muted hover:bg-surface-elevated"
+                    >
+                      <ChevronDown
+                        className={cn("h-4 w-4 transition-transform", expanded.has(it.incidentId) && "rotate-180")}
+                      />
+                    </button>
+                  </td>
                   <td className="whitespace-nowrap px-3 py-2 font-mono text-text-primary">{it.incidentId}</td>
                   <td className="whitespace-nowrap px-3 py-2 font-mono text-text-muted">
                     {it.openTime ? formatHpsm(it.openTime) : "—"}
@@ -229,8 +275,37 @@ export function EscalatedPanel() {
                       <X className="h-3.5 w-3.5" />
                     </button>
                   </td>
-                </tr>
-              ))}
+                </tr>,
+                ...(expanded.has(it.incidentId)
+                  ? [
+                      <tr key={`note-${it.incidentId}`} className="border-b border-border/50 bg-surface-elevated/50">
+                        <td colSpan={COLS.length + 2} className="px-4 py-3">
+                          <div className="space-y-2">
+                            <label className="block text-xs font-medium text-text-muted">Nota</label>
+                            <textarea
+                              value={editingNote[it.incidentId] ?? it.note ?? ""}
+                              onChange={(e) =>
+                                setEditingNote((prev) => ({ ...prev, [it.incidentId]: e.target.value }))
+                              }
+                              placeholder="Agregar nota especial..."
+                              className="w-full rounded border border-border bg-surface px-3 py-2 text-sm text-text-primary placeholder-text-muted focus:border-accent focus:outline-none"
+                              rows={3}
+                            />
+                            <button
+                              type="button"
+                              onClick={() => handleSaveNote(it.incidentId)}
+                              disabled={saveNote.isPending}
+                              className="flex items-center gap-1.5 rounded-md border border-accent bg-accent/10 px-2.5 py-1.5 text-xs font-medium text-accent transition-colors hover:bg-accent/20 disabled:opacity-50"
+                            >
+                              <Check className="h-3.5 w-3.5" />
+                              Guardar nota
+                            </button>
+                          </div>
+                        </td>
+                      </tr>,
+                    ]
+                  : []),
+              ])}
             </tbody>
           </table>
         </div>

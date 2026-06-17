@@ -52,6 +52,7 @@ export async function GET(req: NextRequest) {
         stillOpen: Boolean(live),
         markedBy: m.markedBy,
         markedAt: m.createdAt.toISOString(),
+        note: m.note ?? null,
       };
     });
 
@@ -67,7 +68,7 @@ export async function POST(req: NextRequest) {
   if (!session) return NextResponse.json({ error: "No autorizado" }, { status: 401 });
 
   try {
-    const body = (await req.json()) as { incidentId?: string; escalated?: boolean };
+    const body = (await req.json()) as { incidentId?: string; escalated?: boolean; note?: string };
     const incidentId = (body.incidentId ?? "").trim();
     if (!incidentId)
       return NextResponse.json({ error: "incidentId requerido" }, { status: 400 });
@@ -75,8 +76,8 @@ export async function POST(req: NextRequest) {
     if (body.escalated) {
       await db.escalatedIncident.upsert({
         where: { incidentId },
-        create: { incidentId, markedBy: session.id },
-        update: {},
+        create: { incidentId, markedBy: session.id, note: body.note ?? null },
+        update: { note: body.note ?? null },
       });
     } else {
       await db.escalatedIncident.deleteMany({ where: { incidentId } });
@@ -87,7 +88,7 @@ export async function POST(req: NextRequest) {
         data: {
           userId: session.id,
           action: body.escalated ? "ESCALATE_INCIDENT" : "UNESCALATE_INCIDENT",
-          metadata: { incidentId },
+          metadata: { incidentId, note: body.note },
         },
       })
       .catch(() => {});
