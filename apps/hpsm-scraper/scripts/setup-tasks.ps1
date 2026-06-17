@@ -25,12 +25,12 @@ if ($LASTEXITCODE -eq 0) { Write-Host "OK   NOC-RunClosed-15 (diario 14:00)" }
 else                      { Write-Host "ERR  NOC-RunClosed-15: $out" }
 
 # -------------------------------------------------------
-# 3. NOC-RunClosed-2230 — diario a las 22:30
+# 3. NOC-RunClosed-2210 — diario a las 22:10
 # -------------------------------------------------------
-$out = schtasks /Create /TN "NOC-RunClosed-2230" /TR "$ps $flg $dir\run-closed-2230.ps1" `
-    /SC DAILY /ST 22:30 /F 2>&1
-if ($LASTEXITCODE -eq 0) { Write-Host "OK   NOC-RunClosed-2230 (diario 22:30)" }
-else                      { Write-Host "ERR  NOC-RunClosed-2230: $out" }
+$out = schtasks /Create /TN "NOC-RunClosed-2210" /TR "$ps $flg $dir\run-closed-2230.ps1" `
+    /SC DAILY /ST 22:10 /F 2>&1
+if ($LASTEXITCODE -eq 0) { Write-Host "OK   NOC-RunClosed-2210 (diario 22:10)" }
+else                      { Write-Host "ERR  NOC-RunClosed-2210: $out" }
 
 # -------------------------------------------------------
 # 4. Ajustes de las tareas de cerrados: despertar la PC si está
@@ -40,7 +40,7 @@ else                      { Write-Host "ERR  NOC-RunClosed-2230: $out" }
 # -------------------------------------------------------
 $settings = New-ScheduledTaskSettingsSet -WakeToRun -AllowStartIfOnBatteries `
     -DontStopIfGoingOnBatteries -ExecutionTimeLimit (New-TimeSpan -Hours 1)
-foreach ($t in "NOC-RunClosed-15", "NOC-RunClosed-2230") {
+foreach ($t in "NOC-RunClosed-15", "NOC-RunClosed-2210") {
     Set-ScheduledTask -TaskName $t -Settings $settings | Out-Null
     Write-Host "OK   $t (WakeToRun + bateria)"
 }
@@ -49,4 +49,4 @@ Write-Host ""
 Write-Host "Verificar con:"
 Write-Host "  schtasks /Query /TN NOC-RunOpen /V /FO LIST"
 Write-Host "  schtasks /Query /TN NOC-RunClosed-15 /V /FO LIST"
-Write-Host "  schtasks /Query /TN NOC-RunClosed-2230 /V /FO LIST"
+Write-Host "  schtasks /Query /TN NOC-RunClosed-2210 /V /FO LIST"

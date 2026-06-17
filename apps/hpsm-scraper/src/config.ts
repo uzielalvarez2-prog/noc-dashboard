@@ -16,7 +16,7 @@ export const config = {
   closed: {
     group: process.env.HPSM_CLOSED_GROUP ?? "PEXA",
     startTime: process.env.HPSM_CLOSED_START_TIME ?? "07:00",
-    endTime: process.env.HPSM_CLOSED_END_TIME ?? "22:30",
+    endTime: process.env.HPSM_CLOSED_END_TIME ?? "22:10",
   },
   headed: process.env.HEADED === "true",
   dashboardUrl: process.env.DASHBOARD_URL ?? "http://localhost:3000",

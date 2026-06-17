@@ -8,7 +8,7 @@ $tsxCli     = "C:\Users\Admin\noc-dashboard\apps\hpsm-scraper\node_modules\tsx\d
 $scraperDir = "C:\Users\Admin\noc-dashboard\apps\hpsm-scraper"
 
 if (!(Test-Path $logDir)) { New-Item -ItemType Directory $logDir -Force | Out-Null }
-Start-Transcript -Path "$logDir\run-closed-2230-$(Get-Date -Format 'yyyyMMdd').log" -Append
+Start-Transcript -Path "$logDir\run-closed-2210-$(Get-Date -Format 'yyyyMMdd').log" -Append
 
 # Lock anti-traslape
 $lockedPid = 0
@@ -23,7 +23,7 @@ $PID | Out-File $lockFile -Encoding utf8 -NoNewline
 $exitCode = 0
 try {
     Set-Location $scraperDir
-    Write-Host "$(Get-Date -Format 'HH:mm:ss') [run-closed-2230] iniciando (rango 07:00-22:30)..."
+    Write-Host "$(Get-Date -Format 'HH:mm:ss') [run-closed-2230] iniciando (rango 07:00-22:10)..."
     & $nodeExe $tsxCli src/run-closed.ts
     $exitCode = $LASTEXITCODE
 } finally {
