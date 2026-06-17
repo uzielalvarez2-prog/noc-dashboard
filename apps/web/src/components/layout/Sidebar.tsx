@@ -14,7 +14,10 @@ import {
   Upload,
   ChevronLeft,
   ChevronRight,
+  Sun,
+  Moon,
 } from "lucide-react";
+import { useTheme } from "@/components/layout/ThemeProvider";
 
 const NAV_ITEMS = [
   { href: "/", label: "Overview", icon: LayoutDashboard },
@@ -33,6 +36,7 @@ interface SidebarProps {
 export function Sidebar({ collapsed, onToggle }: SidebarProps) {
   const pathname = usePathname();
   const [role, setRole] = useState<string | undefined>();
+  const { theme, toggle: toggleTheme } = useTheme();
 
   useEffect(() => {
     fetch("/api/auth/me")
@@ -88,7 +92,28 @@ export function Sidebar({ collapsed, onToggle }: SidebarProps) {
         })}
       </nav>
 
-      {/* Toggle button */}
+      {/* Theme toggle */}
+      <button
+        onClick={toggleTheme}
+        title={theme === "dark" ? "Cambiar a modo día" : "Cambiar a modo noche"}
+        className={cn(
+          "flex h-10 items-center border-t border-border text-text-muted transition-colors hover:text-text-primary",
+          collapsed ? "justify-center" : "gap-3 px-3"
+        )}
+      >
+        {theme === "dark" ? (
+          <Sun className="h-4 w-4 shrink-0" />
+        ) : (
+          <Moon className="h-4 w-4 shrink-0" />
+        )}
+        {!collapsed && (
+          <span className="text-sm font-medium">
+            {theme === "dark" ? "Modo día" : "Modo noche"}
+          </span>
+        )}
+      </button>
+
+      {/* Sidebar collapse button */}
       <button
         onClick={onToggle}
         className="flex h-10 items-center justify-center border-t border-border text-text-muted transition-colors hover:text-text-primary"
