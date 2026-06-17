@@ -6,7 +6,6 @@ import type { OpenStats } from "@/types/open";
 import { OpenKpis } from "./OpenKpis";
 import { TopByDimension } from "./TopByDimension";
 import { OpenIncidentTable } from "./OpenIncidentTable";
-import { TopCriticalTable } from "@/components/dashboard/TopCriticalTable";
 import { EscalatedPanel } from "@/components/dashboard/EscalatedPanel";
 import { cn } from "@/lib/utils";
 import { RefreshCw } from "lucide-react";
@@ -145,8 +144,6 @@ export function OpenIncidentsView() {
           maxAgeHours={maxAgeHours}
         />
       </div>
-
-      <TopCriticalTable />
 
       {/* La tabla de incidentes SIEMPRE muestra todo (no se filtra por ≤1h);
           el toggle "Última hora" es exclusivo del Top por Estado/Distrito. */}
