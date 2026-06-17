@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import type { OpenStats } from "@/types/open";
 import { OpenKpis } from "./OpenKpis";
@@ -9,6 +9,29 @@ import { OpenIncidentTable } from "./OpenIncidentTable";
 import { TopCriticalTable } from "@/components/dashboard/TopCriticalTable";
 import { EscalatedPanel } from "@/components/dashboard/EscalatedPanel";
 import { cn } from "@/lib/utils";
+import { RefreshCw } from "lucide-react";
+
+const POLL_MS = 240_000;
+
+function useCountdown(dataUpdatedAt: number) {
+  const [remaining, setRemaining] = useState(POLL_MS / 1000);
+  useEffect(() => {
+    function tick() {
+      const elapsed = (Date.now() - dataUpdatedAt) / 1000;
+      setRemaining(Math.max(0, Math.round(POLL_MS / 1000 - elapsed)));
+    }
+    tick();
+    const id = setInterval(tick, 1000);
+    return () => clearInterval(id);
+  }, [dataUpdatedAt]);
+  return remaining;
+}
+
+function formatCountdown(s: number) {
+  const m = Math.floor(s / 60);
+  const sec = s % 60;
+  return m > 0 ? `${m}m ${sec}s` : `${sec}s`;
+}
 
 type Group = "ALL" | "PEXA" | "CECOR";
 
@@ -29,11 +52,13 @@ export function OpenIncidentsView() {
   const maxAgeHours = recentOnly ? 1 : undefined;
 
   // KPIs: siempre TODO (sin filtro de antigüedad).
-  const { data: stats } = useQuery<OpenStats>({
+  const { data: stats, isFetching, refetch, dataUpdatedAt } = useQuery<OpenStats>({
     queryKey: ["open-stats", group],
     queryFn: () => fetchStats(group),
-    refetchInterval: 240_000,
+    refetchInterval: POLL_MS,
   });
+
+  const countdown = useCountdown(dataUpdatedAt);
 
   // Top: respeta el filtro ≤1h / Todo (query aparte para no tocar los KPIs).
   const { data: topStats } = useQuery<OpenStats>({
@@ -56,12 +81,30 @@ export function OpenIncidentsView() {
 
   return (
     <div className="space-y-5">
-      <div className="flex items-center gap-2">
-        {(["ALL", "PEXA", "CECOR"] as Group[]).map((g) => (
-          <button key={g} type="button" onClick={() => setGroup(g)} className={groupBtn(g)}>
-            {g === "ALL" ? "Todos" : g}
+      <div className="flex items-center justify-between gap-2">
+        <div className="flex items-center gap-2">
+          {(["ALL", "PEXA", "CECOR"] as Group[]).map((g) => (
+            <button key={g} type="button" onClick={() => setGroup(g)} className={groupBtn(g)}>
+              {g === "ALL" ? "Todos" : g}
+            </button>
+          ))}
+        </div>
+
+        <div className="flex items-center gap-3">
+          <span className="font-mono text-xs text-text-muted">
+            {isFetching ? "Actualizando…" : `Próxima actualización en ${formatCountdown(countdown)}`}
+          </span>
+          <button
+            type="button"
+            onClick={() => void refetch()}
+            disabled={isFetching}
+            title="Actualizar ahora"
+            className="flex items-center gap-1.5 rounded-md border border-border px-2.5 py-1.5 text-xs font-medium text-text-muted transition-colors hover:border-accent hover:text-accent disabled:opacity-40"
+          >
+            <RefreshCw className={cn("h-3.5 w-3.5", isFetching && "animate-spin")} />
+            Actualizar
           </button>
-        ))}
+        </div>
       </div>
 
       <OpenKpis stats={stats} />
