@@ -26,7 +26,13 @@ else                      { Write-Host "ERR  NOC-RunClosed-15: $out" }
 
 # -------------------------------------------------------
 # 3. NOC-RunClosed-2210 — diario a las 22:10
+#    (antes 22:30; se elimina el nombre viejo si quedó registrado para
+#     evitar que cerrados corra dos veces tras el renombre)
 # -------------------------------------------------------
+if (Get-ScheduledTask -TaskName "NOC-RunClosed-2230" -ErrorAction SilentlyContinue) {
+    Unregister-ScheduledTask -TaskName "NOC-RunClosed-2230" -Confirm:$false
+    Write-Host "OK   eliminada tarea vieja NOC-RunClosed-2230 (renombrada a 2210)"
+}
 $out = schtasks /Create /TN "NOC-RunClosed-2210" /TR "$ps $flg $dir\run-closed-2230.ps1" `
     /SC DAILY /ST 22:10 /F 2>&1
 if ($LASTEXITCODE -eq 0) { Write-Host "OK   NOC-RunClosed-2210 (diario 22:10)" }
