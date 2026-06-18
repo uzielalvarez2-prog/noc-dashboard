@@ -20,7 +20,7 @@
   <Principals>
     <Principal id="Author">
       <UserId>S-1-5-21-574742617-329689270-600032062-1001</UserId>
-      <LogonType>InteractiveToken</LogonType>
+      <LogonType>S4U</LogonType>
       <RunLevel>LeastPrivilege</RunLevel>
     </Principal>
   </Principals>
@@ -39,6 +39,7 @@
     <RunOnlyIfNetworkAvailable>false</RunOnlyIfNetworkAvailable>
     <RunOnlyIfIdle>false</RunOnlyIfIdle>
     <WakeToRun>false</WakeToRun>
+    <Priority>8</Priority>
   </Settings>
   <Actions Context="Author">
     <Exec>

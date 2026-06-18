@@ -2,7 +2,13 @@
 # Registra las 3 tareas programadas del scraper NOC.
 # NOC-RunOpen usa XML (único modo de configurar Daily + repetición en PS 5.1).
 # NOC-RunClosed-* usan schtasks directamente (trigger simple diario).
-# Ejecutar una vez como Admin (usuario interactivo).
+# Ejecutar una vez como Admin ELEVADO (clic derecho > Ejecutar como administrador):
+# cambiar el LogonType a S4U requiere elevación.
+#
+# Todas corren con LogonType=S4U (sesión 0, sin ventana en el escritorio: no
+# parpadean ni roban el foco) y prioridad 8 (below-normal: ceden CPU mientras
+# el usuario trabaja). El scraper es headless (HEADED=false), así que no
+# necesita sesión interactiva.
 
 $dir = "C:\Users\Admin\noc-dashboard\apps\hpsm-scraper\scripts"
 $ps  = "$env:SystemRoot\System32\WindowsPowerShell\v1.0\powershell.exe"
@@ -39,16 +45,22 @@ if ($LASTEXITCODE -eq 0) { Write-Host "OK   NOC-RunClosed-2210 (diario 22:10)" }
 else                      { Write-Host "ERR  NOC-RunClosed-2210: $out" }
 
 # -------------------------------------------------------
-# 4. Ajustes de las tareas de cerrados: despertar la PC si está
-#    dormida a la hora del trigger y no bloquear por batería.
-#    (schtasks no puede configurar esto; se aplica después de crear.)
-#    NOC-RunOpen NO lleva WakeToRun: despertaría la PC cada 8 min.
+# 4. Ajustes de las tareas de cerrados:
+#    - S4U: corren en sesión 0, sin ventana en el escritorio.
+#    - Prioridad 8 (below-normal): ceden CPU mientras el usuario trabaja.
+#    - WakeToRun: despertar la PC si está dormida a la hora del trigger.
+#    - Batería: no bloquear ni detener por batería.
+#    (schtasks crea las tareas como Interactive; esto se aplica después.)
+#    NOC-RunOpen ya lleva S4U + prioridad 8 en su XML, y NO lleva WakeToRun:
+#    despertaría la PC cada 5 min.
 # -------------------------------------------------------
+$principal = New-ScheduledTaskPrincipal -UserId "Admin" -LogonType S4U -RunLevel Limited
 $settings = New-ScheduledTaskSettingsSet -WakeToRun -AllowStartIfOnBatteries `
     -DontStopIfGoingOnBatteries -ExecutionTimeLimit (New-TimeSpan -Hours 1)
+$settings.Priority = 8
 foreach ($t in "NOC-RunClosed-15", "NOC-RunClosed-2210") {
-    Set-ScheduledTask -TaskName $t -Settings $settings | Out-Null
-    Write-Host "OK   $t (WakeToRun + bateria)"
+    Set-ScheduledTask -TaskName $t -Principal $principal -Settings $settings | Out-Null
+    Write-Host "OK   $t (S4U + prioridad 8 + WakeToRun + bateria)"
 }
 
 Write-Host ""
