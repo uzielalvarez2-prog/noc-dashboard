@@ -107,14 +107,16 @@ export function ClosedRanking({
     ctx.fillStyle = "#0d1526";
     ctx.fillRect(0, 0, W, totalH);
 
+    // Para "Por causa" (cause): título centrado + total centrado debajo (como en Overview)
+    const centerHeader = variant === "cause";
     ctx.fillStyle = "#f8fafc";
-    ctx.font = "bold 13px Arial,sans-serif";
-    ctx.textAlign = "left";
-    ctx.fillText(title, PAD, 24);
+    ctx.font = "bold 14px Arial,sans-serif";
+    ctx.textAlign = centerHeader ? "center" : "left";
+    ctx.fillText(title, centerHeader ? W / 2 : PAD, 24);
 
-    ctx.fillStyle = "#64748b";
-    ctx.font = "11px Arial,sans-serif";
-    ctx.fillText(`${total} cerrados`, PAD, 42);
+    ctx.fillStyle = "#cbd5e1";
+    ctx.font = "bold 12px Arial,sans-serif";
+    ctx.fillText(`${total} cerrados`, centerHeader ? W / 2 : PAD, 42);
 
     const barMaxW = W - PAD - NAME_W - COUNT_W - PAD;
 
@@ -170,22 +172,31 @@ export function ClosedRanking({
 
   return (
     <div className="rounded-xl border border-border/60 bg-surface/60 p-4 backdrop-blur-md">
-      <div className="mb-3 flex items-center justify-between gap-2">
-        <h3 className="text-sm font-semibold text-text-primary">{title}</h3>
-        {variant === "analyst" && (
-          <div className="flex items-center gap-2 text-[10px] text-text-muted">
-            <span className="flex items-center gap-1">
-              <span className="h-2 w-2 rounded-full bg-[#22c55e]" /> 31+
-            </span>
-            <span className="flex items-center gap-1">
-              <span className="h-2 w-2 rounded-full bg-[#f59e0b]" /> 20-30
-            </span>
-            <span className="flex items-center gap-1">
-              <span className="h-2 w-2 rounded-full bg-[#ef4444]" /> &lt;20
-            </span>
-          </div>
-        )}
-      </div>
+      {variant === "cause" ? (
+        <div className="mb-3 text-center">
+          <h3 className="text-sm font-bold text-text-primary">{title}</h3>
+          <p className="mt-0.5 text-xs text-text-muted">
+            <span className="text-base font-bold text-text-primary">{total}</span> cerrados
+          </p>
+        </div>
+      ) : (
+        <div className="mb-3 flex items-center justify-between gap-2">
+          <h3 className="text-sm font-semibold text-text-primary">{title}</h3>
+          {variant === "analyst" && (
+            <div className="flex items-center gap-2 text-[10px] text-text-muted">
+              <span className="flex items-center gap-1">
+                <span className="h-2 w-2 rounded-full bg-[#22c55e]" /> 31+
+              </span>
+              <span className="flex items-center gap-1">
+                <span className="h-2 w-2 rounded-full bg-[#f59e0b]" /> 20-30
+              </span>
+              <span className="flex items-center gap-1">
+                <span className="h-2 w-2 rounded-full bg-[#ef4444]" /> &lt;20
+              </span>
+            </div>
+          )}
+        </div>
+      )}
 
       <div className="max-h-64 space-y-1.5 overflow-y-auto pr-1">
         {top.length === 0 && (
@@ -220,10 +231,14 @@ export function ClosedRanking({
       </div>
 
       <div className="mt-3 flex items-center justify-between border-t border-border/50 pt-3">
-        <span className="text-sm text-text-muted">
-          <span className="font-bold text-lg text-text-primary">{total}</span>{" "}
-          cerrados
-        </span>
+        {variant === "cause" ? (
+          <span />
+        ) : (
+          <span className="text-sm text-text-muted">
+            <span className="font-bold text-lg text-text-primary">{total}</span>{" "}
+            cerrados
+          </span>
+        )}
         <div className="flex gap-2">
           <button
             type="button"
