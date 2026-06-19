@@ -23,15 +23,19 @@ if ($LASTEXITCODE -eq 0) { Write-Host "OK   NOC-RunOpen (diario, cada 8 min, 06:
 else                      { Write-Host "ERR  NOC-RunOpen: $out" }
 
 # -------------------------------------------------------
-# 2. NOC-RunClosed-15 — diario a las 14:00
+# 2. NOC-RunClosed-15 — diario a las 14:02
+#    Minuto :02 (fuera de la rejilla de 5 min de NOC-RunOpen) para no chocar
+#    por el lock anti-traslape; aún así run-closed espera el lock si hace falta.
 # -------------------------------------------------------
 $out = schtasks /Create /TN "NOC-RunClosed-15" /TR "$ps $flg $dir\run-closed-15.ps1" `
-    /SC DAILY /ST 14:00 /F 2>&1
-if ($LASTEXITCODE -eq 0) { Write-Host "OK   NOC-RunClosed-15 (diario 14:00)" }
+    /SC DAILY /ST 14:02 /F 2>&1
+if ($LASTEXITCODE -eq 0) { Write-Host "OK   NOC-RunClosed-15 (diario 14:02)" }
 else                      { Write-Host "ERR  NOC-RunClosed-15: $out" }
 
 # -------------------------------------------------------
-# 3. NOC-RunClosed-2210 — diario a las 22:10
+# 3. NOC-RunClosed-2210 — diario a las 22:12
+#    Minuto :12 (fuera de la rejilla de 5 min de NOC-RunOpen) por la misma
+#    razón que la del mediodía. El nombre conserva "2210" por compatibilidad.
 #    (antes 22:30; se elimina el nombre viejo si quedó registrado para
 #     evitar que cerrados corra dos veces tras el renombre)
 # -------------------------------------------------------
@@ -40,8 +44,8 @@ if (Get-ScheduledTask -TaskName "NOC-RunClosed-2230" -ErrorAction SilentlyContin
     Write-Host "OK   eliminada tarea vieja NOC-RunClosed-2230 (renombrada a 2210)"
 }
 $out = schtasks /Create /TN "NOC-RunClosed-2210" /TR "$ps $flg $dir\run-closed-2230.ps1" `
-    /SC DAILY /ST 22:10 /F 2>&1
-if ($LASTEXITCODE -eq 0) { Write-Host "OK   NOC-RunClosed-2210 (diario 22:10)" }
+    /SC DAILY /ST 22:12 /F 2>&1
+if ($LASTEXITCODE -eq 0) { Write-Host "OK   NOC-RunClosed-2210 (diario 22:12)" }
 else                      { Write-Host "ERR  NOC-RunClosed-2210: $out" }
 
 # -------------------------------------------------------
