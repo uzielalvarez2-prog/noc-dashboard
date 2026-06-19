@@ -89,22 +89,32 @@ export function OpenByDayChart({ initial }: Props) {
     ctx.fillStyle = "#0d1526";
     ctx.fillRect(0, 0, W, H);
 
-    // Header: título + números PEXA / CECOR / total
+    // Header: título centrado + números PEXA / CECOR / total centrados debajo
+    ctx.textAlign = "center";
+    ctx.font = "bold 14px Arial,sans-serif";
+    ctx.fillStyle = "#f8fafc";
+    ctx.fillText("Dilación - Incidentes Pexa", W / 2, 22);
+
     const parts: Array<{ text: string; color: string; bold: boolean; size: number }> = [
-      { text: "Incidentes por día  ", color: "#f8fafc", bold: true, size: 13 },
       { text: String(totalPexa), color: "#3b82f6", bold: true, size: 18 },
-      { text: " PEXA  ", color: "#64748b", bold: false, size: 11 },
+      { text: " PEXA   ", color: "#64748b", bold: false, size: 11 },
       { text: String(totalCecor), color: "#f59e0b", bold: true, size: 18 },
-      { text: " CECOR  ", color: "#64748b", bold: false, size: 11 },
+      { text: " CECOR   ", color: "#64748b", bold: false, size: 11 },
       { text: String(grandTotal), color: "#f8fafc", bold: true, size: 18 },
       { text: " total", color: "#64748b", bold: false, size: 11 },
     ];
-    let hx = PAD;
+    // medir ancho total para centrar la fila de números
+    let totalW = 0;
+    for (const p of parts) {
+      ctx.font = `${p.bold ? "bold " : ""}${p.size}px Arial,sans-serif`;
+      totalW += ctx.measureText(p.text).width;
+    }
+    let hx = (W - totalW) / 2;
+    ctx.textAlign = "left";
     for (const p of parts) {
       ctx.font = `${p.bold ? "bold " : ""}${p.size}px Arial,sans-serif`;
       ctx.fillStyle = p.color;
-      ctx.textAlign = "left";
-      ctx.fillText(p.text, hx, 26);
+      ctx.fillText(p.text, hx, 46);
       hx += ctx.measureText(p.text).width;
     }
 
@@ -197,29 +207,12 @@ export function OpenByDayChart({ initial }: Props) {
 
   return (
     <div className="rounded-lg border border-border bg-surface p-5">
-      <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
-        <div className="flex flex-wrap items-baseline gap-3">
-          <h2 className="text-base font-semibold text-text-primary">
-            Incidentes por día
-          </h2>
-          <span className="font-mono text-xs">
-            <span className="text-lg font-bold text-accent">{totalPexa}</span>{" "}
-            <span className="text-text-muted">PEXA</span>
-          </span>
-          <span className="font-mono text-xs">
-            <span className="text-lg font-bold text-warning">{totalCecor}</span>{" "}
-            <span className="text-text-muted">CECOR</span>
-          </span>
-          <span className="font-mono text-xs">
-            <span className="text-lg font-bold text-text-primary">{grandTotal}</span>{" "}
-            <span className="text-text-muted">total</span>
-          </span>
-        </div>
+      <div className="relative mb-4">
         <button
           type="button"
           onClick={copyAsImage}
           title="Copiar gráfica como imagen"
-          className="flex items-center gap-1.5 rounded-md border border-border bg-surface-elevated px-2.5 py-1 text-xs text-text-muted transition-colors hover:border-accent hover:text-accent"
+          className="absolute right-0 top-0 flex items-center gap-1.5 rounded-md border border-border bg-surface-elevated px-2.5 py-1 text-xs text-text-muted transition-colors hover:border-accent hover:text-accent"
         >
           {copied ? (
             <Check className="h-3.5 w-3.5 text-success" />
@@ -228,6 +221,25 @@ export function OpenByDayChart({ initial }: Props) {
           )}
           {copied ? "Copiada" : "Copiar imagen"}
         </button>
+        <div className="text-center">
+          <h2 className="text-base font-semibold text-text-primary">
+            Dilación - Incidentes Pexa
+          </h2>
+          <div className="mt-1 flex flex-wrap items-baseline justify-center gap-3">
+            <span className="font-mono text-xs">
+              <span className="text-lg font-bold text-accent">{totalPexa}</span>{" "}
+              <span className="text-text-muted">PEXA</span>
+            </span>
+            <span className="font-mono text-xs">
+              <span className="text-lg font-bold text-warning">{totalCecor}</span>{" "}
+              <span className="text-text-muted">CECOR</span>
+            </span>
+            <span className="font-mono text-xs">
+              <span className="text-lg font-bold text-text-primary">{grandTotal}</span>{" "}
+              <span className="text-text-muted">total</span>
+            </span>
+          </div>
+        </div>
       </div>
 
       <div className="mx-auto h-56 max-w-2xl">

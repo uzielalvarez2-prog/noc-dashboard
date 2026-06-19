@@ -88,7 +88,7 @@ export function ClosedIncidentsView() {
           variant="analyst"
         />
         <ClosedRanking
-          title="Por Causa"
+          title="Incidentes cerrados por Código"
           dimensionLabel="Causa"
           rows={stats?.byCause ?? []}
           fileBase={`cerrados-causa-${group.toLowerCase()}`}

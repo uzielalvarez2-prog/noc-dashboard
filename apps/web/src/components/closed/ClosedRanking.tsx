@@ -6,20 +6,20 @@ import type { ClosedRankRow } from "@/types/closed";
 import { copyHTMLTable } from "@/lib/openExport";
 import { downloadXLSX } from "@/lib/excelExport";
 
-// Paleta de colores para causas (cada una un color distinto)
+// Paleta sobria para causas: azules (no tan claros), verdes y marrones
 const CAUSE_PALETTE = [
-  "#38bdf8", // sky
-  "#f59e0b", // amber
-  "#a78bfa", // violet
-  "#34d399", // emerald
-  "#fb7185", // rose
-  "#fb923c", // orange
-  "#22d3ee", // cyan
-  "#f472b6", // fuchsia
-  "#a3e635", // lime
-  "#e879f9", // purple
-  "#4ade80", // green
-  "#94a3b8", // slate
+  "#2563eb", // azul
+  "#16a34a", // verde
+  "#b45309", // marrón
+  "#1d4ed8", // azul oscuro
+  "#15803d", // verde oscuro
+  "#a16207", // marrón dorado
+  "#0e7490", // azul petróleo
+  "#4d7c0f", // verde oliva
+  "#92400e", // marrón rojizo
+  "#3b82f6", // azul medio
+  "#166534", // verde bosque
+  "#c2410c", // marrón anaranjado
 ];
 
 // Semáforo por volumen de cierres: 31+ verde, 20-30 ámbar, <20 rojo
