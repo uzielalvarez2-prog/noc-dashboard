@@ -18,6 +18,7 @@ import {
   Moon,
   Star,
   Siren,
+  BookOpen,
 } from "lucide-react";
 import { useTheme } from "@/components/layout/ThemeProvider";
 
@@ -28,6 +29,7 @@ const NAV_ITEMS = [
   { href: "/sla", label: "SLA", icon: BarChart2 },
   { href: "/operators", label: "Operadores", icon: Users },
   { href: "/clientes-top", label: "Clientes TOP", icon: Star },
+  { href: "/base-conocimiento", label: "Base de Conocimiento", icon: BookOpen },
   { href: "/import", label: "Importar CSV", icon: Upload },
   { href: "/settings", label: "Configuración", icon: Settings, settingsOnly: true },
 ];
