@@ -146,12 +146,14 @@ model EscalatedIncident {
 // ─────────────────────────────────────────────────────────────────────────────
 model ClienteTop {
   id         String   @id @default(cuid())
+  siglasIm   String   @default("") // Siglas IM — primer criterio de match/búsqueda
   company    String
   serviceRef String   @default("")
   note       String?
   createdBy  String   @default("")
   createdAt  DateTime @default(now())
 
+  @@index([siglasIm])
   @@index([company])
   @@index([serviceRef])
 }
@@ -174,6 +176,8 @@ model WarRoomIncident {
   group       String    @default("")
   matchedBy   String    @default("") // 'company' | 'service' | 'both'
   flagged     Boolean   @default(false)
+  note        String?                 // nota editable por el operador
+  dismissed   Boolean   @default(false) // X para quitar de la vista War Room
   resolvedAt  DateTime?
   firstSeenAt DateTime  @default(now())
   lastSeenAt  DateTime  @default(now())

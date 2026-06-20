@@ -1,8 +1,8 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useMemo, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Siren, Flag, X, CheckCircle2, AlertTriangle, RotateCw } from "lucide-react";
+import { Siren, Flag, X, CheckCircle2, RotateCw, Search, Check, Pencil } from "lucide-react";
 
 // UP/recuperado si el status contiene resolv/resuelt (mismo criterio que el server).
 function isResolvedStatus(status: string | null | undefined): boolean {
@@ -21,6 +21,7 @@ interface WarRoomItem {
   group: string;
   matchedBy: string;
   flagged: boolean;
+  note: string;
   resolvedAt: string | null;
   firstSeenAt: string;
   recurrence: number;
@@ -42,19 +43,7 @@ function fmt(iso: string | null): string {
   });
 }
 
-// IDs ya anunciados en esta sesión (para no repetir el modal).
-const SEEN_KEY = "wr-seen-down";
-const UP_KEY = "wr-seen-up";
-function loadSet(key: string): Set<string> {
-  try {
-    return new Set(JSON.parse(sessionStorage.getItem(key) ?? "[]"));
-  } catch {
-    return new Set();
-  }
-}
-function saveSet(key: string, set: Set<string>) {
-  sessionStorage.setItem(key, JSON.stringify([...set]));
-}
+const DAY = 24 * 60 * 60 * 1000;
 
 export function WarRoomView() {
   const qc = useQueryClient();
@@ -66,83 +55,69 @@ export function WarRoomView() {
 
   const items = useMemo(() => data?.items ?? [], [data]);
 
-  const [alertDown, setAlertDown] = useState<WarRoomItem[]>([]);
-  const [alertUp, setAlertUp] = useState<WarRoomItem[]>([]);
-  const initialized = useRef(false);
-
-  // Detectar nuevas caídas y recuperaciones desde la última vez.
-  useEffect(() => {
-    if (!items.length && !initialized.current) return;
-    const seenDown = loadSet(SEEN_KEY);
-    const seenUp = loadSet(UP_KEY);
-
-    const newDown: WarRoomItem[] = [];
-    const newUp: WarRoomItem[] = [];
-
+  // Tres cubetas: DOWN (caído), UP (<24h) y UP histórico (24h–7d).
+  const { down, up24, up7d } = useMemo(() => {
+    const now = Date.now();
+    const down: WarRoomItem[] = [];
+    const up24: WarRoomItem[] = [];
+    const up7d: WarRoomItem[] = [];
     for (const it of items) {
       const resolved = Boolean(it.resolvedAt) || isResolvedStatus(it.status);
-      if (!resolved && !seenDown.has(it.incidentId)) {
-        newDown.push(it);
-        seenDown.add(it.incidentId);
+      if (!resolved) {
+        down.push(it);
+        continue;
       }
-      if (resolved && !seenUp.has(it.incidentId)) {
-        newUp.push(it);
-        seenUp.add(it.incidentId);
-      }
+      const t = it.resolvedAt ? new Date(it.resolvedAt).getTime() : now;
+      if (now - t < DAY) up24.push(it);
+      else up7d.push(it);
     }
-
-    saveSet(SEEN_KEY, seenDown);
-    saveSet(UP_KEY, seenUp);
-
-    // En la primera carga de la sesión no disparamos modal (solo sembramos).
-    if (initialized.current && (newDown.length || newUp.length)) {
-      if (newDown.length) setAlertDown((p) => [...p, ...newDown]);
-      if (newUp.length) setAlertUp((p) => [...p, ...newUp]);
-    }
-    initialized.current = true;
+    return { down, up24, up7d };
   }, [items]);
 
-  async function toggleFlag(it: WarRoomItem) {
-    // Optimista
+  // Actualización parcial optimista en la caché + POST al server.
+  async function patch(it: WarRoomItem, body: Partial<{ flagged: boolean; note: string; dismissed: boolean }>) {
     qc.setQueryData<{ items: WarRoomItem[] }>(["war-room"], (old) =>
       old
-        ? { items: old.items.map((x) => (x.incidentId === it.incidentId ? { ...x, flagged: !x.flagged } : x)) }
+        ? {
+            items: body.dismissed
+              ? old.items.filter((x) => x.incidentId !== it.incidentId)
+              : old.items.map((x) =>
+                  x.incidentId === it.incidentId ? { ...x, ...body } : x
+                ),
+          }
         : old
     );
     try {
       await fetch("/api/war-room", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ incidentId: it.incidentId, flagged: !it.flagged }),
+        body: JSON.stringify({ incidentId: it.incidentId, ...body }),
       });
     } catch {
       qc.invalidateQueries({ queryKey: ["war-room"] });
     }
   }
 
-  function dismissAlert() {
-    setAlertDown([]);
-    setAlertUp([]);
-  }
-
-  const activos = items.filter((i) => !i.resolvedAt && !isResolvedStatus(i.status));
-  const recuperados = items.filter((i) => i.resolvedAt || isResolvedStatus(i.status));
-  const showModal = alertDown.length > 0 || alertUp.length > 0;
-
   return (
-    <div className="space-y-4">
+    <div className="space-y-6">
       {/* Resumen */}
       <div className="flex flex-wrap items-center gap-3">
         <div className="flex items-center gap-2 rounded-lg border border-critical/40 bg-critical-dim px-3 py-2">
           <Siren className="h-4 w-4 text-critical" />
           <span className="text-sm text-text-primary">
-            <span className="text-lg font-bold text-critical">{activos.length}</span> activos
+            <span className="text-lg font-bold text-critical">{down.length}</span> DOWN
           </span>
         </div>
         <div className="flex items-center gap-2 rounded-lg border border-success/30 bg-success/10 px-3 py-2">
           <CheckCircle2 className="h-4 w-4 text-success" />
           <span className="text-sm text-text-primary">
-            <span className="text-lg font-bold text-success">{recuperados.length}</span> recuperados (7d)
+            <span className="text-lg font-bold text-success">{up24.length}</span> UP
+          </span>
+        </div>
+        <div className="flex items-center gap-2 rounded-lg border border-border bg-surface-elevated px-3 py-2">
+          <CheckCircle2 className="h-4 w-4 text-text-muted" />
+          <span className="text-sm text-text-primary">
+            <span className="text-lg font-bold text-text-primary">{up7d.length}</span> UP (7d)
           </span>
         </div>
         <button
@@ -153,7 +128,105 @@ export function WarRoomView() {
         </button>
       </div>
 
-      {/* Tabla */}
+      <WarRoomTable
+        title="DOWN — caídos"
+        accent="critical"
+        items={down}
+        isLoading={isLoading}
+        emptyText="Sin incidentes de Clientes TOP caídos."
+        onPatch={patch}
+      />
+      <WarRoomTable
+        title="UP — recuperados (24 h)"
+        accent="success"
+        items={up24}
+        isLoading={isLoading}
+        emptyText="Sin recuperaciones en las últimas 24 h."
+        onPatch={patch}
+      />
+      <WarRoomTable
+        title="UP (7d) — histórico"
+        accent="muted"
+        items={up7d}
+        isLoading={isLoading}
+        emptyText="Sin recuperaciones de hace 1–7 días."
+        onPatch={patch}
+      />
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+
+type Accent = "critical" | "success" | "muted";
+
+function WarRoomTable({
+  title,
+  accent,
+  items,
+  isLoading,
+  emptyText,
+  onPatch,
+}: {
+  title: string;
+  accent: Accent;
+  items: WarRoomItem[];
+  isLoading: boolean;
+  emptyText: string;
+  onPatch: (
+    it: WarRoomItem,
+    body: Partial<{ flagged: boolean; note: string; dismissed: boolean }>
+  ) => void;
+}) {
+  const [q, setQ] = useState("");
+
+  const filtered = useMemo(() => {
+    const needle = q.trim().toLowerCase();
+    if (!needle) return items;
+    return items.filter((it) =>
+      [
+        it.incidentId,
+        it.status,
+        it.company,
+        it.serviceId,
+        it.state,
+        it.district,
+        it.assignee ?? "",
+        it.note,
+      ]
+        .join(" ")
+        .toLowerCase()
+        .includes(needle)
+    );
+  }, [items, q]);
+
+  const titleColor =
+    accent === "critical"
+      ? "text-critical"
+      : accent === "success"
+      ? "text-success"
+      : "text-text-primary";
+
+  return (
+    <div className="space-y-2">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div className="flex items-center gap-2">
+          <h2 className={`text-base font-semibold ${titleColor}`}>{title}</h2>
+          <span className="rounded-full border border-border bg-surface-elevated px-2 py-0.5 text-xs text-text-muted">
+            {items.length}
+          </span>
+        </div>
+        <div className="relative">
+          <Search className="absolute left-2 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-text-muted" />
+          <input
+            value={q}
+            onChange={(e) => setQ(e.target.value)}
+            placeholder="Buscar..."
+            className="rounded-md border border-border bg-surface py-1.5 pl-7 pr-2.5 text-sm text-text-primary placeholder:text-text-muted/60 focus:border-accent focus:outline-none"
+          />
+        </div>
+      </div>
+
       <div className="overflow-x-auto rounded-lg border border-border">
         <table className="w-full text-sm">
           <thead>
@@ -163,30 +236,38 @@ export function WarRoomView() {
               <th className="px-3 py-2.5 text-left text-xs font-medium text-text-muted">Apertura</th>
               <th className="px-3 py-2.5 text-left text-xs font-medium text-text-muted">Estatus</th>
               <th className="px-3 py-2.5 text-left text-xs font-medium text-text-muted">Empresa</th>
-              <th className="px-3 py-2.5 text-left text-xs font-medium text-text-muted">Servicio</th>
+              <th className="whitespace-nowrap px-3 py-2.5 text-left text-xs font-medium text-text-muted">Servicio</th>
               <th className="px-3 py-2.5 text-left text-xs font-medium text-text-muted">Estado</th>
               <th className="px-3 py-2.5 text-left text-xs font-medium text-text-muted">Asignado</th>
               <th className="px-3 py-2.5 text-left text-xs font-medium text-text-muted">Distrito</th>
+              <th className="px-3 py-2.5 text-left text-xs font-medium text-text-muted">Nota</th>
+              <th className="px-3 py-2.5 text-center text-xs font-medium text-text-muted">Quitar</th>
             </tr>
           </thead>
           <tbody>
             {isLoading && (
               <tr>
-                <td colSpan={9} className="px-4 py-8 text-center text-sm text-text-muted">
-                  Cargando War Room...
+                <td colSpan={11} className="px-4 py-8 text-center text-sm text-text-muted">
+                  Cargando...
                 </td>
               </tr>
             )}
             {!isLoading && items.length === 0 && (
               <tr>
-                <td colSpan={9} className="px-4 py-8 text-center text-sm text-text-muted">
-                  Sin incidentes de Clientes TOP. Cuando caiga uno que coincida, aparecerá aquí.
+                <td colSpan={11} className="px-4 py-8 text-center text-sm text-text-muted">
+                  {emptyText}
                 </td>
               </tr>
             )}
-            {items.map((it) => {
+            {!isLoading && items.length > 0 && filtered.length === 0 && (
+              <tr>
+                <td colSpan={11} className="px-4 py-8 text-center text-sm text-text-muted">
+                  Sin coincidencias
+                </td>
+              </tr>
+            )}
+            {filtered.map((it) => {
               const resolved = Boolean(it.resolvedAt) || isResolvedStatus(it.status);
-              // Bandera marcada → texto rojo en toda la fila (visual).
               const rowText = it.flagged ? "text-critical" : "text-text-primary";
               return (
                 <tr
@@ -195,7 +276,7 @@ export function WarRoomView() {
                 >
                   <td className="px-3 py-2.5 text-center">
                     <button
-                      onClick={() => toggleFlag(it)}
+                      onClick={() => onPatch(it, { flagged: !it.flagged })}
                       title={it.flagged ? "Quitar bandera" : "Marcar bandera"}
                       className={it.flagged ? "text-critical" : "text-text-muted/50 hover:text-text-muted"}
                     >
@@ -213,8 +294,8 @@ export function WarRoomView() {
                       </span>
                     )}
                   </td>
-                  <td className={`px-3 py-2.5 text-xs ${rowText}`}>{fmt(it.openTime)}</td>
-                  {/* Estatus: verde si recuperado (solo esta celda) */}
+                  <td className={`whitespace-nowrap px-3 py-2.5 text-xs ${rowText}`}>{fmt(it.openTime)}</td>
+                  {/* Estatus: verde=recuperado, rojo=bandera, ámbar=caído */}
                   <td className="px-3 py-2.5">
                     <span
                       className={`inline-flex items-center rounded border px-2 py-0.5 text-xs font-semibold ${
@@ -222,78 +303,99 @@ export function WarRoomView() {
                           ? "border-success/40 bg-success/10 text-success"
                           : it.flagged
                           ? "border-critical/40 bg-critical-dim text-critical"
-                          : "border-border bg-surface text-text-muted"
+                          : "border-warning/40 bg-warning-dim text-warning"
                       }`}
                     >
                       {it.status || "—"}
                     </span>
                   </td>
                   <td className={`px-3 py-2.5 ${rowText}`}>{it.company || "—"}</td>
-                  <td className={`px-3 py-2.5 font-mono text-xs ${rowText}`}>{it.serviceId || "—"}</td>
+                  <td className={`whitespace-nowrap px-3 py-2.5 font-mono text-xs ${rowText}`}>{it.serviceId || "—"}</td>
                   <td className={`px-3 py-2.5 text-xs ${rowText}`}>{it.state || "—"}</td>
                   <td className={`px-3 py-2.5 text-xs ${rowText}`}>{it.assignee || "—"}</td>
                   <td className={`px-3 py-2.5 text-xs ${rowText}`}>{it.district || "—"}</td>
+                  <td className="px-3 py-2.5">
+                    <NoteCell value={it.note} onSave={(note) => onPatch(it, { note })} />
+                  </td>
+                  <td className="px-3 py-2.5 text-center">
+                    <button
+                      onClick={() => onPatch(it, { dismissed: true })}
+                      title="Quitar de War Room"
+                      className="text-text-muted/50 transition-colors hover:text-critical"
+                    >
+                      <X className="h-4 w-4" />
+                    </button>
+                  </td>
                 </tr>
               );
             })}
           </tbody>
         </table>
       </div>
-
-      {/* Modal de alerta (cierre manual) */}
-      {showModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
-          <div className="w-full max-w-lg overflow-hidden rounded-xl border border-border bg-surface shadow-2xl">
-            {alertDown.length > 0 && (
-              <div className="border-b border-border">
-                <div className="flex items-center gap-2 bg-critical-dim px-5 py-3">
-                  <AlertTriangle className="h-5 w-5 text-critical" />
-                  <h3 className="text-base font-bold text-critical">
-                    SEVERIDAD CRÍTICA — {alertDown.length} cliente(s) TOP caído(s)
-                  </h3>
-                </div>
-                <ul className="max-h-52 space-y-1.5 overflow-y-auto px-5 py-3">
-                  {alertDown.map((it) => (
-                    <li key={it.incidentId} className="text-sm text-text-primary">
-                      <span className="font-mono text-xs font-bold text-critical">{it.incidentId}</span>{" "}
-                      — <span className="font-semibold">{it.company || it.serviceId}</span>
-                      {it.serviceId && it.company ? (
-                        <span className="text-text-muted"> · {it.serviceId}</span>
-                      ) : null}
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            )}
-            {alertUp.length > 0 && (
-              <div>
-                <div className="flex items-center gap-2 bg-success/10 px-5 py-3">
-                  <CheckCircle2 className="h-5 w-5 text-success" />
-                  <h3 className="text-base font-bold text-success">
-                    UP — {alertUp.length} cliente(s) recuperado(s)
-                  </h3>
-                </div>
-                <ul className="max-h-52 space-y-1.5 overflow-y-auto px-5 py-3">
-                  {alertUp.map((it) => (
-                    <li key={it.incidentId} className="text-sm text-text-primary">
-                      <span className="font-mono text-xs font-bold text-success">{it.incidentId}</span>{" "}
-                      — <span className="font-semibold">{it.company || it.serviceId}</span>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            )}
-            <div className="flex justify-end border-t border-border bg-surface-elevated px-5 py-3">
-              <button
-                onClick={dismissAlert}
-                className="flex items-center gap-1.5 rounded-md bg-accent px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-accent/90"
-              >
-                <X className="h-4 w-4" /> Entendido
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
+  );
+}
+
+// Celda de nota editable in-place: click al lápiz → input → ✔ guarda / X cancela.
+function NoteCell({ value, onSave }: { value: string; onSave: (note: string) => void }) {
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(value);
+
+  if (editing) {
+    return (
+      <div className="flex items-center gap-1">
+        <input
+          autoFocus
+          value={draft}
+          onChange={(e) => setDraft(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") {
+              onSave(draft);
+              setEditing(false);
+            }
+            if (e.key === "Escape") {
+              setDraft(value);
+              setEditing(false);
+            }
+          }}
+          placeholder="Nota..."
+          className="w-40 rounded border border-border bg-surface px-1.5 py-1 text-xs text-text-primary focus:border-accent focus:outline-none"
+        />
+        <button
+          onClick={() => {
+            onSave(draft);
+            setEditing(false);
+          }}
+          title="Guardar"
+          className="text-success hover:opacity-80"
+        >
+          <Check className="h-3.5 w-3.5" />
+        </button>
+        <button
+          onClick={() => {
+            setDraft(value);
+            setEditing(false);
+          }}
+          title="Cancelar"
+          className="text-text-muted hover:text-text-primary"
+        >
+          <X className="h-3.5 w-3.5" />
+        </button>
+      </div>
+    );
+  }
+
+  return (
+    <button
+      onClick={() => {
+        setDraft(value);
+        setEditing(true);
+      }}
+      title="Editar nota"
+      className="group flex max-w-[12rem] items-center gap-1 text-left text-xs text-text-muted hover:text-text-primary"
+    >
+      <span className="truncate">{value || "—"}</span>
+      <Pencil className="h-3 w-3 shrink-0 opacity-0 transition-opacity group-hover:opacity-60" />
+    </button>
   );
 }

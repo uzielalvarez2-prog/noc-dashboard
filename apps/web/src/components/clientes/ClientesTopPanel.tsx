@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 
 interface Cliente {
   id: string;
+  siglasIm: string;
   company: string;
   serviceRef: string;
   note: string | null;
@@ -25,9 +26,11 @@ export function ClientesTopPanel() {
 
   const [filter, setFilter] = useState("");
   const [adding, setAdding] = useState(false);
+  const [newSiglas, setNewSiglas] = useState("");
   const [newCompany, setNewCompany] = useState("");
   const [newService, setNewService] = useState("");
   const [editingId, setEditingId] = useState<string | null>(null);
+  const [editSiglas, setEditSiglas] = useState("");
   const [editCompany, setEditCompany] = useState("");
   const [editService, setEditService] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -42,19 +45,38 @@ export function ClientesTopPanel() {
   }
 
   async function handleAdd() {
-    if (!newCompany.trim() && !newService.trim()) return;
+    const siglas = newSiglas.trim();
+    const company = newCompany.trim();
+    const service = newService.trim();
+    if (!siglas && !company && !service) return;
+
+    // Pre-chequeo en cliente para aviso inmediato (el server vuelve a validar).
+    const all = data?.clientes ?? [];
+    const dup = all.find((c) =>
+      siglas
+        ? c.siglasIm.trim().toLowerCase() === siglas.toLowerCase()
+        : c.company.trim().toLowerCase() === company.toLowerCase() &&
+          c.serviceRef.trim().toLowerCase() === service.toLowerCase()
+    );
+    if (dup) {
+      setError(`⚠️ Cliente ya existe: ${dup.siglasIm || dup.company || dup.serviceRef}`);
+      return;
+    }
+
     setBusy(true);
     setError(null);
     try {
       const res = await fetch("/api/clientes-top", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ company: newCompany, serviceRef: newService }),
+        body: JSON.stringify({ siglasIm: siglas, company, serviceRef: service }),
       });
       if (!res.ok) {
-        setError((await res.json()).error ?? "Error al agregar");
+        const j = await res.json();
+        setError((j.duplicate ? "⚠️ " : "") + (j.error ?? "Error al agregar"));
         return;
       }
+      setNewSiglas("");
       setNewCompany("");
       setNewService("");
       setAdding(false);
@@ -73,7 +95,7 @@ export function ClientesTopPanel() {
       const res = await fetch(`/api/clientes-top/${id}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ company: editCompany, serviceRef: editService }),
+        body: JSON.stringify({ siglasIm: editSiglas, company: editCompany, serviceRef: editService }),
       });
       if (!res.ok) {
         setError((await res.json()).error ?? "Error al guardar");
@@ -113,9 +135,9 @@ export function ClientesTopPanel() {
       .filter(Boolean)
       .map((line) => {
         const parts = line.split(/\t|,|;/).map((p) => p.trim());
-        return { company: parts[0] ?? "", serviceRef: parts[1] ?? "" };
+        return { siglasIm: parts[0] ?? "", company: parts[1] ?? "", serviceRef: parts[2] ?? "" };
       })
-      .filter((r) => r.company || r.serviceRef);
+      .filter((r) => r.siglasIm || r.company || r.serviceRef);
 
     if (rows.length === 0) {
       setError("Pega al menos una línea válida");
@@ -145,17 +167,27 @@ export function ClientesTopPanel() {
 
   function startEdit(c: Cliente) {
     setEditingId(c.id);
+    setEditSiglas(c.siglasIm);
     setEditCompany(c.company);
     setEditService(c.serviceRef);
   }
 
   const all = data?.clientes ?? [];
   const q = filter.trim().toLowerCase();
+  // Búsqueda: prioriza Siglas IM (coincidencias de siglas primero), luego empresa/servicio.
   const clientes = q
-    ? all.filter(
-        (c) =>
-          c.company.toLowerCase().includes(q) || c.serviceRef.toLowerCase().includes(q)
-      )
+    ? all
+        .filter(
+          (c) =>
+            c.siglasIm.toLowerCase().includes(q) ||
+            c.company.toLowerCase().includes(q) ||
+            c.serviceRef.toLowerCase().includes(q)
+        )
+        .sort((a, b) => {
+          const aS = a.siglasIm.toLowerCase().includes(q) ? 0 : 1;
+          const bS = b.siglasIm.toLowerCase().includes(q) ? 0 : 1;
+          return aS - bS;
+        })
     : all;
 
   const inputCls =
@@ -180,7 +212,7 @@ export function ClientesTopPanel() {
             <input
               value={filter}
               onChange={(e) => setFilter(e.target.value)}
-              placeholder="Buscar..."
+              placeholder="Buscar (Siglas IM)..."
               className="rounded-md border border-border bg-surface py-1.5 pl-7 pr-2.5 text-sm text-text-primary placeholder:text-text-muted/60 focus:border-accent focus:outline-none"
             />
           </div>
@@ -212,14 +244,14 @@ export function ClientesTopPanel() {
       {bulkOpen && (
         <div className="space-y-2 rounded-lg border border-border bg-surface-elevated/40 p-3">
           <p className="text-xs text-text-muted">
-            Pega una línea por cliente: <code>Empresa[TAB o coma]Servicio</code>. El
-            servicio es opcional.
+            Pega una línea por cliente: <code>Siglas IM[TAB o coma]Empresa[TAB o coma]Servicio</code>.
+            Empresa y servicio son opcionales.
           </p>
           <textarea
             value={bulkText}
             onChange={(e) => setBulkText(e.target.value)}
             rows={6}
-            placeholder={"ACME S.A.\tSERV-001\nGlobex,SERV-002\nIniciodyne"}
+            placeholder={"IM-ACME\tACME S.A.\tSERV-001\nIM-GLBX,Globex,SERV-002\nIM-INI,Iniciodyne"}
             className="w-full rounded-md border border-border bg-surface px-2.5 py-2 font-mono text-xs text-text-primary focus:border-accent focus:outline-none"
           />
           <div className="flex justify-end gap-2">
@@ -248,6 +280,7 @@ export function ClientesTopPanel() {
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b border-border bg-surface-elevated">
+              <th className="px-4 py-2.5 text-left text-xs font-medium text-text-muted">Siglas IM</th>
               <th className="px-4 py-2.5 text-left text-xs font-medium text-text-muted">Empresa</th>
               <th className="px-4 py-2.5 text-left text-xs font-medium text-text-muted">Servicio</th>
               <th className="px-4 py-2.5 text-right text-xs font-medium text-text-muted">Acciones</th>
@@ -260,6 +293,14 @@ export function ClientesTopPanel() {
                 <td className="px-4 py-2">
                   <input
                     autoFocus
+                    value={newSiglas}
+                    onChange={(e) => setNewSiglas(e.target.value)}
+                    placeholder="Siglas IM"
+                    className={inputCls}
+                  />
+                </td>
+                <td className="px-4 py-2">
+                  <input
                     value={newCompany}
                     onChange={(e) => setNewCompany(e.target.value)}
                     placeholder="Nombre de la empresa"
@@ -281,7 +322,7 @@ export function ClientesTopPanel() {
                       className="h-7 w-7 p-0 text-success hover:bg-success/10">
                       <Check className="h-3.5 w-3.5" />
                     </Button>
-                    <Button size="sm" variant="ghost" onClick={() => { setAdding(false); setNewCompany(""); setNewService(""); }}
+                    <Button size="sm" variant="ghost" onClick={() => { setAdding(false); setNewSiglas(""); setNewCompany(""); setNewService(""); }}
                       className="h-7 w-7 p-0 text-text-muted hover:bg-surface-elevated">
                       <X className="h-3.5 w-3.5" />
                     </Button>
@@ -292,14 +333,14 @@ export function ClientesTopPanel() {
 
             {isLoading && (
               <tr>
-                <td colSpan={3} className="px-4 py-8 text-center text-sm text-text-muted">
+                <td colSpan={4} className="px-4 py-8 text-center text-sm text-text-muted">
                   Cargando clientes...
                 </td>
               </tr>
             )}
             {!isLoading && clientes.length === 0 && !adding && (
               <tr>
-                <td colSpan={3} className="px-4 py-8 text-center text-sm text-text-muted">
+                <td colSpan={4} className="px-4 py-8 text-center text-sm text-text-muted">
                   {q ? "Sin coincidencias" : "No hay clientes — agrega o importa la lista"}
                 </td>
               </tr>
@@ -308,6 +349,9 @@ export function ClientesTopPanel() {
             {clientes.map((c) =>
               editingId === c.id ? (
                 <tr key={c.id} className="border-b border-border bg-accent/5 last:border-0">
+                  <td className="px-4 py-2">
+                    <input value={editSiglas} onChange={(e) => setEditSiglas(e.target.value)} className={inputCls} />
+                  </td>
                   <td className="px-4 py-2">
                     <input value={editCompany} onChange={(e) => setEditCompany(e.target.value)} className={inputCls} />
                   </td>
@@ -330,8 +374,9 @@ export function ClientesTopPanel() {
                 </tr>
               ) : (
                 <tr key={c.id} className="border-b border-border transition-colors last:border-0 hover:bg-surface-elevated/40">
+                  <td className="px-4 py-3 font-mono text-xs font-semibold text-accent">{c.siglasIm || "—"}</td>
                   <td className="px-4 py-3 font-medium text-text-primary">{c.company || "—"}</td>
-                  <td className="px-4 py-3 font-mono text-xs text-text-muted">{c.serviceRef || "—"}</td>
+                  <td className="whitespace-nowrap px-4 py-3 font-mono text-xs text-text-muted">{c.serviceRef || "—"}</td>
                   <td className="px-4 py-3 text-right">
                     <div className="flex justify-end gap-1">
                       <Button size="sm" variant="ghost" onClick={() => startEdit(c)}

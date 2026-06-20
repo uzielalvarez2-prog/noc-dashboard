@@ -10,15 +10,16 @@ export async function PUT(req: NextRequest, ctx: { params: Promise<{ id: string 
 
   const { id } = await ctx.params;
   try {
-    const body = (await req.json()) as { company?: string; serviceRef?: string; note?: string };
+    const body = (await req.json()) as { siglasIm?: string; company?: string; serviceRef?: string; note?: string };
+    const siglasIm = (body.siglasIm ?? "").trim();
     const company = (body.company ?? "").trim();
     const serviceRef = (body.serviceRef ?? "").trim();
-    if (!company && !serviceRef)
-      return NextResponse.json({ error: "Indica al menos empresa o servicio" }, { status: 400 });
+    if (!siglasIm && !company && !serviceRef)
+      return NextResponse.json({ error: "Indica al menos Siglas IM, empresa o servicio" }, { status: 400 });
 
     const cliente = await db.clienteTop.update({
       where: { id },
-      data: { company, serviceRef, note: (body.note ?? "").trim() || null },
+      data: { siglasIm, company, serviceRef, note: (body.note ?? "").trim() || null },
     });
     return NextResponse.json({ cliente });
   } catch (err) {

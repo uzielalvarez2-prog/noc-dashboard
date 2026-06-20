@@ -5,7 +5,8 @@ import { db } from "@/lib/db";
 export const dynamic = "force-dynamic";
 
 // War Room: incidentes de Clientes TOP. Devuelve los activos (sin resolver) +
-// los vistos en los últimos 7 días, para analizar recurrencia por cliente.
+// los recuperados en los últimos 7 días. Excluye los descartados (X "quitar").
+// El cliente separa en 3 vistas: DOWN, UP (<24h) y UP histórico (24h–7d).
 export async function GET(req: NextRequest) {
   const session = getSessionFromRequest(req);
   if (!session) return NextResponse.json({ error: "No autorizado" }, { status: 401 });
@@ -15,7 +16,8 @@ export async function GET(req: NextRequest) {
 
     const rows = await db.warRoomIncident.findMany({
       where: {
-        OR: [{ resolvedAt: null }, { firstSeenAt: { gte: sevenDaysAgo } }],
+        dismissed: false,
+        OR: [{ resolvedAt: null }, { resolvedAt: { gte: sevenDaysAgo } }],
       },
       orderBy: [{ resolvedAt: "asc" }, { openTime: "desc" }],
     });
@@ -39,6 +41,7 @@ export async function GET(req: NextRequest) {
       group: r.group,
       matchedBy: r.matchedBy,
       flagged: r.flagged,
+      note: r.note ?? "",
       resolvedAt: r.resolvedAt ? r.resolvedAt.toISOString() : null,
       firstSeenAt: r.firstSeenAt.toISOString(),
       recurrence: recur.get(`${r.company.toLowerCase()}|${r.serviceId.toLowerCase()}`) ?? 1,
@@ -51,25 +54,36 @@ export async function GET(req: NextRequest) {
   }
 }
 
-// Marcar/desmarcar la bandera manual de un incidente.
+// Actualizar un incidente: bandera manual, nota o descarte (X "quitar").
+// Solo se tocan los campos presentes en el body (actualización parcial).
 export async function POST(req: NextRequest) {
   const session = getSessionFromRequest(req);
   if (!session) return NextResponse.json({ error: "No autorizado" }, { status: 401 });
 
   try {
-    const body = (await req.json()) as { incidentId?: string; flagged?: boolean };
+    const body = (await req.json()) as {
+      incidentId?: string;
+      flagged?: boolean;
+      note?: string;
+      dismissed?: boolean;
+    };
     const incidentId = (body.incidentId ?? "").trim();
     if (!incidentId)
       return NextResponse.json({ error: "incidentId requerido" }, { status: 400 });
 
-    await db.warRoomIncident.update({
-      where: { incidentId },
-      data: { flagged: Boolean(body.flagged) },
-    });
+    const data: { flagged?: boolean; note?: string | null; dismissed?: boolean } = {};
+    if (typeof body.flagged === "boolean") data.flagged = body.flagged;
+    if (typeof body.dismissed === "boolean") data.dismissed = body.dismissed;
+    if (typeof body.note === "string") data.note = body.note.trim() || null;
+
+    if (Object.keys(data).length === 0)
+      return NextResponse.json({ error: "Nada que actualizar" }, { status: 400 });
+
+    await db.warRoomIncident.update({ where: { incidentId }, data });
 
     return NextResponse.json({ ok: true });
   } catch (err) {
     console.error("[POST /api/war-room]", err);
-    return NextResponse.json({ error: "Error al actualizar bandera" }, { status: 500 });
+    return NextResponse.json({ error: "Error al actualizar incidente" }, { status: 500 });
   }
 }

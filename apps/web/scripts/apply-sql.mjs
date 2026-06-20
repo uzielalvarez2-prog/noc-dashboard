@@ -10,7 +10,9 @@ import pg from "pg";
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const webRoot = resolve(__dirname, "..");
 
+// .env.local tiene prioridad; si no existe, cae a .env (no sobreescribe lo ya cargado).
 config({ path: resolve(webRoot, ".env.local") });
+config({ path: resolve(webRoot, ".env") });
 
 const url = process.env.DATABASE_URL;
 if (!url) {
