@@ -37,6 +37,10 @@ export interface TopRow {
 export interface OpenStats {
   totalSites: number;
   totalIncidents: number;
+  /** Incidentes únicos con status "WORK IN PROGRESS". */
+  workInProgress: number;
+  /** Incidentes únicos con status "RESOLVED". */
+  resolved: number;
   byGroup: { group: string; incidents: number }[];
   topByState: TopRow[];
   topByDistrict: TopRow[];

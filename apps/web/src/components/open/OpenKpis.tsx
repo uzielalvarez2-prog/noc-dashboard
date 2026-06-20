@@ -24,17 +24,22 @@ function Card({
 
 export function OpenKpis({ stats }: { stats?: OpenStats }) {
   const pexa = stats?.byGroup.find((g) => g.group === "PEXA")?.incidents ?? 0;
-  const cecor = stats?.byGroup.find((g) => g.group === "CECOR")?.incidents ?? 0;
   return (
     <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
       <Card label="Incidentes abiertos" value={stats?.totalIncidents ?? "—"} sub="únicos" />
-      <Card
-        label="Sitios afectados"
-        value={stats?.totalSites ?? "—"}
-        sub="ubicaciones — un incidente puede abarcar varios sitios"
-      />
       <Card label="PEXA" value={pexa} accent="text-accent" sub="incidentes" />
-      <Card label="CECOR" value={cecor} accent="text-warning" sub="incidentes" />
+      <Card
+        label="Work In Progress"
+        value={stats?.workInProgress ?? "—"}
+        accent="text-warning"
+        sub="en progreso"
+      />
+      <Card
+        label="Resueltos"
+        value={stats?.resolved ?? "—"}
+        accent="text-success"
+        sub="status resolved"
+      />
     </div>
   );
 }

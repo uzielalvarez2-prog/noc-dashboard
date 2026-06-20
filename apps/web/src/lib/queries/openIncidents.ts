@@ -198,16 +198,22 @@ export async function getOpenStats(group?: string, maxAgeHours?: number) {
   }
   const rows = await db.openIncident.findMany({
     where,
-    select: { incidentId: true, state: true, district: true, group: true },
+    select: { incidentId: true, state: true, district: true, group: true, status: true },
   });
 
   const stateMap = new Map<string, { sites: number; ids: Set<string> }>();
   const distMap = new Map<string, { sites: number; ids: Set<string> }>();
   const groupIds = new Map<string, Set<string>>();
   const allIds = new Set<string>();
+  const wipIds = new Set<string>();
+  const resolvedIds = new Set<string>();
 
   for (const r of rows) {
     allIds.add(r.incidentId);
+
+    const st = (r.status ?? "").toLowerCase();
+    if (st.includes("progress")) wipIds.add(r.incidentId);
+    if (st.includes("resolv")) resolvedIds.add(r.incidentId);
 
     let g = groupIds.get(r.group);
     if (!g) groupIds.set(r.group, (g = new Set()));
@@ -227,6 +233,8 @@ export async function getOpenStats(group?: string, maxAgeHours?: number) {
   return {
     totalSites: rows.length,
     totalIncidents: allIds.size,
+    workInProgress: wipIds.size,
+    resolved: resolvedIds.size,
     byGroup: [...groupIds.entries()]
       .map(([g, ids]) => ({ group: g, incidents: ids.size }))
       .sort((a, b) => b.incidents - a.incidents),
