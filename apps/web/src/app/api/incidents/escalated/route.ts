@@ -53,6 +53,7 @@ export async function GET(req: NextRequest) {
         markedBy: m.markedBy,
         markedAt: m.createdAt.toISOString(),
         note: m.note ?? null,
+        flagged: m.flagged,
       };
     });
 
@@ -68,10 +69,24 @@ export async function POST(req: NextRequest) {
   if (!session) return NextResponse.json({ error: "No autorizado" }, { status: 401 });
 
   try {
-    const body = (await req.json()) as { incidentId?: string; escalated?: boolean; note?: string };
+    const body = (await req.json()) as {
+      incidentId?: string;
+      escalated?: boolean;
+      note?: string;
+      flag?: boolean;
+    };
     const incidentId = (body.incidentId ?? "").trim();
     if (!incidentId)
       return NextResponse.json({ error: "incidentId requerido" }, { status: 400 });
+
+    // Alternar solo la bandera visual, sin tocar el estado de escalado.
+    if (typeof body.flag === "boolean") {
+      await db.escalatedIncident.update({
+        where: { incidentId },
+        data: { flagged: body.flag },
+      });
+      return NextResponse.json({ ok: true });
+    }
 
     if (body.escalated) {
       await db.escalatedIncident.upsert({

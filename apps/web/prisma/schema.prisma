@@ -134,6 +134,7 @@ model EscalatedIncident {
   incidentId String   @id
   markedBy   String
   note       String?
+  flagged    Boolean  @default(false)
   createdAt  DateTime @default(now())
 }
 

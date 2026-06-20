@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Siren, X, Download, ChevronDown, Check } from "lucide-react";
+import { Siren, X, Download, ChevronDown, Check, Flag } from "lucide-react";
 import { cn, formatHpsm, formatHpsmExcel } from "@/lib/utils";
 import { downloadXLSX } from "@/lib/excelExport";
 
@@ -20,6 +20,7 @@ export interface EscalatedItem {
   markedBy: string;
   markedAt: string;
   note: string | null;
+  flagged: boolean;
 }
 
 export interface EscalatedResponse {
@@ -33,13 +34,23 @@ export async function fetchEscalated(): Promise<EscalatedResponse> {
   return res.json();
 }
 
-function StatusBadge({ status, stillOpen }: { status: string; stillOpen: boolean }) {
-  if (!stillOpen)
+function StatusBadge({
+  status,
+  stillOpen,
+  flagged = false,
+}: {
+  status: string;
+  stillOpen: boolean;
+  flagged?: boolean;
+}) {
+  const s = (status || "").toUpperCase();
+  const resolved = s.includes("RESOLV") || s.includes("RESUELT");
+  // Resuelto/recuperado → verde, aun si la fila está marcada en rojo.
+  if (resolved || !stillOpen)
     return <span className="text-xs font-medium text-success">{status}</span>;
-  const s = status.toUpperCase();
-  const color = s.includes("RESOLVED")
-    ? "text-success"
-    : s.includes("PROGRESS")
+  // Fila marcada con bandera → status en rojo.
+  if (flagged) return <span className="text-xs font-medium text-critical">{status || "—"}</span>;
+  const color = s.includes("PROGRESS")
     ? "text-warning"
     : s.includes("PENDING")
     ? "text-accent"
@@ -95,6 +106,31 @@ export function EscalatedPanel() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ incidentId, escalated: true, note }),
       });
+    },
+    onSettled: () => qc.invalidateQueries({ queryKey: ["escalated"] }),
+  });
+
+  const toggleFlag = useMutation({
+    mutationFn: async ({ incidentId, flag }: { incidentId: string; flag: boolean }) => {
+      await fetch("/api/incidents/escalated", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ incidentId, flag }),
+      });
+    },
+    // Optimista: refleja el color de inmediato.
+    onMutate: async ({ incidentId, flag }) => {
+      await qc.cancelQueries({ queryKey: ["escalated"] });
+      const prev = qc.getQueryData<EscalatedResponse>(["escalated"]);
+      qc.setQueryData<EscalatedResponse>(["escalated"], (old) =>
+        old
+          ? { ...old, items: old.items.map((x) => (x.incidentId === incidentId ? { ...x, flagged: flag } : x)) }
+          : old
+      );
+      return { prev };
+    },
+    onError: (_e, _v, ctx) => {
+      if (ctx?.prev) qc.setQueryData(["escalated"], ctx.prev);
     },
     onSettled: () => qc.invalidateQueries({ queryKey: ["escalated"] }),
   });
@@ -216,7 +252,9 @@ export function EscalatedPanel() {
           <table className="w-full border-collapse text-xs">
             <thead className="sticky top-0 z-10 bg-surface-elevated">
               <tr className="border-b border-border">
-                <th className="px-2 py-2 w-6" />
+                <th className="w-6 px-2 py-2" />
+                <th className="w-6 px-1 py-2" />
+                <th className="w-6 px-1 py-2" />
                 {COLS.map((h) => (
                   <th
                     key={h}
@@ -225,7 +263,6 @@ export function EscalatedPanel() {
                     {h}
                   </th>
                 ))}
-                <th className="px-3 py-2" />
               </tr>
             </thead>
             <tbody>
@@ -234,12 +271,40 @@ export function EscalatedPanel() {
                   key={`row-${it.incidentId}`}
                   className={cn(
                     "border-b border-border/50 transition-colors",
-                    it.stillOpen
+                    it.flagged
+                      ? "bg-critical/5 hover:bg-critical/10"
+                      : it.stillOpen
                       ? "bg-warning/5 hover:bg-warning/10"
                       : "opacity-60 hover:opacity-80"
                   )}
                 >
+                  {/* X — quitar de atención especial (al inicio, directo) */}
                   <td className="px-2 py-2">
+                    <button
+                      type="button"
+                      title="Quitar de atención especial"
+                      onClick={() => unmark.mutate(it.incidentId)}
+                      className="rounded p-1 text-text-muted transition-colors hover:bg-surface-elevated hover:text-critical"
+                    >
+                      <X className="h-3.5 w-3.5" />
+                    </button>
+                  </td>
+                  {/* Bandera — marca visual (fila en rojo) */}
+                  <td className="px-1 py-2">
+                    <button
+                      type="button"
+                      title={it.flagged ? "Quitar bandera" : "Marcar bandera"}
+                      onClick={() => toggleFlag.mutate({ incidentId: it.incidentId, flag: !it.flagged })}
+                      className={cn(
+                        "rounded p-1 transition-colors",
+                        it.flagged ? "text-critical" : "text-text-muted/50 hover:text-text-muted"
+                      )}
+                    >
+                      <Flag className={cn("h-3.5 w-3.5", it.flagged && "fill-critical")} />
+                    </button>
+                  </td>
+                  {/* Chevron — expandir nota */}
+                  <td className="px-1 py-2">
                     <button
                       type="button"
                       onClick={() => toggleExpanded(it.incidentId)}
@@ -250,36 +315,26 @@ export function EscalatedPanel() {
                       />
                     </button>
                   </td>
-                  <td className="whitespace-nowrap px-3 py-2 font-mono text-text-primary">{it.incidentId}</td>
-                  <td className="whitespace-nowrap px-3 py-2 font-mono text-text-muted">
+                  <td className={cn("whitespace-nowrap px-3 py-2 font-mono", it.flagged ? "text-critical" : "text-text-primary")}>{it.incidentId}</td>
+                  <td className={cn("whitespace-nowrap px-3 py-2 font-mono", it.flagged ? "text-critical" : "text-text-muted")}>
                     {it.openTime ? formatHpsm(it.openTime) : "—"}
                   </td>
-                  <td className="px-3 py-2"><StatusBadge status={it.status} stillOpen={it.stillOpen} /></td>
+                  <td className="px-3 py-2"><StatusBadge status={it.status} stillOpen={it.stillOpen} flagged={it.flagged} /></td>
                   <td className="max-w-[12rem] px-3 py-2">
-                    <span className="block truncate text-text-primary" title={it.company}>{it.company}</span>
+                    <span className={cn("block truncate", it.flagged ? "text-critical" : "text-text-primary")} title={it.company}>{it.company}</span>
                   </td>
-                  <td className="whitespace-nowrap px-3 py-2 font-mono text-text-muted">{it.serviceId}</td>
-                  <td className="whitespace-nowrap px-3 py-2 text-text-primary">{it.state}</td>
-                  <td className="whitespace-nowrap px-3 py-2 font-mono text-text-primary">
-                    {it.assignee ?? <span className="text-text-muted">—</span>}
+                  <td className={cn("whitespace-nowrap px-3 py-2 font-mono", it.flagged ? "text-critical" : "text-text-muted")}>{it.serviceId}</td>
+                  <td className={cn("whitespace-nowrap px-3 py-2", it.flagged ? "text-critical" : "text-text-primary")}>{it.state}</td>
+                  <td className={cn("whitespace-nowrap px-3 py-2 font-mono", it.flagged ? "text-critical" : "text-text-primary")}>
+                    {it.assignee ?? <span className={it.flagged ? "text-critical" : "text-text-muted"}>—</span>}
                   </td>
-                  <td className="whitespace-nowrap px-3 py-2 text-text-primary">{it.district}</td>
+                  <td className={cn("whitespace-nowrap px-3 py-2", it.flagged ? "text-critical" : "text-text-primary")}>{it.district}</td>
                   <td className="px-3 py-2"><GroupBadge group={it.group} /></td>
-                  <td className="px-3 py-2 text-right">
-                    <button
-                      type="button"
-                      title="Quitar de atención especial"
-                      onClick={() => unmark.mutate(it.incidentId)}
-                      className="rounded p-1 text-text-muted transition-colors hover:bg-surface-elevated hover:text-critical"
-                    >
-                      <X className="h-3.5 w-3.5" />
-                    </button>
-                  </td>
                 </tr>,
                 ...(expanded.has(it.incidentId)
                   ? [
                       <tr key={`note-${it.incidentId}`} className="border-b border-border/50 bg-surface-elevated/50">
-                        <td colSpan={COLS.length + 2} className="px-4 py-3">
+                        <td colSpan={COLS.length + 3} className="px-4 py-3">
                           <div className="space-y-2">
                             <label className="block text-xs font-medium text-text-muted">Nota</label>
                             <textarea
