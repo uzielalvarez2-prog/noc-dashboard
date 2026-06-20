@@ -5,6 +5,8 @@ import { Download, Copy, Check, Camera } from "lucide-react";
 import type { ClosedRankRow } from "@/types/closed";
 import { copyHTMLTable } from "@/lib/openExport";
 import { downloadXLSX } from "@/lib/excelExport";
+import { useTheme } from "@/components/layout/ThemeProvider";
+import { canvasPalette } from "@/lib/chartTheme";
 
 // Paleta sobria para causas: azules (no tan claros), verdes y marrones
 const CAUSE_PALETTE = [
@@ -68,6 +70,7 @@ export function ClosedRanking({
 }) {
   const [copied, setCopied] = useState(false);
   const [imgCopied, setImgCopied] = useState(false);
+  const { theme } = useTheme();
 
   const sorted = [...rows].sort((a, b) => b.count - a.count);
   const top = sorted;
@@ -98,23 +101,25 @@ export function ClosedRanking({
     const COUNT_W = 44;
     const totalH = TITLE_H + top.length * (ROW_H + GAP) + PAD;
 
+    const pal = canvasPalette(theme);
+
     const canvas = document.createElement("canvas");
     canvas.width = W * SCALE;
     canvas.height = totalH * SCALE;
     const ctx = canvas.getContext("2d")!;
     ctx.scale(SCALE, SCALE);
 
-    ctx.fillStyle = "#0d1526";
+    ctx.fillStyle = pal.bg;
     ctx.fillRect(0, 0, W, totalH);
 
     // Para "Por causa" (cause): título centrado + total centrado debajo (como en Overview)
     const centerHeader = variant === "cause";
-    ctx.fillStyle = "#f8fafc";
+    ctx.fillStyle = pal.title;
     ctx.font = "bold 14px Arial,sans-serif";
     ctx.textAlign = centerHeader ? "center" : "left";
     ctx.fillText(title, centerHeader ? W / 2 : PAD, 24);
 
-    ctx.fillStyle = "#cbd5e1";
+    ctx.fillStyle = pal.text;
     ctx.font = "bold 12px Arial,sans-serif";
     ctx.fillText(`${total} cerrados`, centerHeader ? W / 2 : PAD, 42);
 
@@ -127,12 +132,12 @@ export function ClosedRanking({
       const label = variant === "analyst" ? shortName(r.name) : r.name;
       const display = label.length > 23 ? label.slice(0, 21) + "…" : label;
 
-      ctx.fillStyle = "#e2e8f0";
+      ctx.fillStyle = pal.text;
       ctx.font = "11px Arial,sans-serif";
       ctx.textAlign = "left";
       ctx.fillText(display, PAD, y + ROW_H - 5);
 
-      ctx.fillStyle = "#1e293b";
+      ctx.fillStyle = pal.trackBg;
       ctx.fillRect(PAD + NAME_W, y, barMaxW, ROW_H);
 
       ctx.fillStyle = color;

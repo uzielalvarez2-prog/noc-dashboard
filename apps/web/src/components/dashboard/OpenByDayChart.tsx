@@ -14,6 +14,8 @@ import {
   ResponsiveContainer,
 } from "recharts";
 import { Camera, Check } from "lucide-react";
+import { useTheme } from "@/components/layout/ThemeProvider";
+import { canvasPalette } from "@/lib/chartTheme";
 
 interface DayPoint {
   day: string;
@@ -47,6 +49,7 @@ interface Props {
 
 export function OpenByDayChart({ initial }: Props) {
   const [copied, setCopied] = useState(false);
+  const { theme } = useTheme();
 
   const { data } = useQuery<DayPoint[]>({
     queryKey: ["incidents-by-day"],
@@ -79,6 +82,8 @@ export function OpenByDayChart({ initial }: Props) {
     const W = Math.max(520, PAD + AXIS_L + n * (BAR_W + GAP) - GAP + AXIS_R + PAD);
     const H = TITLE_H + CHART_H + BOTTOM + LEGEND_H;
 
+    const pal = canvasPalette(theme);
+
     const canvas = document.createElement("canvas");
     canvas.width = W * SCALE;
     canvas.height = H * SCALE;
@@ -86,22 +91,22 @@ export function OpenByDayChart({ initial }: Props) {
     ctx.scale(SCALE, SCALE);
 
     // Fondo
-    ctx.fillStyle = "#0d1526";
+    ctx.fillStyle = pal.bg;
     ctx.fillRect(0, 0, W, H);
 
     // Header: título centrado + números PEXA / CECOR / total centrados debajo
     ctx.textAlign = "center";
     ctx.font = "bold 14px Arial,sans-serif";
-    ctx.fillStyle = "#f8fafc";
+    ctx.fillStyle = pal.title;
     ctx.fillText("Dilación - Incidentes Pexa", W / 2, 22);
 
     const parts: Array<{ text: string; color: string; bold: boolean; size: number }> = [
       { text: String(totalPexa), color: "#3b82f6", bold: true, size: 18 },
-      { text: " PEXA   ", color: "#64748b", bold: false, size: 11 },
+      { text: " PEXA   ", color: pal.muted, bold: false, size: 11 },
       { text: String(totalCecor), color: "#f59e0b", bold: true, size: 18 },
-      { text: " CECOR   ", color: "#64748b", bold: false, size: 11 },
-      { text: String(grandTotal), color: "#f8fafc", bold: true, size: 18 },
-      { text: " total", color: "#64748b", bold: false, size: 11 },
+      { text: " CECOR   ", color: pal.muted, bold: false, size: 11 },
+      { text: String(grandTotal), color: pal.title, bold: true, size: 18 },
+      { text: " total", color: pal.muted, bold: false, size: 11 },
     ];
     // medir ancho total para centrar la fila de números
     let totalW = 0;
@@ -122,7 +127,7 @@ export function OpenByDayChart({ initial }: Props) {
     const chartTop = TITLE_H;
 
     // Grid lines
-    ctx.strokeStyle = "#1e3048";
+    ctx.strokeStyle = pal.grid;
     ctx.lineWidth = 1;
     for (let i = 0; i <= 4; i++) {
       const y = chartTop + CHART_H - (i / 4) * CHART_H;
@@ -149,7 +154,7 @@ export function OpenByDayChart({ initial }: Props) {
 
       // Total encima
       if (d.total > 0) {
-        ctx.fillStyle = "#e2e8f0";
+        ctx.fillStyle = pal.text;
         ctx.font = "bold 10px Arial,sans-serif";
         ctx.textAlign = "center";
         ctx.fillText(String(d.total), x + BAR_W / 2, cecorY - 4);
@@ -157,7 +162,7 @@ export function OpenByDayChart({ initial }: Props) {
 
       // Etiqueta X rotada
       ctx.save();
-      ctx.fillStyle = "#64748b";
+      ctx.fillStyle = pal.muted;
       ctx.font = "10px Arial,sans-serif";
       ctx.textAlign = "right";
       ctx.translate(x + BAR_W / 2, chartTop + CHART_H + 8);
@@ -167,7 +172,7 @@ export function OpenByDayChart({ initial }: Props) {
     });
 
     // Línea base
-    ctx.strokeStyle = "#1e3048";
+    ctx.strokeStyle = pal.grid;
     ctx.lineWidth = 1;
     ctx.beginPath();
     ctx.moveTo(PAD + AXIS_L - 4, chartTop + CHART_H);
@@ -183,7 +188,7 @@ export function OpenByDayChart({ initial }: Props) {
     ].forEach(({ label, color }) => {
       ctx.fillStyle = color;
       ctx.fillRect(lx, lY - 9, 12, 12);
-      ctx.fillStyle = "#94a3b8";
+      ctx.fillStyle = pal.muted;
       ctx.font = "11px Arial,sans-serif";
       ctx.textAlign = "left";
       ctx.fillText(label, lx + 16, lY);
