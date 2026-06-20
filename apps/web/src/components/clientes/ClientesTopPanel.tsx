@@ -1,57 +1,9 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Building2, Plus, Pencil, Trash2, Check, X, Upload, Search, FileSpreadsheet, ClipboardPaste } from "lucide-react";
+import { Building2, Plus, Pencil, Trash2, Check, X, Upload, Search } from "lucide-react";
 import { Button } from "@/components/ui/button";
-
-interface ParsedRow {
-  company: string;
-  serviceRef: string;
-}
-
-// Detecta y descarta una fila de encabezados (empresa/company/cliente...).
-function isHeaderRow(a: string, b: string): boolean {
-  const h = `${a} ${b}`.toLowerCase();
-  return /empresa|company|cliente|servicio|service/.test(h);
-}
-
-// Lee .csv o .xlsx → [{company, serviceRef}]. Col A = empresa, Col B = servicio.
-async function parseClientesFile(file: File): Promise<ParsedRow[]> {
-  const name = file.name.toLowerCase();
-
-  if (name.endsWith(".csv")) {
-    const text = await file.text();
-    const lines = text.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
-    const rows: ParsedRow[] = [];
-    lines.forEach((line, i) => {
-      const parts = line.split(/\t|,|;/).map((p) => p.trim().replace(/^"|"$/g, ""));
-      const company = parts[0] ?? "";
-      const serviceRef = parts[1] ?? "";
-      if (i === 0 && isHeaderRow(company, serviceRef)) return;
-      if (company || serviceRef) rows.push({ company, serviceRef });
-    });
-    return rows;
-  }
-
-  if (name.endsWith(".xlsx") || name.endsWith(".xlsm")) {
-    const ExcelJS = (await import("exceljs")).default;
-    const wb = new ExcelJS.Workbook();
-    await wb.xlsx.load(await file.arrayBuffer());
-    const ws = wb.worksheets[0];
-    if (!ws) return [];
-    const rows: ParsedRow[] = [];
-    ws.eachRow((row, rowNumber) => {
-      const company = String(row.getCell(1).value ?? "").trim();
-      const serviceRef = String(row.getCell(2).value ?? "").trim();
-      if (rowNumber === 1 && isHeaderRow(company, serviceRef)) return;
-      if (company || serviceRef) rows.push({ company, serviceRef });
-    });
-    return rows;
-  }
-
-  throw new Error("Formato no soportado. Usa .xlsx o .csv");
-}
 
 interface Cliente {
   id: string;
@@ -83,46 +35,6 @@ export function ClientesTopPanel() {
 
   const [bulkOpen, setBulkOpen] = useState(false);
   const [bulkText, setBulkText] = useState("");
-  const [okMsg, setOkMsg] = useState<string | null>(null);
-  const fileRef = useRef<HTMLInputElement>(null);
-
-  async function sendBulk(rows: ParsedRow[]): Promise<number | null> {
-    const res = await fetch("/api/clientes-top", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ bulk: rows }),
-    });
-    if (!res.ok) {
-      setError((await res.json()).error ?? "Error al importar");
-      return null;
-    }
-    return (await res.json()).inserted ?? rows.length;
-  }
-
-  async function handleFile(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0];
-    e.target.value = "";
-    if (!file) return;
-    setBusy(true);
-    setError(null);
-    setOkMsg(null);
-    try {
-      const rows = await parseClientesFile(file);
-      if (rows.length === 0) {
-        setError("El archivo no tiene filas válidas (Col A: empresa, Col B: servicio).");
-        return;
-      }
-      const inserted = await sendBulk(rows);
-      if (inserted !== null) {
-        setOkMsg(`Se importaron ${inserted} clientes desde ${file.name}.`);
-        invalidate();
-      }
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Error al leer el archivo");
-    } finally {
-      setBusy(false);
-    }
-  }
 
   function invalidate() {
     qc.invalidateQueries({ queryKey: ["clientes-top"] });
@@ -272,34 +184,18 @@ export function ClientesTopPanel() {
               className="rounded-md border border-border bg-surface py-1.5 pl-7 pr-2.5 text-sm text-text-primary placeholder:text-text-muted/60 focus:border-accent focus:outline-none"
             />
           </div>
-          <input
-            ref={fileRef}
-            type="file"
-            accept=".xlsx,.xlsm,.csv"
-            className="hidden"
-            onChange={handleFile}
-          />
-          <Button
-            size="sm"
-            onClick={() => fileRef.current?.click()}
-            disabled={busy}
-            className="h-8 gap-1.5 bg-accent text-xs text-white hover:bg-accent/90"
-          >
-            <FileSpreadsheet className="h-3.5 w-3.5" /> Importar archivo
-          </Button>
           <Button
             size="sm"
             variant="ghost"
             onClick={() => setBulkOpen((v) => !v)}
             className="h-8 gap-1.5 border border-border text-xs text-text-muted hover:text-text-primary"
           >
-            <ClipboardPaste className="h-3.5 w-3.5" /> Pegar
+            <Upload className="h-3.5 w-3.5" /> Importar
           </Button>
           <Button
             size="sm"
-            variant="ghost"
             onClick={() => setAdding(true)}
-            className="h-8 gap-1.5 border border-border text-xs text-text-muted hover:text-text-primary"
+            className="h-8 gap-1.5 bg-accent text-xs text-white hover:bg-accent/90"
           >
             <Plus className="h-3.5 w-3.5" /> Agregar
           </Button>
@@ -309,17 +205,6 @@ export function ClientesTopPanel() {
       {error && (
         <p className="rounded-md border border-critical/40 bg-critical-dim px-3 py-2 text-xs text-critical">
           {error}
-        </p>
-      )}
-      {okMsg && (
-        <p className="rounded-md border border-success/40 bg-success-dim px-3 py-2 text-xs text-success">
-          {okMsg}
-        </p>
-      )}
-      {busy && (
-        <p className="flex items-center gap-2 text-xs text-text-muted">
-          <span className="h-3 w-3 animate-spin rounded-full border-2 border-accent border-t-transparent" />
-          Procesando...
         </p>
       )}
 
