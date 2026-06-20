@@ -106,7 +106,7 @@ export function OpenIncidentsView() {
         </div>
       </div>
 
-      <OpenKpis stats={stats} />
+      <OpenKpis stats={stats} group={group} />
 
       <EscalatedPanel />
 
