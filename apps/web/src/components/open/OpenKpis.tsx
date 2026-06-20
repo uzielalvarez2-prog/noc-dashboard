@@ -26,30 +26,36 @@ export function OpenKpis({ stats, group = "ALL" }: { stats?: OpenStats; group?: 
   const pexa = stats?.byGroup.find((g) => g.group === "PEXA")?.incidents ?? 0;
   const cecor = stats?.byGroup.find((g) => g.group === "CECOR")?.incidents ?? 0;
 
-  // PEXA visible salvo en la pestaña CECOR; CECOR visible salvo en la pestaña PEXA.
-  // En "Todos" se muestran ambos (engloba los dos grupos).
-  const showPexa = group !== "CECOR";
-  const showCecor = group !== "PEXA";
-  const count = 1 + (showPexa ? 1 : 0) + (showCecor ? 1 : 0) + 2;
-  const cols = count >= 5 ? "md:grid-cols-5" : "md:grid-cols-4";
+  // "Todos" engloba ambos grupos → PEXA + CECOR (sin desglose por estatus).
+  // En una pestaña de grupo (PEXA/CECOR) "Incidentes abiertos" ya ES ese total,
+  // así que en vez de repetir la tarjeta del grupo, mostramos WIP + Resueltos.
+  const showGroups = group === "ALL";
+  const showStatus = group !== "ALL";
+  const count = 1 + (showGroups ? 2 : 0) + (showStatus ? 2 : 0);
+  const cols =
+    count >= 5 ? "md:grid-cols-5" : count === 4 ? "md:grid-cols-4" : "md:grid-cols-3";
 
   return (
     <div className={`grid grid-cols-2 gap-3 ${cols}`}>
       <Card label="Incidentes abiertos" value={stats?.totalIncidents ?? "—"} sub="únicos" />
-      {showPexa && <Card label="PEXA" value={pexa} accent="text-accent" sub="incidentes" />}
-      {showCecor && <Card label="CECOR" value={cecor} accent="text-warning" sub="incidentes" />}
-      <Card
-        label="Work In Progress"
-        value={stats?.workInProgress ?? "—"}
-        accent="text-accent"
-        sub="en progreso"
-      />
-      <Card
-        label="Resueltos"
-        value={stats?.resolved ?? "—"}
-        accent="text-success"
-        sub="status resolved"
-      />
+      {showGroups && <Card label="PEXA" value={pexa} accent="text-accent" sub="incidentes" />}
+      {showGroups && <Card label="CECOR" value={cecor} accent="text-warning" sub="incidentes" />}
+      {showStatus && (
+        <Card
+          label="Work In Progress"
+          value={stats?.workInProgress ?? "—"}
+          accent="text-accent"
+          sub="en progreso"
+        />
+      )}
+      {showStatus && (
+        <Card
+          label="Resueltos"
+          value={stats?.resolved ?? "—"}
+          accent="text-success"
+          sub="status resolved"
+        />
+      )}
     </div>
   );
 }
