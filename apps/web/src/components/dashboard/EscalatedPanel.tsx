@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Siren, X, Download, ChevronDown, Check, Flag } from "lucide-react";
+import { Siren, X, Download, ChevronDown, Check, Flag, CheckCircle2 } from "lucide-react";
 import { cn, formatHpsm, formatHpsmExcel } from "@/lib/utils";
 import { downloadXLSX } from "@/lib/excelExport";
 
@@ -81,6 +81,8 @@ export function EscalatedPanel() {
   const qc = useQueryClient();
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const [editingNote, setEditingNote] = useState<Record<string, string>>({});
+  // Pestaña activa: "edc" = escalados activos (caídos) · "up" = ya resueltos.
+  const [view, setView] = useState<"edc" | "up">("edc");
 
   const { data } = useQuery<EscalatedResponse>({
     queryKey: ["escalated"],
@@ -137,6 +139,12 @@ export function EscalatedPanel() {
 
   const items = data?.items ?? [];
 
+  // Resuelto / UP: ya no está abierto o el status dice resolv/resuelt.
+  const isUp = (it: EscalatedItem) => !it.stillOpen || /resolv|resuelt/i.test(it.status);
+  const downItems = items.filter((it) => !isUp(it));
+  const upItems = items.filter(isUp);
+  const shown = view === "edc" ? downItems : upItems;
+
   const toggleExpanded = (id: string) => {
     const newSet = new Set(expanded);
     if (newSet.has(id)) {
@@ -157,7 +165,7 @@ export function EscalatedPanel() {
   };
 
   function onExport() {
-    const rows = items.map((it) => [
+    const rows = shown.map((it) => [
       it.incidentId,
       it.openTime ? formatHpsmExcel(it.openTime) : "—",
       it.status,
@@ -168,7 +176,8 @@ export function EscalatedPanel() {
       it.district,
       it.group ?? "—",
     ]);
-    downloadXLSX("escalados-atencion-especial.xlsx", "Escalados", COLS, rows);
+    const base = view === "edc" ? "escalados-edc" : "edc-up-resueltos";
+    downloadXLSX(`${base}.xlsx`, view === "edc" ? "Escalados" : "EDC-UP", COLS, rows);
   }
 
   return (
@@ -198,40 +207,71 @@ export function EscalatedPanel() {
       }
     `}</style>
     <div
-      className="flex flex-col rounded-lg border bg-surface"
-      style={{ animation: 'edc-glow 1s step-start infinite' }}
+      className={cn("flex flex-col rounded-lg border bg-surface", view === "up" && "border-success/40")}
+      style={view === "edc" ? { animation: 'edc-glow 1s step-start infinite' } : undefined}
     >
       <div
-        className="flex flex-wrap items-center justify-between gap-2 border-b px-4 py-3"
-        style={{ animation: 'edc-header 1s step-start infinite' }}
+        className={cn(
+          "flex flex-wrap items-center justify-between gap-2 border-b px-4 py-3",
+          view === "up" && "border-success/40 bg-success/5"
+        )}
+        style={view === "edc" ? { animation: 'edc-header 1s step-start infinite' } : undefined}
       >
         <div className="flex items-center gap-2">
-          <span className="relative flex h-5 w-5 items-center justify-center">
-            <span
-              className="absolute inline-flex h-full w-full rounded-full"
-              style={{ animation: 'edc-ping 1s step-start infinite' }}
-            />
-            <Siren
-              className="relative h-4 w-4"
-              style={{ animation: 'edc-flash 1s step-start infinite' }}
-            />
-          </span>
-          <h2
-            className="text-sm font-bold uppercase tracking-wide"
-            style={{ animation: 'edc-flash 1s step-start infinite' }}
+          {/* Pestaña: ESCALADOS - EDC (activos / caídos) */}
+          <button
+            type="button"
+            onClick={() => setView("edc")}
+            className={cn(
+              "flex items-center gap-2 rounded-md px-2.5 py-1 transition-all",
+              view === "edc" ? "ring-2 ring-critical/50" : "opacity-50 hover:opacity-100"
+            )}
           >
-            Escalados - EDC
-          </h2>
-          {items.length > 0 && (
-            <span
-              className="rounded-full px-2 py-0.5 font-mono text-xs font-bold text-white"
-              style={{ animation: 'edc-badge 1s step-start infinite' }}
-            >
-              {items.length}
+            <span className="relative flex h-5 w-5 items-center justify-center">
+              <span
+                className="absolute inline-flex h-full w-full rounded-full"
+                style={view === "edc" ? { animation: 'edc-ping 1s step-start infinite' } : undefined}
+              />
+              <Siren
+                className="relative h-4 w-4"
+                style={view === "edc" ? { animation: 'edc-flash 1s step-start infinite' } : { color: '#ef4444' }}
+              />
             </span>
-          )}
+            <span
+              className="text-sm font-bold uppercase tracking-wide"
+              style={view === "edc" ? { animation: 'edc-flash 1s step-start infinite' } : { color: '#ef4444' }}
+            >
+              Escalados - EDC
+            </span>
+            {downItems.length > 0 && (
+              <span
+                className="rounded-full px-2 py-0.5 font-mono text-xs font-bold text-white"
+                style={view === "edc" ? { animation: 'edc-badge 1s step-start infinite' } : { backgroundColor: '#ef4444' }}
+              >
+                {downItems.length}
+              </span>
+            )}
+          </button>
+
+          {/* Pestaña: EDC - UP (recuperados / resueltos) */}
+          <button
+            type="button"
+            onClick={() => setView("up")}
+            className={cn(
+              "flex items-center gap-2 rounded-md px-2.5 py-1 transition-all",
+              view === "up" ? "ring-2 ring-success/50" : "opacity-50 hover:opacity-100"
+            )}
+          >
+            <CheckCircle2 className="h-4 w-4 text-success" />
+            <span className="text-sm font-bold uppercase tracking-wide text-success">EDC - UP</span>
+            {upItems.length > 0 && (
+              <span className="rounded-full bg-success px-2 py-0.5 font-mono text-xs font-bold text-white">
+                {upItems.length}
+              </span>
+            )}
+          </button>
         </div>
-        {items.length > 0 && (
+        {shown.length > 0 && (
           <button
             type="button"
             onClick={onExport}
@@ -242,10 +282,11 @@ export function EscalatedPanel() {
         )}
       </div>
 
-      {items.length === 0 ? (
+      {shown.length === 0 ? (
         <p className="px-4 py-8 text-center text-sm text-text-muted">
-          Sin incidentes marcados. Usa la casilla ★ en la tabla de abiertos para
-          escalar uno aquí.
+          {view === "edc"
+            ? "Sin escalados activos. Usa la casilla ★ en la tabla de abiertos para escalar uno aquí."
+            : "Sin escalados resueltos (EDC - UP) todavía."}
         </p>
       ) : (
         <div className="max-h-[400px] overflow-auto">
@@ -266,16 +307,16 @@ export function EscalatedPanel() {
               </tr>
             </thead>
             <tbody>
-              {items.flatMap((it) => [
+              {shown.flatMap((it) => [
                 <tr
                   key={`row-${it.incidentId}`}
                   className={cn(
                     "border-b border-border/50 transition-colors",
                     it.flagged
                       ? "bg-critical/5 hover:bg-critical/10"
-                      : it.stillOpen
-                      ? "bg-warning/5 hover:bg-warning/10"
-                      : "opacity-60 hover:opacity-80"
+                      : view === "up"
+                      ? "bg-success/5 hover:bg-success/10"
+                      : "bg-warning/5 hover:bg-warning/10"
                   )}
                 >
                   {/* X — quitar de atención especial (al inicio, directo) */}
