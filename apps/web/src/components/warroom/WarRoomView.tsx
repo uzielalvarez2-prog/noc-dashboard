@@ -251,21 +251,21 @@ function WarRoomTable({
         </div>
       </div>
 
-      <div className="overflow-x-auto rounded-lg border border-border">
+      <div className="max-h-[60vh] overflow-auto rounded-lg border border-border">
         <table className="w-full text-sm">
           <thead>
-            <tr className="border-b border-border bg-surface-elevated">
-              <th className="px-3 py-2.5 text-center text-xs font-medium text-text-muted">🚩</th>
-              <th className="px-3 py-2.5 text-left text-xs font-medium text-text-muted">Incidente</th>
-              <th className="px-3 py-2.5 text-left text-xs font-medium text-text-muted">Apertura</th>
-              <th className="px-3 py-2.5 text-left text-xs font-medium text-text-muted">Estatus</th>
-              <th className="px-3 py-2.5 text-left text-xs font-medium text-text-muted">Empresa</th>
-              <th className="whitespace-nowrap px-3 py-2.5 text-left text-xs font-medium text-text-muted">Servicio</th>
-              <th className="px-3 py-2.5 text-left text-xs font-medium text-text-muted">Estado</th>
-              <th className="px-3 py-2.5 text-left text-xs font-medium text-text-muted">Asignado</th>
-              <th className="px-3 py-2.5 text-left text-xs font-medium text-text-muted">Distrito</th>
-              <th className="px-3 py-2.5 text-left text-xs font-medium text-text-muted">Nota</th>
-              <th className="px-3 py-2.5 text-center text-xs font-medium text-text-muted">Quitar</th>
+            <tr>
+              <th className="sticky top-0 z-10 border-b border-border bg-surface-elevated px-3 py-2.5 text-left text-xs font-medium text-text-muted">Nota</th>
+              <th className="sticky top-0 z-10 border-b border-border bg-surface-elevated px-3 py-2.5 text-center text-xs font-medium text-text-muted">Quitar</th>
+              <th className="sticky top-0 z-10 border-b border-border bg-surface-elevated px-3 py-2.5 text-center text-xs font-medium text-text-muted">🚩</th>
+              <th className="sticky top-0 z-10 border-b border-border bg-surface-elevated px-3 py-2.5 text-left text-xs font-medium text-text-muted">Incidente</th>
+              <th className="sticky top-0 z-10 border-b border-border bg-surface-elevated px-3 py-2.5 text-left text-xs font-medium text-text-muted">Apertura</th>
+              <th className="sticky top-0 z-10 border-b border-border bg-surface-elevated px-3 py-2.5 text-left text-xs font-medium text-text-muted">Estatus</th>
+              <th className="sticky top-0 z-10 border-b border-border bg-surface-elevated px-3 py-2.5 text-left text-xs font-medium text-text-muted">Empresa</th>
+              <th className="sticky top-0 z-10 border-b border-border bg-surface-elevated px-3 py-2.5 text-left text-xs font-medium text-text-muted">Servicio</th>
+              <th className="sticky top-0 z-10 border-b border-border bg-surface-elevated px-3 py-2.5 text-left text-xs font-medium text-text-muted">Estado</th>
+              <th className="sticky top-0 z-10 border-b border-border bg-surface-elevated px-3 py-2.5 text-left text-xs font-medium text-text-muted">Asignado</th>
+              <th className="sticky top-0 z-10 border-b border-border bg-surface-elevated px-3 py-2.5 text-left text-xs font-medium text-text-muted">Distrito</th>
             </tr>
           </thead>
           <tbody>
@@ -298,6 +298,18 @@ function WarRoomTable({
                   key={it.incidentId}
                   className="border-b border-border transition-colors last:border-0 hover:bg-surface-elevated/40"
                 >
+                  <td className="px-3 py-2.5">
+                    <NoteCell value={it.note} onSave={(note) => onPatch(it, { note })} />
+                  </td>
+                  <td className="px-3 py-2.5 text-center">
+                    <button
+                      onClick={() => onPatch(it, { dismissed: true })}
+                      title="Quitar de War Room"
+                      className="text-text-muted/50 transition-colors hover:text-critical"
+                    >
+                      <X className="h-4 w-4" />
+                    </button>
+                  </td>
                   <td className="px-3 py-2.5 text-center">
                     <button
                       onClick={() => onPatch(it, { flagged: !it.flagged })}
@@ -334,22 +346,14 @@ function WarRoomTable({
                     </span>
                   </td>
                   <td className={`px-3 py-2.5 ${rowText}`}>{it.company || "—"}</td>
-                  <td className={`whitespace-nowrap px-3 py-2.5 font-mono text-xs ${rowText}`}>{it.serviceId || "—"}</td>
+                  <td className={`px-3 py-2.5 font-mono text-xs ${rowText}`}>
+                    <div className="max-w-[11rem] truncate" title={it.serviceId}>
+                      {it.serviceId || "—"}
+                    </div>
+                  </td>
                   <td className={`px-3 py-2.5 text-xs ${rowText}`}>{it.state || "—"}</td>
                   <td className={`px-3 py-2.5 text-xs ${rowText}`}>{it.assignee || "—"}</td>
                   <td className={`px-3 py-2.5 text-xs ${rowText}`}>{it.district || "—"}</td>
-                  <td className="px-3 py-2.5">
-                    <NoteCell value={it.note} onSave={(note) => onPatch(it, { note })} />
-                  </td>
-                  <td className="px-3 py-2.5 text-center">
-                    <button
-                      onClick={() => onPatch(it, { dismissed: true })}
-                      title="Quitar de War Room"
-                      className="text-text-muted/50 transition-colors hover:text-critical"
-                    >
-                      <X className="h-4 w-4" />
-                    </button>
-                  </td>
                 </tr>
               );
             })}
