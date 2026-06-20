@@ -9,6 +9,7 @@ import {
   parseHpsmDate,
   pickCol,
 } from "@/lib/csv/hpsm";
+import { syncWarRoom } from "@/lib/war-room";
 
 // Carga del CSV de incidentes ABIERTOS.
 // El archivo trae todos los grupos; filtramos a PEXA/CECOR, quitamos duplicados
@@ -123,6 +124,14 @@ export async function POST(req: NextRequest) {
 
     const uniqueIncidents = new Set(records.map((r) => r.incidentId)).size;
 
+    // War Room: detectar incidentes de Clientes TOP. No debe romper la carga.
+    let warRoomMatched = 0;
+    try {
+      warRoomMatched = await syncWarRoom(records);
+    } catch (e) {
+      console.error("[open/upload] syncWarRoom falló (no crítico):", e);
+    }
+
     await db.auditLog
       .create({
         data: {
@@ -143,6 +152,7 @@ export async function POST(req: NextRequest) {
       totalRows: rows.length,
       inserted: records.length,
       uniqueIncidents,
+      warRoomMatched,
       duplicatesRemoved: activeRows - records.length,
       message: `${uniqueIncidents} incidentes abiertos (${records.length} ubicaciones) de PEXA/CECOR importados.`,
     });
