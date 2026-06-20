@@ -1,0 +1,42 @@
+import { NextRequest, NextResponse } from "next/server";
+import { getSessionFromRequest } from "@/lib/auth-session";
+import { db } from "@/lib/db";
+
+export const dynamic = "force-dynamic";
+
+export async function PUT(req: NextRequest, ctx: { params: Promise<{ id: string }> }) {
+  const session = getSessionFromRequest(req);
+  if (!session) return NextResponse.json({ error: "No autorizado" }, { status: 401 });
+
+  const { id } = await ctx.params;
+  try {
+    const body = (await req.json()) as { company?: string; serviceRef?: string; note?: string };
+    const company = (body.company ?? "").trim();
+    const serviceRef = (body.serviceRef ?? "").trim();
+    if (!company && !serviceRef)
+      return NextResponse.json({ error: "Indica al menos empresa o servicio" }, { status: 400 });
+
+    const cliente = await db.clienteTop.update({
+      where: { id },
+      data: { company, serviceRef, note: (body.note ?? "").trim() || null },
+    });
+    return NextResponse.json({ cliente });
+  } catch (err) {
+    console.error("[PUT /api/clientes-top/:id]", err);
+    return NextResponse.json({ error: "Error al actualizar cliente" }, { status: 500 });
+  }
+}
+
+export async function DELETE(req: NextRequest, ctx: { params: Promise<{ id: string }> }) {
+  const session = getSessionFromRequest(req);
+  if (!session) return NextResponse.json({ error: "No autorizado" }, { status: 401 });
+
+  const { id } = await ctx.params;
+  try {
+    await db.clienteTop.delete({ where: { id } });
+    return NextResponse.json({ ok: true });
+  } catch (err) {
+    console.error("[DELETE /api/clientes-top/:id]", err);
+    return NextResponse.json({ error: "Error al eliminar cliente" }, { status: 500 });
+  }
+}

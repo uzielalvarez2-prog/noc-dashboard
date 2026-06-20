@@ -16,6 +16,7 @@ import {
   ChevronRight,
   Sun,
   Moon,
+  Star,
 } from "lucide-react";
 import { useTheme } from "@/components/layout/ThemeProvider";
 
@@ -24,6 +25,7 @@ const NAV_ITEMS = [
   { href: "/incidents", label: "Incidentes", icon: AlertTriangle },
   { href: "/sla", label: "SLA", icon: BarChart2 },
   { href: "/operators", label: "Operadores", icon: Users },
+  { href: "/clientes-top", label: "Clientes TOP", icon: Star },
   { href: "/import", label: "Importar CSV", icon: Upload },
   { href: "/settings", label: "Configuración", icon: Settings, settingsOnly: true },
 ];
