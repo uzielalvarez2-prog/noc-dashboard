@@ -137,6 +137,68 @@ model EscalatedIncident {
   createdAt  DateTime @default(now())
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// CLIENTES TOP: base editable (empresa + referencia de servicio) que define los
+// clientes críticos con chat directo. Al subir el snapshot de abiertos, cada
+// incidente se compara contra esta base; si la empresa O el servicio coinciden,
+// entra a War Room. Tabla chica (~93→300 filas): el match se hace en memoria.
+// ─────────────────────────────────────────────────────────────────────────────
+model ClienteTop {
+  id         String   @id @default(cuid())
+  company    String
+  serviceRef String   @default("")
+  note       String?
+  createdBy  String   @default("")
+  createdAt  DateTime @default(now())
+
+  @@index([company])
+  @@index([serviceRef])
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// WAR ROOM: incidentes que coincidieron con un Cliente TOP. Vive aparte de
+// OpenIncident porque ese snapshot se reemplaza cada 5 min; aquí PERSISTE para
+// guardar historial de 7 días y medir recurrencia por cliente/servicio. Upsert
+// por incidentId. resolvedAt se llena cuando el status pasa a "resolv" (alerta UP).
+// ─────────────────────────────────────────────────────────────────────────────
+model WarRoomIncident {
+  incidentId  String    @id
+  openTime    DateTime
+  status      String    @default("")
+  company     String    @default("")
+  serviceId   String    @default("")
+  state       String    @default("")
+  district    String    @default("")
+  assignee    String?
+  group       String    @default("")
+  matchedBy   String    @default("") // 'company' | 'service' | 'both'
+  flagged     Boolean   @default(false)
+  resolvedAt  DateTime?
+  firstSeenAt DateTime  @default(now())
+  lastSeenAt  DateTime  @default(now())
+
+  @@index([company])
+  @@index([serviceId])
+  @@index([firstSeenAt])
+  @@index([resolvedAt])
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// BASE DE CONOCIMIENTO: enlaces / PDF / Drive con categoría. El Admin administra.
+// ─────────────────────────────────────────────────────────────────────────────
+model KnowledgeDoc {
+  id        String   @id @default(cuid())
+  title     String
+  url       String
+  category  String   @default("General")
+  docType   String   @default("LINK") // LINK | PDF | DRIVE
+  note      String?
+  createdBy String   @default("")
+  createdAt DateTime @default(now())
+
+  @@index([category])
+}
+
 enum Severity {
   CRITICAL
   HIGH
