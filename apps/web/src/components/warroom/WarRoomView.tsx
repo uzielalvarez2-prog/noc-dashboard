@@ -55,25 +55,27 @@ export function WarRoomView() {
 
   const items = useMemo(() => data?.items ?? [], [data]);
 
-  // Qué tabla se muestra (los chips de arriba funcionan como pestañas).
-  const [view, setView] = useState<"down" | "up24" | "cm">("down");
+  const [view, setView] = useState<"criticos" | "cm">("criticos");
 
-  // Dos cubetas: DOWN (caído) y UP (<24h).
-  const { down, up24 } = useMemo(() => {
-    const now = Date.now();
-    const down: WarRoomItem[] = [];
-    const up24: WarRoomItem[] = [];
-    for (const it of items) {
-      const resolved = Boolean(it.resolvedAt) || isResolvedStatus(it.status);
-      if (!resolved) {
-        down.push(it);
-        continue;
-      }
-      const t = it.resolvedAt ? new Date(it.resolvedAt).getTime() : now;
-      if (now - t < DAY) up24.push(it);
-    }
-    return { down, up24 };
-  }, [items]);
+  // Contador para el chip Críticos (solo DOWN activos).
+  const downCount = useMemo(
+    () => items.filter((it) => !Boolean(it.resolvedAt) && !isResolvedStatus(it.status)).length,
+    [items]
+  );
+
+  // Datos de Contrato Marco para mostrar el contador en el chip.
+  const { data: cmData } = useQuery({
+    queryKey: ["contrato-marco"],
+    queryFn: fetchContratoMarco,
+    refetchInterval: 60_000,
+  });
+  const cmDownCount = useMemo(
+    () =>
+      (cmData?.items ?? []).filter(
+        (it) => !Boolean(it.resolvedAt) && !isResolvedStatus(it.status)
+      ).length,
+    [cmData]
+  );
 
   // Actualización parcial optimista en la caché + POST al server.
   async function patch(it: WarRoomItem, body: Partial<{ flagged: boolean; note: string; dismissed: boolean }>) {
@@ -101,28 +103,16 @@ export function WarRoomView() {
 
   return (
     <div className="space-y-6">
-      {/* Resumen / pestañas: cada chip muestra su tabla al hacer clic */}
       <div className="flex flex-wrap items-center gap-3">
         <button
-          onClick={() => setView("down")}
+          onClick={() => setView("criticos")}
           className={`flex items-center gap-2 rounded-lg border border-critical/40 bg-critical-dim px-3 py-2 transition-all ${
-            view === "down" ? "ring-2 ring-critical" : "opacity-50 hover:opacity-100"
+            view === "criticos" ? "ring-2 ring-critical" : "opacity-50 hover:opacity-100"
           }`}
         >
           <Siren className="h-4 w-4 text-critical" />
           <span className="text-sm text-text-primary">
-            <span className="text-lg font-bold text-critical">{down.length}</span> DOWN
-          </span>
-        </button>
-        <button
-          onClick={() => setView("up24")}
-          className={`flex items-center gap-2 rounded-lg border border-success/30 bg-success/10 px-3 py-2 transition-all ${
-            view === "up24" ? "ring-2 ring-success" : "opacity-50 hover:opacity-100"
-          }`}
-        >
-          <CheckCircle2 className="h-4 w-4 text-success" />
-          <span className="text-sm text-text-primary">
-            <span className="text-lg font-bold text-success">{up24.length}</span> UP
+            <span className="text-lg font-bold text-critical">{downCount}</span> Críticos
           </span>
         </button>
         <button
@@ -132,35 +122,24 @@ export function WarRoomView() {
           }`}
         >
           <CheckCircle2 className="h-4 w-4 text-accent" />
-          <span className="text-sm text-text-primary font-medium">Contrato Marco</span>
+          <span className="text-sm text-text-primary">
+            <span className="text-lg font-bold text-accent">{cmDownCount}</span>{" "}
+            <span className="font-medium">Contrato Marco</span>
+          </span>
         </button>
         <button
-          onClick={() => qc.invalidateQueries({ queryKey: ["war-room"] })}
+          onClick={() => {
+            qc.invalidateQueries({ queryKey: ["war-room"] });
+            qc.invalidateQueries({ queryKey: ["contrato-marco"] });
+          }}
           className="ml-auto flex items-center gap-1.5 rounded-md border border-border bg-surface px-2.5 py-1.5 text-xs text-text-muted transition-colors hover:text-text-primary"
         >
           <RotateCw className="h-3.5 w-3.5" /> Actualizar
         </button>
       </div>
 
-      {view === "down" && (
-        <WarRoomTable
-          title="DOWN — caídos"
-          accent="critical"
-          items={down}
-          isLoading={isLoading}
-          emptyText="Sin incidentes de Clientes TOP caídos."
-          onPatch={patch}
-        />
-      )}
-      {view === "up24" && (
-        <WarRoomTable
-          title="UP — recuperados (24 h)"
-          accent="success"
-          items={up24}
-          isLoading={isLoading}
-          emptyText="Sin recuperaciones en las últimas 24 h."
-          onPatch={patch}
-        />
+      {view === "criticos" && (
+        <CriticosView items={items} isLoading={isLoading} onPatch={patch} />
       )}
       {view === "cm" && <ContratoMarcoView />}
     </div>
@@ -347,6 +326,86 @@ function WarRoomTable({
           </tbody>
         </table>
       </div>
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+
+function CriticosView({
+  items,
+  isLoading,
+  onPatch,
+}: {
+  items: WarRoomItem[];
+  isLoading: boolean;
+  onPatch: (
+    it: WarRoomItem,
+    body: Partial<{ flagged: boolean; note: string; dismissed: boolean }>
+  ) => void;
+}) {
+  const [subView, setSubView] = useState<"down" | "up24">("down");
+
+  const { down, up24 } = useMemo(() => {
+    const now = Date.now();
+    const down: WarRoomItem[] = [];
+    const up24: WarRoomItem[] = [];
+    for (const it of items) {
+      const resolved = Boolean(it.resolvedAt) || isResolvedStatus(it.status);
+      if (!resolved) { down.push(it); continue; }
+      const t = it.resolvedAt ? new Date(it.resolvedAt).getTime() : now;
+      if (now - t < DAY) up24.push(it);
+    }
+    return { down, up24 };
+  }, [items]);
+
+  return (
+    <div className="space-y-4">
+      <div className="flex flex-wrap items-center gap-3">
+        <button
+          onClick={() => setSubView("down")}
+          className={`flex items-center gap-2 rounded-lg border border-critical/40 bg-critical-dim px-3 py-2 transition-all ${
+            subView === "down" ? "ring-2 ring-critical" : "opacity-50 hover:opacity-100"
+          }`}
+        >
+          <Siren className="h-4 w-4 text-critical" />
+          <span className="text-sm text-text-primary">
+            <span className="text-lg font-bold text-critical">{down.length}</span> DOWN
+          </span>
+        </button>
+        <button
+          onClick={() => setSubView("up24")}
+          className={`flex items-center gap-2 rounded-lg border border-success/30 bg-success/10 px-3 py-2 transition-all ${
+            subView === "up24" ? "ring-2 ring-success" : "opacity-50 hover:opacity-100"
+          }`}
+        >
+          <CheckCircle2 className="h-4 w-4 text-success" />
+          <span className="text-sm text-text-primary">
+            <span className="text-lg font-bold text-success">{up24.length}</span> UP
+          </span>
+        </button>
+      </div>
+
+      {subView === "down" && (
+        <WarRoomTable
+          title="Críticos — DOWN"
+          accent="critical"
+          items={down}
+          isLoading={isLoading}
+          emptyText="Sin incidentes de Clientes TOP caídos."
+          onPatch={onPatch}
+        />
+      )}
+      {subView === "up24" && (
+        <WarRoomTable
+          title="Críticos — UP (24 h)"
+          accent="success"
+          items={up24}
+          isLoading={isLoading}
+          emptyText="Sin recuperaciones en las últimas 24 h."
+          onPatch={onPatch}
+        />
+      )}
     </div>
   );
 }
