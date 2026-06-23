@@ -117,13 +117,13 @@ export function WarRoomView() {
         </button>
         <button
           onClick={() => setView("cm")}
-          className={`flex items-center gap-2 rounded-lg border border-accent/30 bg-accent/10 px-3 py-2 transition-all ${
-            view === "cm" ? "ring-2 ring-accent" : "opacity-50 hover:opacity-100"
+          className={`flex items-center gap-2 rounded-lg border border-critical/40 bg-critical-dim px-3 py-2 transition-all ${
+            view === "cm" ? "ring-2 ring-critical" : "opacity-50 hover:opacity-100"
           }`}
         >
-          <CheckCircle2 className="h-4 w-4 text-accent" />
+          <Siren className="h-4 w-4 text-critical" />
           <span className="text-sm text-text-primary">
-            <span className="text-lg font-bold text-accent">{cmDownCount}</span>{" "}
+            <span className="text-lg font-bold text-critical">{cmDownCount}</span>{" "}
             <span className="font-medium">Contrato Marco</span>
           </span>
         </button>
