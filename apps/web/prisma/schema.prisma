@@ -189,6 +189,50 @@ model WarRoomIncident {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// CONTRATO MARCO: base de clientes con contrato marco (similar a Clientes TOP).
+// Match en tiempo real contra OpenIncident por company, serviceRef o siglasIm.
+// ─────────────────────────────────────────────────────────────────────────────
+model ContratoMarco {
+  id         String   @id @default(cuid())
+  siglasIm   String   @default("")
+  company    String
+  serviceRef String   @default("")
+  note       String?
+  createdBy  String   @default("")
+  createdAt  DateTime @default(now())
+
+  @@index([siglasIm])
+  @@index([company])
+  @@index([serviceRef])
+}
+
+// Incidentes que coincidieron con un cliente de Contrato Marco.
+// Persiste para notas/banderas/quitar. Historial UP: 12 horas (no 7 días).
+model ContratoMarcoIncident {
+  incidentId  String    @id
+  openTime    DateTime
+  status      String    @default("")
+  company     String    @default("")
+  serviceId   String    @default("")
+  state       String    @default("")
+  district    String    @default("")
+  assignee    String?
+  group       String    @default("")
+  matchedBy   String    @default("")
+  flagged     Boolean   @default(false)
+  note        String?
+  dismissed   Boolean   @default(false)
+  resolvedAt  DateTime?
+  firstSeenAt DateTime  @default(now())
+  lastSeenAt  DateTime  @default(now())
+
+  @@index([company])
+  @@index([serviceId])
+  @@index([firstSeenAt])
+  @@index([resolvedAt])
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // BASE DE CONOCIMIENTO: enlaces / PDF / Drive con categoría. El Admin administra.
 // ─────────────────────────────────────────────────────────────────────────────
 model KnowledgeDoc {

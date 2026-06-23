@@ -10,6 +10,7 @@ import {
   pickCol,
 } from "@/lib/csv/hpsm";
 import { syncWarRoom } from "@/lib/war-room";
+import { syncContratoMarco } from "@/lib/contrato-marco";
 
 // Carga del CSV de incidentes ABIERTOS.
 // El archivo trae todos los grupos; filtramos a PEXA/CECOR, quitamos duplicados
@@ -130,6 +131,13 @@ export async function POST(req: NextRequest) {
       warRoomMatched = await syncWarRoom(records);
     } catch (e) {
       console.error("[open/upload] syncWarRoom falló (no crítico):", e);
+    }
+
+    // Contrato Marco: detectar incidentes de clientes con contrato marco.
+    try {
+      await syncContratoMarco(records);
+    } catch (e) {
+      console.error("[open/upload] syncContratoMarco falló (no crítico):", e);
     }
 
     await db.auditLog

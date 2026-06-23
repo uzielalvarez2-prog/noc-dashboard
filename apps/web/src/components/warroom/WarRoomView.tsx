@@ -56,7 +56,7 @@ export function WarRoomView() {
   const items = useMemo(() => data?.items ?? [], [data]);
 
   // Qué tabla se muestra (los chips de arriba funcionan como pestañas).
-  const [view, setView] = useState<"down" | "up24">("down");
+  const [view, setView] = useState<"down" | "up24" | "cm">("down");
 
   // Dos cubetas: DOWN (caído) y UP (<24h).
   const { down, up24 } = useMemo(() => {
@@ -126,6 +126,15 @@ export function WarRoomView() {
           </span>
         </button>
         <button
+          onClick={() => setView("cm")}
+          className={`flex items-center gap-2 rounded-lg border border-accent/30 bg-accent/10 px-3 py-2 transition-all ${
+            view === "cm" ? "ring-2 ring-accent" : "opacity-50 hover:opacity-100"
+          }`}
+        >
+          <CheckCircle2 className="h-4 w-4 text-accent" />
+          <span className="text-sm text-text-primary font-medium">Contrato Marco</span>
+        </button>
+        <button
           onClick={() => qc.invalidateQueries({ queryKey: ["war-room"] })}
           className="ml-auto flex items-center gap-1.5 rounded-md border border-border bg-surface px-2.5 py-1.5 text-xs text-text-muted transition-colors hover:text-text-primary"
         >
@@ -153,6 +162,7 @@ export function WarRoomView() {
           onPatch={patch}
         />
       )}
+      {view === "cm" && <ContratoMarcoView />}
     </div>
   );
 }
@@ -340,6 +350,120 @@ function WarRoomTable({
     </div>
   );
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+
+async function fetchContratoMarco(): Promise<{ items: WarRoomItem[] }> {
+  const res = await fetch("/api/contrato-marco");
+  if (!res.ok) throw new Error("Error al cargar Contrato Marco");
+  return res.json();
+}
+
+const HALF_DAY = 12 * 60 * 60 * 1000;
+
+function ContratoMarcoView() {
+  const qc = useQueryClient();
+  const { data, isLoading } = useQuery({
+    queryKey: ["contrato-marco"],
+    queryFn: fetchContratoMarco,
+    refetchInterval: 60_000,
+  });
+
+  const items = useMemo(() => data?.items ?? [], [data]);
+  const [subView, setSubView] = useState<"down" | "up12">("down");
+
+  const { down, up12 } = useMemo(() => {
+    const now = Date.now();
+    const down: WarRoomItem[] = [];
+    const up12: WarRoomItem[] = [];
+    for (const it of items) {
+      const resolved = Boolean(it.resolvedAt) || isResolvedStatus(it.status);
+      if (!resolved) { down.push(it); continue; }
+      const t = it.resolvedAt ? new Date(it.resolvedAt).getTime() : now;
+      if (now - t < HALF_DAY) up12.push(it);
+    }
+    return { down, up12 };
+  }, [items]);
+
+  async function patch(it: WarRoomItem, body: Partial<{ flagged: boolean; note: string; dismissed: boolean }>) {
+    qc.setQueryData<{ items: WarRoomItem[] }>(["contrato-marco"], (old) =>
+      old
+        ? {
+            items: body.dismissed
+              ? old.items.filter((x) => x.incidentId !== it.incidentId)
+              : old.items.map((x) => x.incidentId === it.incidentId ? { ...x, ...body } : x),
+          }
+        : old
+    );
+    try {
+      await fetch("/api/contrato-marco", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ incidentId: it.incidentId, ...body }),
+      });
+    } catch {
+      qc.invalidateQueries({ queryKey: ["contrato-marco"] });
+    }
+  }
+
+  return (
+    <div className="space-y-4">
+      <div className="flex flex-wrap items-center gap-3">
+        <button
+          onClick={() => setSubView("down")}
+          className={`flex items-center gap-2 rounded-lg border border-critical/40 bg-critical-dim px-3 py-2 transition-all ${
+            subView === "down" ? "ring-2 ring-critical" : "opacity-50 hover:opacity-100"
+          }`}
+        >
+          <Siren className="h-4 w-4 text-critical" />
+          <span className="text-sm text-text-primary">
+            <span className="text-lg font-bold text-critical">{down.length}</span> DOWN
+          </span>
+        </button>
+        <button
+          onClick={() => setSubView("up12")}
+          className={`flex items-center gap-2 rounded-lg border border-success/30 bg-success/10 px-3 py-2 transition-all ${
+            subView === "up12" ? "ring-2 ring-success" : "opacity-50 hover:opacity-100"
+          }`}
+        >
+          <CheckCircle2 className="h-4 w-4 text-success" />
+          <span className="text-sm text-text-primary">
+            <span className="text-lg font-bold text-success">{up12.length}</span> UP (12h)
+          </span>
+        </button>
+        <button
+          onClick={() => qc.invalidateQueries({ queryKey: ["contrato-marco"] })}
+          className="ml-auto flex items-center gap-1.5 rounded-md border border-border bg-surface px-2.5 py-1.5 text-xs text-text-muted transition-colors hover:text-text-primary"
+        >
+          <RotateCw className="h-3.5 w-3.5" /> Actualizar
+        </button>
+      </div>
+
+      {subView === "down" && (
+        <WarRoomTable
+          title="Contrato Marco — DOWN"
+          accent="critical"
+          items={down}
+          isLoading={isLoading}
+          emptyText="Sin incidentes de Contrato Marco caídos."
+          onPatch={patch}
+        />
+      )}
+      {subView === "up12" && (
+        <WarRoomTable
+          title="Contrato Marco — UP (12 h)"
+          accent="success"
+          items={up12}
+          isLoading={isLoading}
+          emptyText="Sin recuperaciones en las últimas 12 h."
+          onPatch={patch}
+        />
+      )}
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 
 // Celda de nota editable in-place: click al lápiz → input → ✔ guarda / X cancela.
 function NoteCell({ value, onSave }: { value: string; onSave: (note: string) => void }) {
