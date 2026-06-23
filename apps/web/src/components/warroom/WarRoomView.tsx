@@ -56,14 +56,13 @@ export function WarRoomView() {
   const items = useMemo(() => data?.items ?? [], [data]);
 
   // Qué tabla se muestra (los chips de arriba funcionan como pestañas).
-  const [view, setView] = useState<"down" | "up24" | "up7d">("down");
+  const [view, setView] = useState<"down" | "up24">("down");
 
-  // Tres cubetas: DOWN (caído), UP (<24h) y UP histórico (24h–7d).
-  const { down, up24, up7d } = useMemo(() => {
+  // Dos cubetas: DOWN (caído) y UP (<24h).
+  const { down, up24 } = useMemo(() => {
     const now = Date.now();
     const down: WarRoomItem[] = [];
     const up24: WarRoomItem[] = [];
-    const up7d: WarRoomItem[] = [];
     for (const it of items) {
       const resolved = Boolean(it.resolvedAt) || isResolvedStatus(it.status);
       if (!resolved) {
@@ -72,9 +71,8 @@ export function WarRoomView() {
       }
       const t = it.resolvedAt ? new Date(it.resolvedAt).getTime() : now;
       if (now - t < DAY) up24.push(it);
-      else up7d.push(it);
     }
-    return { down, up24, up7d };
+    return { down, up24 };
   }, [items]);
 
   // Actualización parcial optimista en la caché + POST al server.
@@ -128,17 +126,6 @@ export function WarRoomView() {
           </span>
         </button>
         <button
-          onClick={() => setView("up7d")}
-          className={`flex items-center gap-2 rounded-lg border border-border bg-surface-elevated px-3 py-2 transition-all ${
-            view === "up7d" ? "ring-2 ring-accent" : "opacity-50 hover:opacity-100"
-          }`}
-        >
-          <CheckCircle2 className="h-4 w-4 text-text-muted" />
-          <span className="text-sm text-text-primary">
-            <span className="text-lg font-bold text-text-primary">{up7d.length}</span> UP (7d)
-          </span>
-        </button>
-        <button
           onClick={() => qc.invalidateQueries({ queryKey: ["war-room"] })}
           className="ml-auto flex items-center gap-1.5 rounded-md border border-border bg-surface px-2.5 py-1.5 text-xs text-text-muted transition-colors hover:text-text-primary"
         >
@@ -163,16 +150,6 @@ export function WarRoomView() {
           items={up24}
           isLoading={isLoading}
           emptyText="Sin recuperaciones en las últimas 24 h."
-          onPatch={patch}
-        />
-      )}
-      {view === "up7d" && (
-        <WarRoomTable
-          title="UP (7d) — histórico"
-          accent="muted"
-          items={up7d}
-          isLoading={isLoading}
-          emptyText="Sin recuperaciones de hace 1–7 días."
           onPatch={patch}
         />
       )}

@@ -5,19 +5,19 @@ import { db } from "@/lib/db";
 export const dynamic = "force-dynamic";
 
 // War Room: incidentes de Clientes TOP. Devuelve los activos (sin resolver) +
-// los recuperados en los últimos 7 días. Excluye los descartados (X "quitar").
-// El cliente separa en 3 vistas: DOWN, UP (<24h) y UP histórico (24h–7d).
+// los recuperados en las últimas 24h. Excluye los descartados (X "quitar").
+// El cliente separa en 2 vistas: DOWN y UP (<24h).
 export async function GET(req: NextRequest) {
   const session = getSessionFromRequest(req);
   if (!session) return NextResponse.json({ error: "No autorizado" }, { status: 401 });
 
   try {
-    const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+    const oneDayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
 
     const rows = await db.warRoomIncident.findMany({
       where: {
         dismissed: false,
-        OR: [{ resolvedAt: null }, { resolvedAt: { gte: sevenDaysAgo } }],
+        OR: [{ resolvedAt: null }, { resolvedAt: { gte: oneDayAgo } }],
       },
       orderBy: [{ resolvedAt: "asc" }, { openTime: "desc" }],
     });

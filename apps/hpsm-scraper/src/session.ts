@@ -204,7 +204,7 @@ export async function exportCurrentViewToCsv(
   // El botón de confirmar es img[src*="tok"] (✓ verde).
   // CRÍTICO: usar .click({ force:true }) — ExtJS panels intercept pointer events en ese frame.
   // Iniciar downloadPromise ANTES del click para no perder el evento.
-  const downloadPromise = page.waitForEvent("download", { timeout: 300_000 });
+  const downloadPromise = page.waitForEvent("download", { timeout: 600_000 });
 
   // Confirmar con img[src*="tok"].
   // NO usar .click({ force:true }): los paneles ExtJS interceptan a nivel de coordenadas de browser.
