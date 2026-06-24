@@ -1,8 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Siren, X, Download, ChevronDown, Check, Flag, CheckCircle2 } from "lucide-react";
+import { Siren, X, Download, ChevronDown, Check, Flag, CheckCircle2, Search } from "lucide-react";
 import { cn, formatHpsm, formatHpsmExcel } from "@/lib/utils";
 import { downloadXLSX } from "@/lib/excelExport";
 
@@ -74,13 +74,14 @@ function GroupBadge({ group }: { group: string | null }) {
 
 const COLS = [
   "Incident ID", "Apertura", "Estatus", "Empresa", "Servicio",
-  "Estado", "Asignado", "Distrito", "Grupo",
+  "Estado", "Asignado", "Distrito",
 ];
 
 export function EscalatedPanel() {
   const qc = useQueryClient();
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const [editingNote, setEditingNote] = useState<Record<string, string>>({});
+  const [searchQuery, setSearchQuery] = useState("");
   // Pestaña activa: "edc" = escalados activos (caídos) · "up" = ya resueltos.
   const [view, setView] = useState<"edc" | "up">("edc");
 
@@ -143,7 +144,28 @@ export function EscalatedPanel() {
   const isUp = (it: EscalatedItem) => !it.stillOpen || /resolv|resuelt/i.test(it.status);
   const downItems = items.filter((it) => !isUp(it));
   const upItems = items.filter(isUp);
-  const shown = view === "edc" ? downItems : upItems;
+  const baseItems = view === "edc" ? downItems : upItems;
+
+  // Filtrado por búsqueda
+  const shown = useMemo(() => {
+    const needle = searchQuery.trim().toLowerCase();
+    if (!needle) return baseItems;
+    return baseItems.filter((it) =>
+      [
+        it.incidentId,
+        it.openTime,
+        it.status,
+        it.company,
+        it.serviceId,
+        it.state,
+        it.district,
+        it.assignee ?? "",
+      ]
+        .join(" ")
+        .toLowerCase()
+        .includes(needle)
+    );
+  }, [baseItems, searchQuery]);
 
   const toggleExpanded = (id: string) => {
     const newSet = new Set(expanded);
@@ -174,7 +196,6 @@ export function EscalatedPanel() {
       it.state,
       it.assignee ?? "—",
       it.district,
-      it.group ?? "—",
     ]);
     const base = view === "edc" ? "escalados-edc" : "edc-up-resueltos";
     downloadXLSX(`${base}.xlsx`, view === "edc" ? "Escalados" : "EDC-UP", COLS, rows);
@@ -271,15 +292,26 @@ export function EscalatedPanel() {
             )}
           </button>
         </div>
-        {shown.length > 0 && (
-          <button
-            type="button"
-            onClick={onExport}
-            className="flex items-center gap-1.5 rounded-md border border-border bg-surface px-2.5 py-1 text-xs text-text-muted transition-colors hover:border-accent hover:text-accent"
-          >
-            <Download className="h-3.5 w-3.5" /> Excel
-          </button>
-        )}
+        <div className="flex items-center gap-2 ml-auto">
+          <div className="relative">
+            <Search className="absolute left-2 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-text-muted" />
+            <input
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder="Buscar..."
+              className="rounded-md border border-border bg-surface py-1.5 pl-7 pr-2.5 text-xs text-text-primary placeholder:text-text-muted/60 focus:border-accent focus:outline-none"
+            />
+          </div>
+          {shown.length > 0 && (
+            <button
+              type="button"
+              onClick={onExport}
+              className="flex items-center gap-1.5 rounded-md border border-border bg-surface px-2.5 py-1 text-xs text-text-muted transition-colors hover:border-accent hover:text-accent"
+            >
+              <Download className="h-3.5 w-3.5" /> Excel
+            </button>
+          )}
+        </div>
       </div>
 
       {shown.length === 0 ? (
@@ -370,7 +402,6 @@ export function EscalatedPanel() {
                     {it.assignee ?? <span className={it.flagged ? "text-critical" : "text-text-muted"}>—</span>}
                   </td>
                   <td className={cn("whitespace-nowrap px-3 py-2", it.flagged ? "text-critical" : "text-text-primary")}>{it.district}</td>
-                  <td className="px-3 py-2"><GroupBadge group={it.group} /></td>
                 </tr>,
                 ...(expanded.has(it.incidentId)
                   ? [
