@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { AlertTriangle, CheckCircle2, X } from "lucide-react";
+import { AlertTriangle, CheckCircle2, User, X } from "lucide-react";
 
 // UP/recuperado si el status contiene resolv/resuelt (mismo criterio que el server).
 function isResolvedStatus(status: string | null | undefined): boolean {
@@ -14,6 +14,7 @@ interface WarRoomItem {
   status: string;
   company: string;
   serviceId: string;
+  assignee: string | null;
   resolvedAt: string | null;
 }
 
@@ -43,6 +44,8 @@ interface Toast {
   incidentId: string;
   company: string;
   serviceId: string;
+  // Solo se usa en los toasts DOWN: a quién está asignado el incidente.
+  assignee?: string | null;
 }
 
 // Notificaciones globales de War Room. Se monta una sola vez en el layout del
@@ -76,6 +79,7 @@ export function WarRoomAlerts() {
           incidentId: it.incidentId,
           company: it.company,
           serviceId: it.serviceId,
+          assignee: it.assignee,
         });
       }
       if (resolved && !seenUp.has(it.incidentId)) {
@@ -157,6 +161,22 @@ export function WarRoomAlerts() {
                     {t.serviceId}
                   </p>
                 )}
+                {/* Asignado: solo en DOWN, para saber a quién avisar a tiempo. */}
+                {down &&
+                  (t.assignee && t.assignee.trim() ? (
+                    <p className="mt-1.5 flex items-center gap-1.5 truncate text-xs font-semibold text-text-primary">
+                      <User className="h-3.5 w-3.5 shrink-0 text-text-muted" />
+                      <span className="truncate">
+                        Asignado: <span className="text-critical">{t.assignee}</span>
+                      </span>
+                    </p>
+                  ) : (
+                    <p className="mt-1.5">
+                      <span className="inline-flex items-center gap-1 rounded bg-warning/15 px-1.5 py-0.5 text-xs font-bold text-warning">
+                        <User className="h-3.5 w-3.5 shrink-0" /> Sin asignar
+                      </span>
+                    </p>
+                  ))}
               </div>
               <button
                 onClick={() => dismiss(t.key)}
