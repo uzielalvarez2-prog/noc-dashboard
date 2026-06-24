@@ -22,6 +22,27 @@ export async function GET(req: NextRequest) {
       orderBy: [{ resolvedAt: "asc" }, { openTime: "desc" }],
     });
 
+    // Auto-resolución: incidentes DOWN que ya no están en el snapshot de abiertos
+    // se marcan con resolvedAt=ahora, igual que hace el panel EDC con stillOpen.
+    const downIds = rows.filter((r) => r.resolvedAt === null).map((r) => r.incidentId);
+    const resolvedNow = new Map<string, Date>();
+    if (downIds.length > 0) {
+      const stillOpen = await db.openIncident.findMany({
+        where: { incidentId: { in: downIds } },
+        select: { incidentId: true },
+      });
+      const openSet = new Set(stillOpen.map((r) => r.incidentId));
+      const gone = downIds.filter((id) => !openSet.has(id));
+      if (gone.length > 0) {
+        const now = new Date();
+        await db.warRoomIncident.updateMany({
+          where: { incidentId: { in: gone }, resolvedAt: null },
+          data: { resolvedAt: now },
+        });
+        for (const id of gone) resolvedNow.set(id, now);
+      }
+    }
+
     // Recurrencia: cuántos incidentes (en la ventana) por empresa|servicio.
     const recur = new Map<string, number>();
     for (const r of rows) {
@@ -29,23 +50,26 @@ export async function GET(req: NextRequest) {
       recur.set(key, (recur.get(key) ?? 0) + 1);
     }
 
-    const items = rows.map((r) => ({
-      incidentId: r.incidentId,
-      openTime: r.openTime.toISOString(),
-      status: r.status,
-      company: r.company,
-      serviceId: r.serviceId,
-      state: r.state,
-      district: r.district,
-      assignee: r.assignee,
-      group: r.group,
-      matchedBy: r.matchedBy,
-      flagged: r.flagged,
-      note: r.note ?? "",
-      resolvedAt: r.resolvedAt ? r.resolvedAt.toISOString() : null,
-      firstSeenAt: r.firstSeenAt.toISOString(),
-      recurrence: recur.get(`${r.company.toLowerCase()}|${r.serviceId.toLowerCase()}`) ?? 1,
-    }));
+    const items = rows.map((r) => {
+      const effectiveResolvedAt = resolvedNow.get(r.incidentId) ?? r.resolvedAt;
+      return {
+        incidentId: r.incidentId,
+        openTime: r.openTime.toISOString(),
+        status: r.status,
+        company: r.company,
+        serviceId: r.serviceId,
+        state: r.state,
+        district: r.district,
+        assignee: r.assignee,
+        group: r.group,
+        matchedBy: r.matchedBy,
+        flagged: r.flagged,
+        note: r.note ?? "",
+        resolvedAt: effectiveResolvedAt ? effectiveResolvedAt.toISOString() : null,
+        firstSeenAt: r.firstSeenAt.toISOString(),
+        recurrence: recur.get(`${r.company.toLowerCase()}|${r.serviceId.toLowerCase()}`) ?? 1,
+      };
+    });
 
     return NextResponse.json({ items });
   } catch (err) {
