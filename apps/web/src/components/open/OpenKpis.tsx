@@ -26,36 +26,17 @@ export function OpenKpis({ stats, group = "ALL" }: { stats?: OpenStats; group?: 
   const pexa = stats?.byGroup.find((g) => g.group === "PEXA")?.incidents ?? 0;
   const cecor = stats?.byGroup.find((g) => g.group === "CECOR")?.incidents ?? 0;
 
-  // "Todos" engloba ambos grupos → PEXA + CECOR (sin desglose por estatus).
-  // En una pestaña de grupo (PEXA/CECOR) "Incidentes abiertos" ya ES ese total,
-  // así que en vez de repetir la tarjeta del grupo, mostramos WIP + Resueltos.
+  // "Todos" engloba ambos grupos → total + desglose PEXA/CECOR. En una pestaña de
+  // grupo, "Incidentes abiertos" YA es ese total, así que solo va esa tarjeta.
+  // El desglose por estatus vive en la sección "Por estatus" (StatusBreakdown).
   const showGroups = group === "ALL";
-  const showStatus = group !== "ALL";
-  const count = 1 + (showGroups ? 2 : 0) + (showStatus ? 2 : 0);
-  const cols =
-    count >= 5 ? "md:grid-cols-5" : count === 4 ? "md:grid-cols-4" : "md:grid-cols-3";
+  const cols = showGroups ? "md:grid-cols-3" : "md:grid-cols-1";
 
   return (
     <div className={`grid grid-cols-2 gap-3 ${cols}`}>
       <Card label="Incidentes abiertos" value={stats?.totalIncidents ?? "—"} sub="únicos" />
       {showGroups && <Card label="PEXA" value={pexa} accent="text-accent" sub="incidentes" />}
       {showGroups && <Card label="CECOR" value={cecor} accent="text-warning" sub="incidentes" />}
-      {showStatus && (
-        <Card
-          label="Work In Progress"
-          value={stats?.workInProgress ?? "—"}
-          accent="text-accent"
-          sub="en progreso"
-        />
-      )}
-      {showStatus && (
-        <Card
-          label="Resueltos"
-          value={stats?.resolved ?? "—"}
-          accent="text-success"
-          sub="status resolved"
-        />
-      )}
     </div>
   );
 }

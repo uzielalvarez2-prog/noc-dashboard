@@ -6,7 +6,7 @@ import { Search, ChevronLeft, ChevronRight, RefreshCw, Star, Download } from "lu
 import type { OpenListResponse } from "@/types/open";
 import { fetchEscalated, type EscalatedResponse } from "@/components/dashboard/EscalatedPanel";
 import { cn, formatDate, formatHpsm } from "@/lib/utils";
-import { downloadXLSX } from "@/lib/excelExport";
+import { exportOpenIncidents, type SortDir } from "@/lib/exportOpenIncidents";
 
 const COLUMNS = [
   { key: "incidentId", label: "Incident ID" },
@@ -51,7 +51,7 @@ function GroupBadge({ group }: { group: string }) {
   );
 }
 
-export function OpenIncidentTable({ group }: { group: string }) {
+export function OpenIncidentTable({ group, sortDir }: { group: string; sortDir: SortDir }) {
   const [search, setSearch] = useState("");
   const [q, setQ] = useState("");
   const [page, setPage] = useState(1);
@@ -108,51 +108,13 @@ export function OpenIncidentTable({ group }: { group: string }) {
   });
 
   // Descarga TODO lo que coincide con el filtro/búsqueda actual (no solo la
-  // página visible), paginando contra el API hasta juntar el total. El .xlsx
-  // sale como Tabla de Excel, listo para "Insertar > Tabla dinámica".
+  // página visible). Sale DEDUPLICADO (1 fila por incidente) y ordenado por
+  // fecha de apertura según el toggle. El .xlsx sale como Tabla de Excel, listo
+  // para "Insertar > Tabla dinámica".
   async function handleExport() {
     setExporting(true);
     try {
-      const base = new URLSearchParams();
-      if (q) base.set("q", q);
-      if (group !== "ALL") base.set("group", group);
-      base.set("collapse", "false");
-      const all: OpenListResponse["data"] = [];
-      const pageSize = 500;
-      let p = 1;
-      for (;;) {
-        const sp = new URLSearchParams(base);
-        sp.set("page", String(p));
-        sp.set("limit", String(pageSize));
-        const res = await fetchOpen(sp.toString());
-        all.push(...res.data);
-        if (res.data.length === 0 || all.length >= res.meta.total) break;
-        p++;
-      }
-      // Export a nivel sitio (1 fila por sitio) = mejor base para tabla dinámica.
-      // "# Sitios" se omite (no aplica al detalle por sitio).
-      const headers = [
-        ...COLUMNS.filter((c) => c.key !== "siteCount").map((c) => c.label),
-        "Apertura",
-      ];
-      const exportRows = all.map((r) => [
-        r.incidentId,
-        r.company,
-        r.serviceId,
-        r.state,
-        r.district,
-        r.assignee ?? "",
-        r.status,
-        r.group,
-        formatHpsm(r.openTime),
-      ]);
-      const stamp = new Date().toISOString().slice(0, 10);
-      await downloadXLSX(
-        `incidentes-abiertos-${group.toLowerCase()}-${stamp}`,
-        "Abiertos",
-        headers,
-        exportRows,
-      );
+      await exportOpenIncidents({ q, group, sortDir, label: "abiertos" });
     } finally {
       setExporting(false);
     }

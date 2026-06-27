@@ -204,6 +204,7 @@ export async function getOpenStats(group?: string, maxAgeHours?: number) {
   const stateMap = new Map<string, { sites: number; ids: Set<string> }>();
   const distMap = new Map<string, { sites: number; ids: Set<string> }>();
   const groupIds = new Map<string, Set<string>>();
+  const statusIds = new Map<string, Set<string>>();
   const allIds = new Set<string>();
   const wipIds = new Set<string>();
   const resolvedIds = new Set<string>();
@@ -214,6 +215,12 @@ export async function getOpenStats(group?: string, maxAgeHours?: number) {
     const st = (r.status ?? "").toLowerCase();
     if (st.includes("progress")) wipIds.add(r.incidentId);
     if (st.includes("resolv")) resolvedIds.add(r.incidentId);
+
+    // Desglose por estatus (incidentes únicos) → tarjetas dinámicas en la UI.
+    const statusKey = (r.status ?? "").trim() || "(sin estatus)";
+    let stSet = statusIds.get(statusKey);
+    if (!stSet) statusIds.set(statusKey, (stSet = new Set()));
+    stSet.add(r.incidentId);
 
     let g = groupIds.get(r.group);
     if (!g) groupIds.set(r.group, (g = new Set()));
@@ -237,6 +244,9 @@ export async function getOpenStats(group?: string, maxAgeHours?: number) {
     resolved: resolvedIds.size,
     byGroup: [...groupIds.entries()]
       .map(([g, ids]) => ({ group: g, incidents: ids.size }))
+      .sort((a, b) => b.incidents - a.incidents),
+    byStatus: [...statusIds.entries()]
+      .map(([status, ids]) => ({ status, incidents: ids.size }))
       .sort((a, b) => b.incidents - a.incidents),
     topByState: topFrom(stateMap),
     topByDistrict: topFrom(distMap),

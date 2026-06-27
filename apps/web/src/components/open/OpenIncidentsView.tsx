@@ -4,9 +4,11 @@ import { useEffect, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import type { OpenStats } from "@/types/open";
 import { OpenKpis } from "./OpenKpis";
+import { StatusBreakdown } from "./StatusBreakdown";
 import { TopByDimension } from "./TopByDimension";
 import { OpenIncidentTable } from "./OpenIncidentTable";
 import { EscalatedPanel } from "@/components/dashboard/EscalatedPanel";
+import type { SortDir } from "@/lib/exportOpenIncidents";
 import { cn } from "@/lib/utils";
 import { RefreshCw } from "lucide-react";
 
@@ -46,6 +48,8 @@ async function fetchStats(group: Group, maxAgeHours?: number): Promise<OpenStats
 
 export function OpenIncidentsView() {
   const [group, setGroup] = useState<Group>("ALL");
+  // Orden de los Excel que se descargan (tabla + tarjetas por estatus).
+  const [sortDir, setSortDir] = useState<SortDir>("desc");
   // Top por Estado/Distrito: por defecto solo incidentes de la última hora.
   const [recentOnly, setRecentOnly] = useState(true);
   const maxAgeHours = recentOnly ? 1 : undefined;
@@ -108,6 +112,13 @@ export function OpenIncidentsView() {
 
       <OpenKpis stats={stats} group={group} />
 
+      <StatusBreakdown
+        stats={stats}
+        group={group}
+        sortDir={sortDir}
+        onSortDirChange={setSortDir}
+      />
+
       <EscalatedPanel />
 
       <div className="flex items-center justify-between gap-2">
@@ -147,7 +158,7 @@ export function OpenIncidentsView() {
 
       {/* La tabla de incidentes SIEMPRE muestra todo (no se filtra por ≤1h);
           el toggle "Última hora" es exclusivo del Top por Estado/Distrito. */}
-      <OpenIncidentTable group={group} />
+      <OpenIncidentTable group={group} sortDir={sortDir} />
     </div>
   );
 }
