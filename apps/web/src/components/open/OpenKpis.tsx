@@ -23,20 +23,19 @@ function Card({
 }
 
 export function OpenKpis({ stats, group = "ALL" }: { stats?: OpenStats; group?: string }) {
+  // Solo la vista "Todos" muestra el resumen total + desglose PEXA/CECOR. En las
+  // pestañas de grupo (PEXA/CECOR) el total se muestra como primera tarjeta de la
+  // sección "Por estatus" (StatusBreakdown), para no ocupar todo el ancho.
+  if (group !== "ALL") return null;
+
   const pexa = stats?.byGroup.find((g) => g.group === "PEXA")?.incidents ?? 0;
   const cecor = stats?.byGroup.find((g) => g.group === "CECOR")?.incidents ?? 0;
 
-  // "Todos" engloba ambos grupos → total + desglose PEXA/CECOR. En una pestaña de
-  // grupo, "Incidentes abiertos" YA es ese total, así que solo va esa tarjeta.
-  // El desglose por estatus vive en la sección "Por estatus" (StatusBreakdown).
-  const showGroups = group === "ALL";
-  const cols = showGroups ? "md:grid-cols-3" : "md:grid-cols-1";
-
   return (
-    <div className={`grid grid-cols-2 gap-3 ${cols}`}>
+    <div className="grid grid-cols-2 gap-3 md:grid-cols-3">
       <Card label="Incidentes abiertos" value={stats?.totalIncidents ?? "—"} sub="únicos" />
-      {showGroups && <Card label="PEXA" value={pexa} accent="text-accent" sub="incidentes" />}
-      {showGroups && <Card label="CECOR" value={cecor} accent="text-warning" sub="incidentes" />}
+      <Card label="PEXA" value={pexa} accent="text-accent" sub="incidentes" />
+      <Card label="CECOR" value={cecor} accent="text-warning" sub="incidentes" />
     </div>
   );
 }

@@ -28,6 +28,9 @@ export function StatusBreakdown({
 }) {
   const [loading, setLoading] = useState<string | null>(null);
   const byStatus = stats?.byStatus ?? [];
+  // En PEXA/CECOR el total de abiertos se muestra aquí como primera tarjeta
+  // (ámbar neón); en "Todos" sigue en el resumen de arriba (OpenKpis).
+  const showTotal = group !== "ALL";
 
   async function download(status: string) {
     setLoading(status);
@@ -66,12 +69,23 @@ export function StatusBreakdown({
         </div>
       </div>
 
-      {byStatus.length === 0 ? (
+      {byStatus.length === 0 && !showTotal ? (
         <p className="rounded-xl border border-border/60 bg-surface/40 p-4 text-center text-xs text-text-muted">
           Sin datos de estatus
         </p>
       ) : (
         <div className="grid grid-cols-2 gap-3 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
+          {showTotal && (
+            <div className="flex flex-col items-start rounded-xl border border-warning/50 bg-warning/5 p-4 ring-1 ring-warning/40 shadow-[0_0_14px_2px_rgba(245,158,11,0.30)] backdrop-blur-md">
+              <p className="truncate text-xs font-medium uppercase tracking-wider text-warning/90">
+                Incidentes abiertos
+              </p>
+              <p className="mt-1 text-2xl font-bold text-warning drop-shadow-[0_0_7px_rgba(245,158,11,0.8)]">
+                {stats?.totalIncidents ?? "—"}
+              </p>
+              <p className="mt-0.5 text-xs text-text-muted">únicos</p>
+            </div>
+          )}
           {byStatus.map(({ status, incidents }) => {
             const isLoading = loading === status;
             return (
