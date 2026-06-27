@@ -5,3 +5,7 @@ node_modules
 debug-*.png
 diag-*.png
 hpsm-cookies.json
+
+# Control Center API tokens (local only)
+.cc-token.json
+src/cc-token-test.ts

@@ -1,6 +1,19 @@
 import { db } from "@/lib/db";
 import type { Prisma } from "@prisma/client";
 
+// Torre CARE (API Control Center): sus incidentes se identifican por el prefijo
+// del número (IMCARE...). Se filtra por prefijo, no por grupo, porque CARE tiene
+// varios grupos (CARE-PROACTIVIDAD, etc.). Convive con PEXA/CECOR (HPSM).
+export const CARE_TOWER = "CARE";
+const CARE_PREFIX = "IMCARE";
+
+/** Filtro Prisma según la "torre"/grupo seleccionado. */
+function towerWhere(group?: string): Prisma.OpenIncidentWhereInput | null {
+  if (!group || group === "ALL") return null;
+  if (group === CARE_TOWER) return { incidentId: { startsWith: CARE_PREFIX } };
+  return { group }; // PEXA / CECOR: match exacto de grupo
+}
+
 export interface OpenFilters {
   q?: string;
   group?: string; // PEXA | CECOR | ALL
@@ -49,7 +62,8 @@ function hpsmCutoff(maxAgeHours: number): Date {
 /** Arma el filtro Prisma. El buscador `q` abarca todas las columnas visibles. */
 export function buildOpenWhere(f: OpenFilters): Prisma.OpenIncidentWhereInput {
   const and: Prisma.OpenIncidentWhereInput[] = [];
-  if (f.group && f.group !== "ALL") and.push({ group: f.group });
+  const tw = towerWhere(f.group);
+  if (tw) and.push(tw);
   if (f.state) and.push({ state: { equals: f.state, mode: "insensitive" } });
   if (f.district) and.push({ district: { equals: f.district, mode: "insensitive" } });
   if (f.assignee) and.push({ assignee: { contains: f.assignee, mode: "insensitive" } });
@@ -192,7 +206,7 @@ function colTotal(map: Map<string, { sites: number; ids: Set<string> }>): number
  * "incidentes únicos" por estado y por distrito (falla masiva).
  */
 export async function getOpenStats(group?: string, maxAgeHours?: number) {
-  const where: Prisma.OpenIncidentWhereInput = group && group !== "ALL" ? { group } : {};
+  const where: Prisma.OpenIncidentWhereInput = towerWhere(group) ?? {};
   if (maxAgeHours && maxAgeHours > 0) {
     where.openTime = { gte: hpsmCutoff(maxAgeHours) };
   }

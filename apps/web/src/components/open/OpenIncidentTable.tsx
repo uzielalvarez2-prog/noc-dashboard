@@ -8,17 +8,20 @@ import { fetchEscalated, type EscalatedResponse } from "@/components/dashboard/E
 import { cn, formatDate, formatHpsm } from "@/lib/utils";
 import { downloadXLSX } from "@/lib/excelExport";
 
-const COLUMNS = [
-  { key: "incidentId", label: "Incident ID" },
-  { key: "company", label: "Empresa" },
-  { key: "serviceId", label: "Servicio" },
-  { key: "state", label: "Estado" },
-  { key: "district", label: "Distrito" },
-  { key: "assignee", label: "Asignado" },
-  { key: "status", label: "Estatus" },
-  { key: "group", label: "Grupo" },
-  { key: "siteCount", label: "# Sitios" },
-] as const;
+// CARE (torre infra-céntrica) reusa los campos state/district como Sitio/Host.
+function columnsFor(isCare: boolean) {
+  return [
+    { key: "incidentId", label: "Incident ID" },
+    { key: "company", label: "Empresa" },
+    { key: "serviceId", label: "Servicio" },
+    { key: "state", label: isCare ? "Sitio" : "Estado" },
+    { key: "district", label: isCare ? "Host / CI" : "Distrito" },
+    { key: "assignee", label: "Asignado" },
+    { key: "status", label: "Estatus" },
+    { key: "group", label: "Grupo" },
+    { key: "siteCount", label: "# Sitios" },
+  ] as const;
+}
 
 async function fetchOpen(qs: string): Promise<OpenListResponse> {
   const res = await fetch(`/api/incidents/open?${qs}`);
@@ -39,11 +42,16 @@ function StatusBadge({ status }: { status: string }) {
 }
 
 function GroupBadge({ group }: { group: string }) {
+  const isCare = group.startsWith("CARE") || group.startsWith("IMCARE");
   return (
     <span
       className={cn(
         "rounded px-1.5 py-0.5 text-[10px] font-semibold",
-        group === "PEXA" ? "bg-accent/15 text-accent" : "bg-warning/15 text-warning"
+        isCare
+          ? "bg-success/15 text-success"
+          : group === "PEXA"
+          ? "bg-accent/15 text-accent"
+          : "bg-warning/15 text-warning"
       )}
     >
       {group}
@@ -52,6 +60,8 @@ function GroupBadge({ group }: { group: string }) {
 }
 
 export function OpenIncidentTable({ group }: { group: string }) {
+  const isCare = group === "CARE";
+  const COLUMNS = columnsFor(isCare);
   const [search, setSearch] = useState("");
   const [q, setQ] = useState("");
   const [page, setPage] = useState(1);

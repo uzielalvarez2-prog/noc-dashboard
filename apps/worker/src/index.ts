@@ -2,9 +2,24 @@ import "dotenv/config";
 import { config } from "./config.js";
 import { logger } from "./logger.js";
 import { syncIncidents, db } from "./sync/incidents.js";
+import { syncCare, isCareConfigured } from "./sync/care.js";
 import { HpsmClient } from "./hpsm/client.js";
 
 const hpsm = new HpsmClient();
+
+// CARE (API Control Center) corre en su propio intervalo, más espaciado que HPSM.
+const CARE_POLL_MS = Number(process.env.CC_POLL_MS ?? 300_000);
+
+async function runCareCycle(): Promise<void> {
+  try {
+    const { open, closed, errors } = await syncCare();
+    if (open > 0 || closed > 0 || errors > 0) {
+      logger.info(`Sync CARE: ${open} abiertos, ${closed} cerrados, ${errors} errores`);
+    }
+  } catch (err) {
+    logger.error("Error fatal en ciclo CARE", { err });
+  }
+}
 
 async function runCycle(): Promise<void> {
   const cycleStart = Date.now();
@@ -42,6 +57,16 @@ async function main(): Promise<void> {
     }
   }, config.poll.intervalMs);
 
+  // CARE: ingesta desde la API de Control Center (si está configurada).
+  let careInterval: NodeJS.Timeout | null = null;
+  if (isCareConfigured()) {
+    logger.info(`  CARE   : ${config.cc.apiBase} (cada ${CARE_POLL_MS}ms)`);
+    await runCareCycle();
+    careInterval = setInterval(runCareCycle, CARE_POLL_MS);
+  } else {
+    logger.info("  CARE   : sin configurar (faltan CC_* / TOTP) — omitido");
+  }
+
   // Heartbeat cada 60s (Railway monitoring)
   setInterval(() => logger.debug("[heartbeat] worker activo"), 60_000);
 
@@ -49,6 +74,7 @@ async function main(): Promise<void> {
   const shutdown = async (signal: string) => {
     logger.info(`${signal} recibido — cerrando...`);
     clearInterval(interval);
+    if (careInterval) clearInterval(careInterval);
     await db.$disconnect();
     process.exit(0);
   };
