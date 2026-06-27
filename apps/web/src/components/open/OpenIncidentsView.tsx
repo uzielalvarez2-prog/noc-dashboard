@@ -32,7 +32,7 @@ function formatCountdown(s: number) {
   return m > 0 ? `${m}m ${sec}s` : `${sec}s`;
 }
 
-type Group = "ALL" | "PEXA" | "CECOR";
+type Group = "ALL" | "PEXA" | "CECOR" | "CARE";
 
 async function fetchStats(group: Group, maxAgeHours?: number): Promise<OpenStats> {
   const p = new URLSearchParams();
@@ -59,6 +59,11 @@ export function OpenIncidentsView() {
 
   const countdown = useCountdown(dataUpdatedAt);
 
+  // CARE es infra-céntrico: Estado/Distrito se leen como Sitio/Host.
+  const isCare = group === "CARE";
+  const stateLabel = isCare ? "Sitio" : "Estado";
+  const districtLabel = isCare ? "Host / CI" : "Distrito";
+
   // Top: respeta el filtro ≤1h / Todo (query aparte para no tocar los KPIs).
   const { data: topStats } = useQuery<OpenStats>({
     queryKey: ["open-stats", group, recentOnly ? "1h" : "all"],
@@ -82,7 +87,7 @@ export function OpenIncidentsView() {
     <div className="space-y-5">
       <div className="flex items-center justify-between gap-2">
         <div className="flex items-center gap-2">
-          {(["ALL", "PEXA", "CECOR"] as Group[]).map((g) => (
+          {(["ALL", "PEXA", "CECOR", "CARE"] as Group[]).map((g) => (
             <button key={g} type="button" onClick={() => setGroup(g)} className={groupBtn(g)}>
               {g === "ALL" ? "Todos" : g}
             </button>
@@ -111,7 +116,7 @@ export function OpenIncidentsView() {
       <EscalatedPanel />
 
       <div className="flex items-center justify-between gap-2">
-        <h2 className="text-sm font-semibold text-text-primary">Top por Estado / Distrito</h2>
+        <h2 className="text-sm font-semibold text-text-primary">Top por {stateLabel} / {districtLabel}</h2>
         <div className="flex items-center gap-1">
           <button type="button" onClick={() => setRecentOnly(true)} className={ageBtn(recentOnly)}>
             Última hora (≤1h)
@@ -124,22 +129,22 @@ export function OpenIncidentsView() {
 
       <div className="grid gap-4 lg:grid-cols-2">
         <TopByDimension
-          title="IM-Estado"
-          dimensionLabel="Estado"
+          title={`IM-${stateLabel}`}
+          dimensionLabel={stateLabel}
           dimensionField="state"
           rows={topStats?.topByState ?? []}
           total={topStats?.stateTotal ?? 0}
-          fileBase={`im-estado-${group.toLowerCase()}${recentOnly ? "-1h" : ""}`}
+          fileBase={`im-${stateLabel.toLowerCase()}-${group.toLowerCase()}${recentOnly ? "-1h" : ""}`}
           group={group}
           maxAgeHours={maxAgeHours}
         />
         <TopByDimension
-          title="IM-Distrito"
-          dimensionLabel="Distrito"
+          title={`IM-${districtLabel}`}
+          dimensionLabel={districtLabel}
           dimensionField="district"
           rows={topStats?.topByDistrict ?? []}
           total={topStats?.districtTotal ?? 0}
-          fileBase={`im-distrito-${group.toLowerCase()}${recentOnly ? "-1h" : ""}`}
+          fileBase={`im-${districtLabel.toLowerCase()}-${group.toLowerCase()}${recentOnly ? "-1h" : ""}`}
           group={group}
           maxAgeHours={maxAgeHours}
         />
