@@ -19,7 +19,14 @@ export const config = {
     url: process.env.DATABASE_URL ?? "",
   },
   poll: {
-    intervalMs: Number(process.env.POLL_INTERVAL_MS ?? "10000"),
+    intervalMs: Number(process.env.POLL_INTERVAL_MS ?? "60000"),
     timeoutMs: Number(process.env.HPSM_TIMEOUT_MS ?? "30000"),
+  },
+  schedule: {
+    // Zona horaria para evaluar la ventana de pausa (Railway corre en UTC).
+    timezone: process.env.WORKER_TIMEZONE ?? "America/Mexico_City",
+    // Ventana de pausa nocturna: el worker no sincroniza para que Neon duerma.
+    pauseStart: process.env.WORKER_PAUSE_START ?? "23:30",
+    pauseEnd: process.env.WORKER_PAUSE_END ?? "05:55",
   },
 };

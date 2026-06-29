@@ -3,10 +3,16 @@ import { config } from "./config.js";
 import { logger } from "./logger.js";
 import { syncIncidents, db } from "./sync/incidents.js";
 import { HpsmClient } from "./hpsm/client.js";
+import { isPaused } from "./schedule.js";
 
 const hpsm = new HpsmClient();
 
 async function runCycle(): Promise<void> {
+  if (isPaused()) {
+    logger.debug("[schedule] Ventana de pausa nocturna — sync omitido (Neon duerme)");
+    return;
+  }
+
   const cycleStart = Date.now();
 
   const { synced, errors } = await syncIncidents();
@@ -24,6 +30,7 @@ async function main(): Promise<void> {
   logger.info(`  HPSM   : ${config.hpsm.baseUrl}`);
   logger.info(`  Grupos : ${config.hpsm.assignmentGroups.join(", ")}`);
   logger.info(`  Polling: ${config.poll.intervalMs}ms`);
+  logger.info(`  Pausa  : ${config.schedule.pauseStart}–${config.schedule.pauseEnd} (${config.schedule.timezone})`);
   logger.info("═══════════════════════════════════════");
 
   // Verificar conexión a HPSM
