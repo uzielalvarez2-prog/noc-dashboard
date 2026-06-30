@@ -14,15 +14,31 @@ interface Cliente {
   createdAt: string;
 }
 
-async function fetchClientes(): Promise<{ clientes: Cliente[] }> {
-  const res = await fetch("/api/clientes-top");
+async function fetchClientes(apiBase: string): Promise<{ clientes: Cliente[] }> {
+  const res = await fetch(apiBase);
   if (!res.ok) throw new Error("Error al cargar clientes");
   return res.json();
 }
 
-export function ClientesTopPanel() {
+export function ClientesTopPanel({
+  apiBase = "/api/clientes-top",
+  queryKey = "clientes-top",
+  invalidateKeys = ["war-room"],
+  heading = "Base de clientes críticos",
+}: {
+  /** Ruta base de la API (CRUD + bulk). */
+  apiBase?: string;
+  /** Clave de TanStack Query para esta base (debe ser única por base). */
+  queryKey?: string;
+  /** Queries adicionales a invalidar tras un cambio (la vista que consume esta base). */
+  invalidateKeys?: string[];
+  heading?: string;
+}) {
   const qc = useQueryClient();
-  const { data, isLoading } = useQuery({ queryKey: ["clientes-top"], queryFn: fetchClientes });
+  const { data, isLoading } = useQuery({
+    queryKey: [queryKey],
+    queryFn: () => fetchClientes(apiBase),
+  });
 
   const [filter, setFilter] = useState("");
   const [adding, setAdding] = useState(false);
@@ -40,8 +56,8 @@ export function ClientesTopPanel() {
   const [bulkText, setBulkText] = useState("");
 
   function invalidate() {
-    qc.invalidateQueries({ queryKey: ["clientes-top"] });
-    qc.invalidateQueries({ queryKey: ["war-room"] });
+    qc.invalidateQueries({ queryKey: [queryKey] });
+    for (const k of invalidateKeys) qc.invalidateQueries({ queryKey: [k] });
   }
 
   async function handleAdd() {
@@ -66,7 +82,7 @@ export function ClientesTopPanel() {
     setBusy(true);
     setError(null);
     try {
-      const res = await fetch("/api/clientes-top", {
+      const res = await fetch(apiBase, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ siglasIm: siglas, company, serviceRef: service }),
@@ -92,7 +108,7 @@ export function ClientesTopPanel() {
     setBusy(true);
     setError(null);
     try {
-      const res = await fetch(`/api/clientes-top/${id}`, {
+      const res = await fetch(`${apiBase}/${id}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ siglasIm: editSiglas, company: editCompany, serviceRef: editService }),
@@ -114,7 +130,7 @@ export function ClientesTopPanel() {
     setBusy(true);
     setError(null);
     try {
-      const res = await fetch(`/api/clientes-top/${id}`, { method: "DELETE" });
+      const res = await fetch(`${apiBase}/${id}`, { method: "DELETE" });
       if (!res.ok) {
         setError((await res.json()).error ?? "Error al eliminar");
         return;
@@ -146,7 +162,7 @@ export function ClientesTopPanel() {
     setBusy(true);
     setError(null);
     try {
-      const res = await fetch("/api/clientes-top", {
+      const res = await fetch(apiBase, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ bulk: rows }),
@@ -200,7 +216,7 @@ export function ClientesTopPanel() {
         <div className="flex items-center gap-2">
           <Building2 className="h-4 w-4 text-text-muted" />
           <h2 className="text-base font-semibold text-text-primary">
-            Base de clientes críticos
+            {heading}
           </h2>
           <span className="rounded-full border border-border bg-surface-elevated px-2 py-0.5 text-xs text-text-muted">
             {all.length}
