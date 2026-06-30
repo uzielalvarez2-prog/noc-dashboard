@@ -10,6 +10,12 @@ function norm(s: string | null | undefined): string {
   return (s ?? "").trim().toLowerCase();
 }
 
+// El prefijo alfabético del Incident ID (antes de los dígitos finales) es la
+// "Siglas IM" que usa el equipo para identificar clientes, ej. "IMSEDP003090" → "IMSEDP".
+function incidentPrefix(incidentId: string): string {
+  return norm(incidentId.replace(/\d+$/, ""));
+}
+
 export interface OpenRecordLite {
   incidentId: string;
   openTime: Date;
@@ -28,17 +34,20 @@ export interface OpenRecordLite {
 // incidentes únicos coincidieron.
 export async function syncWarRoom(records: OpenRecordLite[]): Promise<number> {
   const clientes = await db.clienteTop.findMany({
-    select: { company: true, serviceRef: true },
+    select: { company: true, serviceRef: true, siglasIm: true },
   });
   if (clientes.length === 0) return 0;
 
   const companySet = new Set<string>();
   const serviceSet = new Set<string>();
+  const siglasSet = new Set<string>();
   for (const c of clientes) {
     const co = norm(c.company);
     const sv = norm(c.serviceRef);
+    const si = norm(c.siglasIm);
     if (co) companySet.add(co);
     if (sv) serviceSet.add(sv);
+    if (si) siglasSet.add(si);
   }
 
   // Una fila por incidente (un incidente abarca varios sitios).
@@ -51,12 +60,17 @@ export async function syncWarRoom(records: OpenRecordLite[]): Promise<number> {
   for (const inc of byId.values()) {
     const co = norm(inc.company);
     const sv = norm(inc.serviceId);
+    const prefix = incidentPrefix(inc.incidentId);
     const companyMatch = co.length > 0 && companySet.has(co);
     const serviceMatch = sv.length > 0 && serviceSet.has(sv);
-    if (!companyMatch && !serviceMatch) continue;
+    // Siglas IM: compara contra el prefijo del Incident ID (formato estándar)
+    // y contra Empresa (algunos clientes se identifican por su acrónimo ahí).
+    const siglasMatch = (prefix.length > 0 && siglasSet.has(prefix)) || (co.length > 0 && siglasSet.has(co));
+    if (!companyMatch && !serviceMatch && !siglasMatch) continue;
     matched++;
 
-    const matchedBy = companyMatch && serviceMatch ? "both" : companyMatch ? "company" : "service";
+    const hits = [companyMatch && "company", serviceMatch && "service", siglasMatch && "siglas"].filter(Boolean);
+    const matchedBy = hits.length > 1 ? "both" : (hits[0] as string);
     const resolved = isResolvedStatus(inc.status);
 
     // Preservar la primera hora de recuperación; si se reabre, se limpia.

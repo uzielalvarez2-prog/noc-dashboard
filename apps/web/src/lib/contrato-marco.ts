@@ -8,6 +8,12 @@ function norm(s: string | null | undefined): string {
   return (s ?? "").trim().toLowerCase();
 }
 
+// El prefijo alfabético del Incident ID (antes de los dígitos finales) es la
+// "Siglas IM" que usa el equipo para identificar clientes, ej. "IMSEDP003090" → "IMSEDP".
+function incidentPrefix(incidentId: string): string {
+  return norm(incidentId.replace(/\d+$/, ""));
+}
+
 export interface OpenRecordLite {
   incidentId: string;
   openTime: Date;
@@ -49,13 +55,17 @@ export async function syncContratoMarco(records: OpenRecordLite[]): Promise<numb
   for (const inc of byId.values()) {
     const co = norm(inc.company);
     const sv = norm(inc.serviceId);
+    const prefix = incidentPrefix(inc.incidentId);
     const companyMatch = co.length > 0 && companySet.has(co);
     const serviceMatch = sv.length > 0 && serviceSet.has(sv);
-    const siglasMatch = co.length > 0 && siglasSet.has(co);
+    // Siglas IM: compara contra el prefijo del Incident ID (formato estándar)
+    // y contra Empresa (algunos clientes se identifican por su acrónimo ahí).
+    const siglasMatch = (prefix.length > 0 && siglasSet.has(prefix)) || (co.length > 0 && siglasSet.has(co));
     if (!companyMatch && !serviceMatch && !siglasMatch) continue;
     matched++;
 
-    const matchedBy = companyMatch && serviceMatch ? "both" : companyMatch ? "company" : serviceMatch ? "service" : "siglas";
+    const hits = [companyMatch && "company", serviceMatch && "service", siglasMatch && "siglas"].filter(Boolean);
+    const matchedBy = hits.length > 1 ? "both" : (hits[0] as string);
     const resolved = isResolvedStatus(inc.status);
 
     const existing = await db.contratoMarcoIncident.findUnique({
