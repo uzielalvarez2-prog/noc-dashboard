@@ -7,6 +7,7 @@ import { OpenKpis } from "./OpenKpis";
 import { StatusBreakdown } from "./StatusBreakdown";
 import { TopByDimension } from "./TopByDimension";
 import { OpenIncidentTable } from "./OpenIncidentTable";
+import { GlobalIncidentSearch } from "./GlobalIncidentSearch";
 import { EdcStatusView } from "./EdcStatusView";
 import { CriticosDownView } from "@/components/warroom/CriticosDownView";
 import { ContratoMarcoDownView } from "@/components/warroom/ContratoMarcoDownView";
@@ -198,6 +199,8 @@ export function OpenIncidentsView() {
 
   return (
     <div className="space-y-5">
+      <GlobalIncidentSearch />
+
       <div className="flex flex-wrap items-center gap-2">
         {GROUP_ORDER.map((g) => (
           <button key={g} type="button" onClick={() => setGroup(g)} className={groupBtn(g)}>
