@@ -10,6 +10,7 @@ import { exportOpenIncidents, type SortDir } from "@/lib/exportOpenIncidents";
 
 const COLUMNS = [
   { key: "incidentId", label: "Incident ID" },
+  { key: "openTime", label: "Apertura" },
   { key: "company", label: "Empresa" },
   { key: "serviceId", label: "Servicio" },
   { key: "state", label: "Estado" },
@@ -17,7 +18,6 @@ const COLUMNS = [
   { key: "assignee", label: "Asignado" },
   { key: "status", label: "Estatus" },
   { key: "group", label: "Grupo" },
-  { key: "siteCount", label: "# Sitios" },
 ] as const;
 
 async function fetchOpen(qs: string): Promise<OpenListResponse> {
@@ -145,7 +145,7 @@ export function OpenIncidentTable({
           <thead className="sticky top-0 z-20">
             <tr>
               <th
-                colSpan={COLUMNS.length + 2}
+                colSpan={COLUMNS.length + 1}
                 className="border-b border-border/60 bg-surface/80 p-2 backdrop-blur-md"
               >
                 <div className="flex items-center gap-3">
@@ -197,21 +197,18 @@ export function OpenIncidentTable({
                   {c.label}
                 </th>
               ))}
-              <th className="border-b border-border/60 px-3 py-2 text-left text-xs font-medium uppercase tracking-wider text-text-muted">
-                Apertura
-              </th>
             </tr>
           </thead>
           <tbody>
             {isLoading ? (
               <tr>
-                <td colSpan={COLUMNS.length + 2} className="py-12 text-center text-sm text-text-muted">
+                <td colSpan={COLUMNS.length + 1} className="py-12 text-center text-sm text-text-muted">
                   Cargando…
                 </td>
               </tr>
             ) : rows.length === 0 ? (
               <tr>
-                <td colSpan={COLUMNS.length + 2} className="py-12 text-center text-sm text-text-muted">
+                <td colSpan={COLUMNS.length + 1} className="py-12 text-center text-sm text-text-muted">
                   {q ? "Sin resultados para tu búsqueda" : "Sube un CSV de abiertos para empezar"}
                 </td>
               </tr>
@@ -241,6 +238,7 @@ export function OpenIncidentTable({
                     />
                   </td>
                   <td className="px-3 py-2 font-mono text-xs text-text-muted">{r.incidentId}</td>
+                  <td className="px-3 py-2 font-mono text-xs text-text-muted">{formatHpsm(r.openTime)}</td>
                   <td className="px-3 py-2 text-xs text-text-primary">
                     <span className="block max-w-[12rem] truncate" title={r.company}>
                       {r.company}
@@ -260,14 +258,6 @@ export function OpenIncidentTable({
                   <td className="px-3 py-2">
                     <GroupBadge group={r.group} />
                   </td>
-                  <td className="px-3 py-2 text-center font-mono text-xs text-text-muted">
-                    {r.siteCount > 1 ? (
-                      <span className="rounded bg-accent/15 px-1.5 py-0.5 text-accent">{r.siteCount}</span>
-                    ) : (
-                      r.siteCount
-                    )}
-                  </td>
-                  <td className="px-3 py-2 font-mono text-xs text-text-muted">{formatHpsm(r.openTime)}</td>
                 </tr>
               ))
             )}
