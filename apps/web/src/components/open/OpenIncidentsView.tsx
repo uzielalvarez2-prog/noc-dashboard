@@ -7,7 +7,7 @@ import { OpenKpis } from "./OpenKpis";
 import { StatusBreakdown } from "./StatusBreakdown";
 import { TopByDimension } from "./TopByDimension";
 import { OpenIncidentTable } from "./OpenIncidentTable";
-import { EscalatedPanel } from "@/components/dashboard/EscalatedPanel";
+import { EdcStatusView } from "./EdcStatusView";
 import { CriticosDownView } from "@/components/warroom/CriticosDownView";
 import { ContratoMarcoDownView } from "@/components/warroom/ContratoMarcoDownView";
 import type { SortDir } from "@/lib/exportOpenIncidents";
@@ -167,19 +167,39 @@ function PexaCecorView({ group }: { group: "PEXA" | "CECOR" }) {
   );
 }
 
+// Orden visual pedido: EDC, PEXA, WSP. Clientes, Contrato Marco, CECOR.
+const GROUP_ORDER: Group[] = ["EDC", "PEXA", "WSP", "CM", "CECOR"];
+
+// Estilo "neon pill" (igual criterio que los botones de War Room): borde y
+// fondo del color siempre visibles, atenuados por opacity cuando no está
+// activo, con ring + glow al seleccionar.
+const GROUP_STYLE: Record<Group, { border: string; bg: string; text: string; ring: string; glow: string }> = {
+  EDC: { border: "border-red-500/50", bg: "bg-red-500/10", text: "text-red-400", ring: "ring-red-500", glow: "shadow-[0_0_10px_2px_rgba(239,68,68,0.4)]" },
+  PEXA: { border: "border-blue-400/50", bg: "bg-blue-500/10", text: "text-blue-300", ring: "ring-blue-400", glow: "shadow-[0_0_10px_2px_rgba(96,165,250,0.4)]" },
+  WSP: { border: "border-rose-500/50", bg: "bg-rose-500/10", text: "text-rose-400", ring: "ring-rose-500", glow: "shadow-[0_0_10px_2px_rgba(244,63,94,0.4)]" },
+  CM: { border: "border-amber-500/50", bg: "bg-amber-500/10", text: "text-amber-400", ring: "ring-amber-500", glow: "shadow-[0_0_10px_2px_rgba(245,158,11,0.4)]" },
+  CECOR: { border: "border-blue-400/50", bg: "bg-blue-500/10", text: "text-blue-300", ring: "ring-blue-400", glow: "shadow-[0_0_10px_2px_rgba(96,165,250,0.4)]" },
+};
+
 export function OpenIncidentsView() {
   const [group, setGroup] = useState<Group>("PEXA");
 
-  const groupBtn = (g: Group) =>
-    cn(
-      "rounded-md px-3 py-1.5 text-sm font-medium transition-colors",
-      group === g ? "bg-accent text-white" : "border border-border text-text-muted hover:text-text-primary"
+  const groupBtn = (g: Group) => {
+    const s = GROUP_STYLE[g];
+    const active = group === g;
+    return cn(
+      "rounded-lg border px-3 py-2 text-sm font-semibold transition-all",
+      s.border,
+      s.bg,
+      s.text,
+      active ? cn("ring-2", s.ring, s.glow) : "opacity-60 hover:opacity-100"
     );
+  };
 
   return (
     <div className="space-y-5">
       <div className="flex flex-wrap items-center gap-2">
-        {(["PEXA", "CECOR", "EDC", "WSP", "CM"] as Group[]).map((g) => (
+        {GROUP_ORDER.map((g) => (
           <button key={g} type="button" onClick={() => setGroup(g)} className={groupBtn(g)}>
             {GROUP_LABELS[g]}
           </button>
@@ -190,7 +210,7 @@ export function OpenIncidentsView() {
         <PexaCecorView key={group} group={group} />
       )}
 
-      {group === "EDC" && <EscalatedPanel />}
+      {group === "EDC" && <EdcStatusView />}
 
       {group === "WSP" && <CriticosDownView />}
 

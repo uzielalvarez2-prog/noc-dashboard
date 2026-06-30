@@ -17,14 +17,12 @@ import {
   Sun,
   Moon,
   Star,
-  Siren,
   BookOpen,
 } from "lucide-react";
 import { useTheme } from "@/components/layout/ThemeProvider";
 
 const NAV_ITEMS = [
   { href: "/", label: "Overview", icon: LayoutDashboard },
-  { href: "/war-room", label: "War Room", icon: Siren },
   { href: "/incidents", label: "Incidentes", icon: AlertTriangle },
   { href: "/sla", label: "SLA", icon: BarChart2 },
   { href: "/operators", label: "Operadores", icon: Users },
