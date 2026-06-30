@@ -1,12 +1,10 @@
 "use client";
 
-import { useState } from "react";
-import { Download, Loader2, ArrowDownWideNarrow, ArrowUpNarrowWide } from "lucide-react";
+import { ArrowDownWideNarrow, ArrowUpNarrowWide, ChevronDown } from "lucide-react";
 import type { OpenStats } from "@/types/open";
-import { exportOpenIncidents, type SortDir } from "@/lib/exportOpenIncidents";
+import type { SortDir } from "@/lib/exportOpenIncidents";
 import { cn } from "@/lib/utils";
 
-// Color del acento por familia de estatus (igual criterio que el badge de la tabla).
 function statusAccent(status: string): string {
   const s = status.toUpperCase();
   if (s.includes("RESOLV")) return "text-success";
@@ -20,26 +18,18 @@ export function StatusBreakdown({
   group,
   sortDir,
   onSortDirChange,
+  selectedStatus,
+  onStatusSelect,
 }: {
   stats?: OpenStats;
   group: string;
   sortDir: SortDir;
   onSortDirChange: (d: SortDir) => void;
+  selectedStatus: string | null;
+  onStatusSelect: (status: string | null) => void;
 }) {
-  const [loading, setLoading] = useState<string | null>(null);
   const byStatus = stats?.byStatus ?? [];
-  // En PEXA/CECOR el total de abiertos se muestra aquí como primera tarjeta
-  // (ámbar neón); en "Todos" sigue en el resumen de arriba (OpenKpis).
   const showTotal = group !== "ALL";
-
-  async function download(status: string) {
-    setLoading(status);
-    try {
-      await exportOpenIncidents({ group, status, sortDir, label: status });
-    } finally {
-      setLoading(null);
-    }
-  }
 
   const sortBtn = (dir: SortDir, label: string, Icon: typeof ArrowDownWideNarrow) => (
     <button
@@ -87,25 +77,30 @@ export function StatusBreakdown({
             </div>
           )}
           {byStatus.map(({ status, incidents }) => {
-            const isLoading = loading === status;
+            const isSelected = selectedStatus === status;
             return (
               <button
                 key={status}
                 type="button"
-                onClick={() => download(status)}
-                disabled={isLoading}
-                title={`Descargar Excel de "${status}" (sin duplicados)`}
-                className="group flex flex-col items-start rounded-xl border border-border/60 bg-surface/60 p-4 text-left backdrop-blur-md transition-colors hover:border-accent/60 disabled:opacity-60"
+                onClick={() => onStatusSelect(isSelected ? null : status)}
+                title={`Ver incidentes con estatus "${status}"`}
+                className={cn(
+                  "group flex flex-col items-start rounded-xl border p-4 text-left backdrop-blur-md transition-colors",
+                  isSelected
+                    ? "border-accent bg-accent/10 ring-1 ring-accent"
+                    : "border-border/60 bg-surface/60 hover:border-accent/60"
+                )}
               >
                 <div className="flex w-full items-center justify-between gap-2">
                   <p className="truncate text-xs font-medium uppercase tracking-wider text-text-muted" title={status}>
                     {status}
                   </p>
-                  {isLoading ? (
-                    <Loader2 className="h-3.5 w-3.5 shrink-0 animate-spin text-accent" />
-                  ) : (
-                    <Download className="h-3.5 w-3.5 shrink-0 text-text-muted/40 transition-colors group-hover:text-accent" />
-                  )}
+                  <ChevronDown
+                    className={cn(
+                      "h-3.5 w-3.5 shrink-0 transition-all",
+                      isSelected ? "rotate-180 text-accent" : "text-text-muted/40 group-hover:text-accent"
+                    )}
+                  />
                 </div>
                 <p className={cn("mt-1 text-2xl font-bold", statusAccent(status))}>{incidents}</p>
                 <p className="mt-0.5 text-xs text-text-muted">incidentes</p>

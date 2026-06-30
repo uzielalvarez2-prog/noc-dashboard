@@ -51,7 +51,15 @@ function GroupBadge({ group }: { group: string }) {
   );
 }
 
-export function OpenIncidentTable({ group, sortDir }: { group: string; sortDir: SortDir }) {
+export function OpenIncidentTable({
+  group,
+  sortDir,
+  statusFilter,
+}: {
+  group: string;
+  sortDir: SortDir;
+  statusFilter?: string;
+}) {
   const [search, setSearch] = useState("");
   const [q, setQ] = useState("");
   const [page, setPage] = useState(1);
@@ -89,11 +97,12 @@ export function OpenIncidentTable({ group, sortDir }: { group: string; sortDir: 
 
   useEffect(() => {
     setPage(1);
-  }, [group]);
+  }, [group, statusFilter]);
 
   const params = new URLSearchParams();
   if (q) params.set("q", q);
   if (group !== "ALL") params.set("group", group);
+  if (statusFilter) params.set("status", statusFilter);
   // 1 fila por incidente (collapse default): un IM que toca varios sitios se
   // muestra una sola vez con "Varios (N)" en Estado/Distrito y su # de sitios.
   params.set("page", String(page));
@@ -114,7 +123,7 @@ export function OpenIncidentTable({ group, sortDir }: { group: string; sortDir: 
   async function handleExport() {
     setExporting(true);
     try {
-      await exportOpenIncidents({ q, group, sortDir, label: "abiertos" });
+      await exportOpenIncidents({ q, group, status: statusFilter, sortDir, label: statusFilter ?? "abiertos" });
     } finally {
       setExporting(false);
     }
