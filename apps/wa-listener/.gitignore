@@ -1,0 +1,8 @@
+.env
+dist
+node_modules
+*.log
+
+# Sesión de WhatsApp Web vinculada por QR — NUNCA versionar (da acceso a la cuenta).
+.wwebjs_auth
+.wwebjs_cache

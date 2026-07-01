@@ -8,7 +8,7 @@ import { StatusBreakdown } from "./StatusBreakdown";
 import { TopByDimension } from "./TopByDimension";
 import { OpenIncidentTable } from "./OpenIncidentTable";
 import { GlobalIncidentSearch } from "./GlobalIncidentSearch";
-import { EdcStatusView } from "./EdcStatusView";
+import { EdcTabs } from "./EdcTabs";
 import { CriticosDownView } from "@/components/warroom/CriticosDownView";
 import { ContratoMarcoDownView } from "@/components/warroom/ContratoMarcoDownView";
 import type { SortDir } from "@/lib/exportOpenIncidents";
@@ -213,7 +213,7 @@ export function OpenIncidentsView() {
         <PexaCecorView key={group} group={group} />
       )}
 
-      {group === "EDC" && <EdcStatusView />}
+      {group === "EDC" && <EdcTabs />}
 
       {group === "WSP" && <CriticosDownView />}
 

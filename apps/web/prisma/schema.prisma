@@ -233,6 +233,23 @@ model ContratoMarcoIncident {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// REPORTES WHATSAPP (EDC): copia del bloque de texto que el equipo publica en el
+// grupo "STAFF SUPERVISIÓN". Se guarda tal cual (no se parsea) y se cruza por
+// incidentId contra OpenIncident al consultar: solo se muestra mientras el IM
+// siga abierto. Upsert por incidentId → 1 reporte vigente por IM (el último gana).
+// ─────────────────────────────────────────────────────────────────────────────
+model EdcReport {
+  id         String   @id @default(cuid())
+  incidentId String   @unique // IMxxxxxxx, llave de match contra OpenIncident
+  rawText    String            // bloque completo tal cual del mensaje de WhatsApp
+  sentAt     DateTime          // hora del mensaje en el grupo
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@index([sentAt])
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // BASE DE CONOCIMIENTO: enlaces / PDF / Drive con categoría. El Admin administra.
 // ─────────────────────────────────────────────────────────────────────────────
 model KnowledgeDoc {
