@@ -4,7 +4,6 @@ import { useState } from "react";
 import { Sidebar } from "@/components/layout/Sidebar";
 import { Header } from "@/components/layout/Header";
 import { PollingProvider } from "@/components/layout/PollingProvider";
-import { WarRoomAlerts } from "@/components/warroom/WarRoomAlerts";
 
 export default function DashboardLayout({
   children,
@@ -15,8 +14,6 @@ export default function DashboardLayout({
 
   return (
     <PollingProvider>
-      {/* Avisos War Room globales: aparecen en cualquier página, cascada arriba-derecha */}
-      <WarRoomAlerts />
       <div className="flex h-screen overflow-hidden bg-background">
         <Sidebar
           collapsed={sidebarCollapsed}

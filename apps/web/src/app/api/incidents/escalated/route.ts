@@ -79,11 +79,14 @@ export async function POST(req: NextRequest) {
     if (!incidentId)
       return NextResponse.json({ error: "incidentId requerido" }, { status: 400 });
 
-    // Alternar solo la bandera visual, sin tocar el estado de escalado.
+    // Alternar solo la bandera visual, sin tocar el estado de escalado. Upsert
+    // (no update) para poder marcar bandera en incidentes aún no escalados
+    // (p.ej. los que vienen de WhatsApp en EDC → Escalados).
     if (typeof body.flag === "boolean") {
-      await db.escalatedIncident.update({
+      await db.escalatedIncident.upsert({
         where: { incidentId },
-        data: { flagged: body.flag },
+        create: { incidentId, markedBy: session.id, flagged: body.flag },
+        update: { flagged: body.flag },
       });
       return NextResponse.json({ ok: true });
     }

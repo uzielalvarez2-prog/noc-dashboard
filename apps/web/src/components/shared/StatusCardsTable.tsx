@@ -86,12 +86,16 @@ export function StatusCardsTable({
   totalLabel,
   onPatch,
   fileBase,
+  alwaysShowTable = false,
 }: {
   items: StatusCardItem[];
   isLoading: boolean;
   totalLabel: string;
   onPatch: (it: StatusCardItem, body: Partial<{ flagged: boolean; note: string; dismissed: boolean }>) => void;
   fileBase: string;
+  // Si true, la tabla se muestra siempre (aunque no haya una tarjeta de estatus
+  // seleccionada); sin selección muestra todos los items.
+  alwaysShowTable?: boolean;
 }) {
   const [selectedStatus, setSelectedStatus] = useState<string | null>(null);
   const [q, setQ] = useState("");
@@ -179,20 +183,22 @@ export function StatusCardsTable({
         })}
       </div>
 
-      {selectedStatus && (
+      {(selectedStatus || alwaysShowTable) && (
         <div className="space-y-2">
           <div className="flex flex-wrap items-center justify-between gap-2">
             <div className="flex items-center gap-2">
               <h2 className="text-sm font-semibold text-text-primary">
-                Incidentes — <span className="text-accent">{selectedStatus}</span>
+                Incidentes — <span className="text-accent">{selectedStatus ?? "Todos"}</span>
               </h2>
-              <button
-                type="button"
-                onClick={() => setSelectedStatus(null)}
-                className="rounded-md border border-border px-2 py-0.5 text-xs text-text-muted hover:text-text-primary"
-              >
-                Cerrar
-              </button>
+              {selectedStatus && (
+                <button
+                  type="button"
+                  onClick={() => setSelectedStatus(null)}
+                  className="rounded-md border border-border px-2 py-0.5 text-xs text-text-muted hover:text-text-primary"
+                >
+                  Cerrar
+                </button>
+              )}
             </div>
             <div className="flex items-center gap-2">
               <div className="relative">

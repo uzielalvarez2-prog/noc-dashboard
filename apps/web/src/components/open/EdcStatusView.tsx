@@ -4,87 +4,79 @@ import { useMemo } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { StatusCardsTable, type StatusCardItem } from "@/components/shared/StatusCardsTable";
 
-interface EscalatedItem {
+// Item que devuelve /api/edc-reports/escalados (lista = incidentes de WhatsApp,
+// datos vivos de abiertos; nota/bandera desde EscalatedIncident).
+interface EdcEscaladoItem {
   incidentId: string;
   openTime: string | null;
+  status: string;
+  company: string;
   serviceId: string;
   state: string;
   district: string;
   assignee: string | null;
-  status: string;
-  company: string;
-  group: string | null;
-  stillOpen: boolean;
-  markedBy: string;
-  markedAt: string;
-  note: string | null;
   flagged: boolean;
+  note: string;
 }
 
-interface EscalatedResponse {
-  marked: string[];
-  items: EscalatedItem[];
+async function fetchItems(): Promise<EdcEscaladoItem[]> {
+  const res = await fetch("/api/edc-reports/escalados");
+  if (!res.ok) throw new Error("Error al obtener escalados EDC");
+  const data = (await res.json()) as { items: EdcEscaladoItem[] };
+  return data.items;
 }
 
-async function fetchEscalated(): Promise<EscalatedResponse> {
-  const res = await fetch("/api/incidents/escalated");
-  if (!res.ok) throw new Error("Error al obtener escalados");
-  return res.json();
-}
-
-// Resuelto / UP: ya no está abierto o el status dice resolv/resuelt (mismo criterio que EscalatedPanel).
-function isUp(it: EscalatedItem): boolean {
-  return !it.stillOpen || /resolv|resuelt/i.test(it.status);
-}
-
+// EDC → Escalados: los incidentes que llegan por WhatsApp, en la tabla original
+// de EDC (tarjetas de estatus + tabla Nota/Quitar/🚩/Incidente…). De WhatsApp
+// solo se toma el incidentId; el resto sale de abiertos. La tabla se muestra
+// siempre. Nota/bandera se guardan en EscalatedIncident (vía /api/incidents/escalated);
+// Quitar borra el reporte de WhatsApp (vía DELETE /api/edc-reports).
 export function EdcStatusView() {
   const qc = useQueryClient();
-  const { data, isLoading } = useQuery<EscalatedResponse>({
-    queryKey: ["escalated"],
-    queryFn: fetchEscalated,
+  const { data, isLoading } = useQuery<EdcEscaladoItem[]>({
+    queryKey: ["edc-escalados"],
+    queryFn: fetchItems,
     refetchInterval: 60_000,
   });
 
   const items: StatusCardItem[] = useMemo(
     () =>
-      (data?.items ?? [])
-        .filter((it) => !isUp(it))
-        .map((it) => ({
-          incidentId: it.incidentId,
-          openTime: it.openTime,
-          status: it.status,
-          company: it.company,
-          serviceId: it.serviceId,
-          state: it.state,
-          district: it.district,
-          assignee: it.assignee,
-          flagged: it.flagged,
-          note: it.note ?? "",
-        })),
+      (data ?? []).map((it) => ({
+        incidentId: it.incidentId,
+        openTime: it.openTime,
+        status: it.status,
+        company: it.company,
+        serviceId: it.serviceId,
+        state: it.state,
+        district: it.district,
+        assignee: it.assignee,
+        flagged: it.flagged,
+        note: it.note ?? "",
+      })),
     [data]
   );
 
-  async function patch(it: StatusCardItem, body: Partial<{ flagged: boolean; note: string; dismissed: boolean }>) {
-    qc.setQueryData<EscalatedResponse>(["escalated"], (old) =>
+  async function patch(
+    it: StatusCardItem,
+    body: Partial<{ flagged: boolean; note: string; dismissed: boolean }>
+  ) {
+    // Actualización optimista sobre la caché de esta vista.
+    qc.setQueryData<EdcEscaladoItem[]>(["edc-escalados"], (old) =>
       old
-        ? {
-            ...old,
-            items: body.dismissed
-              ? old.items.filter((x) => x.incidentId !== it.incidentId)
-              : old.items.map((x) =>
-                  x.incidentId === it.incidentId
-                    ? { ...x, flagged: body.flagged ?? x.flagged, note: body.note ?? x.note }
-                    : x
-                ),
-          }
+        ? body.dismissed
+          ? old.filter((x) => x.incidentId !== it.incidentId)
+          : old.map((x) =>
+              x.incidentId === it.incidentId
+                ? { ...x, flagged: body.flagged ?? x.flagged, note: body.note ?? x.note }
+                : x
+            )
         : old
     );
     try {
       if (body.dismissed) {
-        await fetch("/api/incidents/escalated", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ incidentId: it.incidentId, escalated: false }),
+        // Quitar = borrar el reporte de WhatsApp (sale de ambas vistas EDC).
+        await fetch(`/api/edc-reports?incidentId=${encodeURIComponent(it.incidentId)}`, {
+          method: "DELETE",
         });
       } else if (body.note !== undefined) {
         await fetch("/api/incidents/escalated", {
@@ -100,7 +92,8 @@ export function EdcStatusView() {
         });
       }
     } finally {
-      qc.invalidateQueries({ queryKey: ["escalated"] });
+      qc.invalidateQueries({ queryKey: ["edc-escalados"] });
+      if (body.dismissed) qc.invalidateQueries({ queryKey: ["edc-reports"] });
     }
   }
 
@@ -111,6 +104,7 @@ export function EdcStatusView() {
       totalLabel="Escalados EDC"
       onPatch={patch}
       fileBase="escalados-edc"
+      alwaysShowTable
     />
   );
 }
