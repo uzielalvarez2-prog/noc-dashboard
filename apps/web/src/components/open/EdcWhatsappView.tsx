@@ -8,6 +8,7 @@ interface EdcReport {
   incidentId: string;
   rawText: string;
   sentAt: string;
+  status: string; // estatus HPSM del incidente (tabla de abiertos)
 }
 
 async function fetchReports(): Promise<EdcReport[]> {
@@ -17,14 +18,19 @@ async function fetchReports(): Promise<EdcReport[]> {
   return data.reports;
 }
 
-// Servicio UP/recuperado si la línea "Estatus:" del reporte lo indica. Se limita
-// a esa línea (si existe) para no dar falsos positivos con el resto del mensaje;
-// si no hay línea "Estatus:", se evalúa el texto completo. Mismo espíritu que el
-// `isResolvedStatus` de War Room, ampliado con up/restablecido/normalizado.
-function isServiceUp(rawText: string): boolean {
-  const m = rawText.match(/estatus\s*:\s*(.*)/i);
-  const scope = m ? m[1] : rawText;
-  return /\bup\b|resuelt|resolv|restablec|normaliz|operativ/i.test(scope);
+// Color NEÓN del número de incidente según el estatus HPSM real (de la tabla
+// general de abiertos, que el scraper refresca cada ~5 min), NO según el texto
+// de WhatsApp: RESOLVED = verde, WORK IN PROGRESS = ámbar, el resto (PENDING
+// CUSTOMER/VENDOR/OTHER/EVIDENCE, CATEGORIZE) = rojo.
+function statusNeonClass(status: string): string {
+  const s = status.toUpperCase();
+  if (s.includes("RESOLVED")) {
+    return "text-green-400 drop-shadow-[0_0_8px_rgba(74,222,128,0.9)]";
+  }
+  if (s.includes("PROGRESS")) {
+    return "text-amber-400 drop-shadow-[0_0_8px_rgba(251,191,36,0.9)]";
+  }
+  return "text-red-500 drop-shadow-[0_0_8px_rgba(239,68,68,0.9)]";
 }
 
 // Convierte las *negritas* de WhatsApp (`*texto*` → <strong>) sin tocar el resto
@@ -62,7 +68,6 @@ function ReportCard({
   onDismiss: (incidentId: string) => void;
 }) {
   const [copied, setCopied] = useState(false);
-  const up = isServiceUp(report.rawText);
 
   async function copy() {
     try {
@@ -77,13 +82,10 @@ function ReportCard({
   return (
     <div className="flex flex-col rounded-lg border border-border bg-surface p-4">
       <div className="mb-2 flex items-center justify-between gap-2">
-        {/* Número de incidente: verde neón si el servicio está UP, rojo neón si no. */}
+        {/* Número de incidente coloreado por el estatus HPSM (verde/ámbar/rojo neón). */}
         <span
-          className={
-            up
-              ? "font-mono text-xs font-semibold text-green-400 drop-shadow-[0_0_8px_rgba(74,222,128,0.9)]"
-              : "font-mono text-xs font-semibold text-red-500 drop-shadow-[0_0_8px_rgba(239,68,68,0.9)]"
-          }
+          title={report.status || undefined}
+          className={`font-mono text-xs font-semibold ${statusNeonClass(report.status)}`}
         >
           {report.incidentId}
         </span>
