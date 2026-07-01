@@ -34,6 +34,10 @@ export async function POST(req: NextRequest) {
         { status: 400 }
       );
     }
+    // Los incidentes CARE (IMCARE...) no son de PEXA — no se guardan.
+    if (incidentId.startsWith("IMCARE")) {
+      return NextResponse.json({ ok: true, skipped: "care", incidentId });
+    }
     if (!rawText.trim()) {
       return NextResponse.json({ error: "rawText vacío" }, { status: 400 });
     }
@@ -46,11 +50,21 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "sentAt inválido" }, { status: 400 });
     }
 
-    await db.edcReport.upsert({
-      where: { incidentId },
-      create: { incidentId, rawText, sentAt },
-      update: { rawText, sentAt },
+    // "Gana el más reciente": solo sobrescribe si el mensaje entrante es igual o
+    // más nuevo que el guardado. Así un mensaje viejo del backfill no pisa una
+    // actualización más reciente (bug que dejaba el estatus desactualizado).
+    const updated = await db.edcReport.updateMany({
+      where: { incidentId, sentAt: { lte: sentAt } },
+      data: { rawText, sentAt },
     });
+    if (updated.count === 0) {
+      // No existía, o el guardado es más nuevo: crear si falta, si no dejar el nuevo.
+      await db.edcReport.upsert({
+        where: { incidentId },
+        create: { incidentId, rawText, sentAt },
+        update: {},
+      });
+    }
 
     return NextResponse.json({ ok: true, incidentId });
   } catch (err) {

@@ -26,6 +26,7 @@ export async function getActiveEdcReports(): Promise<ActiveEdcReport[]> {
     }),
   ]);
 
+  // CARE (IMCARE...) no es de PEXA: no se muestra aunque quedara alguno en la DB.
   const open = new Set(openIds.map((o) => o.incidentId));
-  return reports.filter((r) => open.has(r.incidentId));
+  return reports.filter((r) => open.has(r.incidentId) && !r.incidentId.startsWith("IMCARE"));
 }
