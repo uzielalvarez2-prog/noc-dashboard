@@ -75,3 +75,27 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: "Error obteniendo reportes" }, { status: 500 });
   }
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// DELETE — quitar manualmente una tarjeta desde el dashboard (?incidentId=IMxxx).
+// Requiere sesión. Borra el reporte; si el grupo vuelve a mandar un mensaje de
+// ese IM el listener lo re-inserta (upsert), así que puede reaparecer con nueva
+// info — comportamiento esperado.
+// ─────────────────────────────────────────────────────────────────────────────
+export async function DELETE(req: NextRequest) {
+  const session = getSessionFromRequest(req);
+  if (!session) return NextResponse.json({ error: "No autorizado" }, { status: 401 });
+
+  const incidentId = (req.nextUrl.searchParams.get("incidentId") ?? "").trim().toUpperCase();
+  if (!IM_RE.test(incidentId)) {
+    return NextResponse.json({ error: "incidentId inválido (se espera IMxxxxxxx)" }, { status: 400 });
+  }
+
+  try {
+    await db.edcReport.deleteMany({ where: { incidentId } });
+    return NextResponse.json({ ok: true, incidentId });
+  } catch (err) {
+    console.error("[DELETE /api/edc-reports]", err);
+    return NextResponse.json({ error: "Error eliminando el reporte" }, { status: 500 });
+  }
+}

@@ -1,8 +1,8 @@
 "use client";
 
 import { useState } from "react";
-import { useQuery } from "@tanstack/react-query";
-import { Copy, Check } from "lucide-react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { Copy, Check, X, CopyCheck } from "lucide-react";
 
 interface EdcReport {
   incidentId: string;
@@ -15,6 +15,16 @@ async function fetchReports(): Promise<EdcReport[]> {
   if (!res.ok) throw new Error("Error al obtener reportes");
   const data = (await res.json()) as { reports: EdcReport[] };
   return data.reports;
+}
+
+// Servicio UP/recuperado si la línea "Estatus:" del reporte lo indica. Se limita
+// a esa línea (si existe) para no dar falsos positivos con el resto del mensaje;
+// si no hay línea "Estatus:", se evalúa el texto completo. Mismo espíritu que el
+// `isResolvedStatus` de War Room, ampliado con up/restablecido/normalizado.
+function isServiceUp(rawText: string): boolean {
+  const m = rawText.match(/estatus\s*:\s*(.*)/i);
+  const scope = m ? m[1] : rawText;
+  return /\bup\b|resuelt|resolv|restablec|normaliz|operativ/i.test(scope);
 }
 
 // Convierte las *negritas* de WhatsApp (`*texto*` → <strong>) sin tocar el resto
@@ -44,8 +54,15 @@ function formatSentAt(iso: string): string {
   }).format(d);
 }
 
-function ReportCard({ report }: { report: EdcReport }) {
+function ReportCard({
+  report,
+  onDismiss,
+}: {
+  report: EdcReport;
+  onDismiss: (incidentId: string) => void;
+}) {
   const [copied, setCopied] = useState(false);
+  const up = isServiceUp(report.rawText);
 
   async function copy() {
     try {
@@ -60,15 +77,35 @@ function ReportCard({ report }: { report: EdcReport }) {
   return (
     <div className="flex flex-col rounded-lg border border-border bg-surface p-4">
       <div className="mb-2 flex items-center justify-between gap-2">
-        <span className="font-mono text-xs text-critical">{report.incidentId}</span>
-        <button
-          type="button"
-          onClick={copy}
-          className="flex items-center gap-1 rounded-md border border-border px-2 py-1 text-xs text-text-muted transition-colors hover:border-accent hover:text-accent"
+        {/* Número de incidente: verde neón si el servicio está UP, rojo neón si no. */}
+        <span
+          className={
+            up
+              ? "font-mono text-xs font-semibold text-green-400 drop-shadow-[0_0_8px_rgba(74,222,128,0.9)]"
+              : "font-mono text-xs font-semibold text-red-500 drop-shadow-[0_0_8px_rgba(239,68,68,0.9)]"
+          }
         >
-          {copied ? <Check className="h-3 w-3" /> : <Copy className="h-3 w-3" />}
-          {copied ? "Copiado" : "Copiar"}
-        </button>
+          {report.incidentId}
+        </span>
+        <div className="flex items-center gap-1">
+          <button
+            type="button"
+            onClick={copy}
+            className="flex items-center gap-1 rounded-md border border-border px-2 py-1 text-xs text-text-muted transition-colors hover:border-accent hover:text-accent"
+          >
+            {copied ? <Check className="h-3 w-3" /> : <Copy className="h-3 w-3" />}
+            {copied ? "Copiado" : "Copiar"}
+          </button>
+          <button
+            type="button"
+            onClick={() => onDismiss(report.incidentId)}
+            title="Quitar esta tarjeta"
+            aria-label="Quitar tarjeta"
+            className="flex items-center rounded-md border border-border p-1 text-text-muted transition-colors hover:border-critical hover:text-critical"
+          >
+            <X className="h-3 w-3" />
+          </button>
+        </div>
       </div>
 
       <div className="whitespace-pre-wrap break-words text-sm text-text-muted">
@@ -88,11 +125,43 @@ function ReportCard({ report }: { report: EdcReport }) {
 // Refresca cada 60s; el cross-ref con abiertos lo hace el API (los resueltos
 // desaparecen solos en el siguiente refresh).
 export function EdcWhatsappView() {
+  const queryClient = useQueryClient();
+  const [copiedAll, setCopiedAll] = useState(false);
+
   const { data, isLoading } = useQuery<EdcReport[]>({
     queryKey: ["edc-reports"],
     queryFn: fetchReports,
     refetchInterval: 60_000,
   });
+
+  // Quita la tarjeta del dashboard (borra el reporte). Optimista: la saca de la
+  // caché de inmediato y persiste en la DB vía DELETE.
+  async function dismiss(incidentId: string) {
+    queryClient.setQueryData<EdcReport[]>(["edc-reports"], (old) =>
+      old ? old.filter((r) => r.incidentId !== incidentId) : old
+    );
+    try {
+      await fetch(`/api/edc-reports?incidentId=${encodeURIComponent(incidentId)}`, {
+        method: "DELETE",
+      });
+    } catch {
+      /* si falla, el refetch de 60s la reincorpora */
+    } finally {
+      queryClient.invalidateQueries({ queryKey: ["edc-reports"] });
+    }
+  }
+
+  async function copyAll() {
+    if (!data || data.length === 0) return;
+    const all = data.map((r) => r.rawText).join("\n\n──────────\n\n");
+    try {
+      await navigator.clipboard.writeText(all);
+      setCopiedAll(true);
+      setTimeout(() => setCopiedAll(false), 1500);
+    } catch {
+      /* clipboard no disponible (contexto inseguro): no rompe la vista */
+    }
+  }
 
   if (isLoading) {
     return <div className="py-8 text-center text-sm text-text-muted">Cargando reportes…</div>;
@@ -107,10 +176,24 @@ export function EdcWhatsappView() {
   }
 
   return (
-    <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-      {data.map((r) => (
-        <ReportCard key={r.incidentId} report={r} />
-      ))}
+    <div className="flex flex-col gap-4">
+      <div className="flex items-center justify-between">
+        <span className="text-xs text-text-muted">{data.length} reporte(s) activo(s)</span>
+        <button
+          type="button"
+          onClick={copyAll}
+          className="flex items-center gap-1 rounded-md border border-border px-3 py-1.5 text-xs text-text-muted transition-colors hover:border-accent hover:text-accent"
+        >
+          {copiedAll ? <CopyCheck className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
+          {copiedAll ? "Copiados" : "Copiar todos"}
+        </button>
+      </div>
+
+      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+        {data.map((r) => (
+          <ReportCard key={r.incidentId} report={r} onDismiss={dismiss} />
+        ))}
+      </div>
     </div>
   );
 }
