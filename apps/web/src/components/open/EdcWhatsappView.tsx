@@ -2,13 +2,19 @@
 
 import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Copy, Check, X, CopyCheck } from "lucide-react";
+import { Copy, Check, X, CopyCheck, StickyNote, Pencil } from "lucide-react";
 
 interface EdcReport {
   incidentId: string;
   rawText: string;
   sentAt: string;
   status: string; // estatus HPSM del incidente (tabla de abiertos)
+  note: string; // nota del equipo (compartida con EDC → Escalados)
+}
+
+// Texto a copiar de un reporte: el bloque de WhatsApp + la nota si existe.
+function reportCopyText(r: EdcReport): string {
+  return r.note && r.note.trim() ? `${r.rawText}\n\nNota: ${r.note.trim()}` : r.rawText;
 }
 
 async function fetchReports(): Promise<EdcReport[]> {
@@ -60,18 +66,69 @@ function formatSentAt(iso: string): string {
   }).format(d);
 }
 
+// Nota discreta editable bajo la fecha. Click para editar; Enter guarda, Esc
+// cancela. Sin nota, solo un ícono tenue que revela "Agregar nota" al pasar.
+function NoteRow({ note, onSave }: { note: string; onSave: (n: string) => void }) {
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(note);
+
+  if (editing) {
+    return (
+      <div className="mt-2 flex items-center gap-1">
+        <StickyNote className="h-3 w-3 shrink-0 text-text-muted/60" />
+        <input
+          autoFocus
+          value={draft}
+          onChange={(e) => setDraft(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") { onSave(draft.trim()); setEditing(false); }
+            if (e.key === "Escape") { setDraft(note); setEditing(false); }
+          }}
+          placeholder="Nota…"
+          className="flex-1 rounded border border-border bg-surface px-1.5 py-0.5 text-[11px] text-text-primary focus:border-accent focus:outline-none"
+        />
+        <button onClick={() => { onSave(draft.trim()); setEditing(false); }} title="Guardar" className="text-success hover:opacity-80">
+          <Check className="h-3 w-3" />
+        </button>
+        <button onClick={() => { setDraft(note); setEditing(false); }} title="Cancelar" className="text-text-muted hover:text-text-primary">
+          <X className="h-3 w-3" />
+        </button>
+      </div>
+    );
+  }
+
+  return (
+    <button
+      type="button"
+      onClick={() => { setDraft(note); setEditing(true); }}
+      title={note ? "Editar nota" : "Agregar nota"}
+      className="group mt-2 flex w-full items-center gap-1 text-left text-[11px] italic text-text-muted/70 transition-colors hover:text-text-primary"
+    >
+      <StickyNote className="h-3 w-3 shrink-0 opacity-70" />
+      {note ? (
+        <span className="truncate">{note}</span>
+      ) : (
+        <span className="not-italic opacity-0 transition-opacity group-hover:opacity-100">Agregar nota</span>
+      )}
+      <Pencil className="ml-auto h-2.5 w-2.5 shrink-0 opacity-0 transition-opacity group-hover:opacity-60" />
+    </button>
+  );
+}
+
 function ReportCard({
   report,
   onDismiss,
+  onSaveNote,
 }: {
   report: EdcReport;
   onDismiss: (incidentId: string) => void;
+  onSaveNote: (incidentId: string, note: string) => void;
 }) {
   const [copied, setCopied] = useState(false);
 
   async function copy() {
     try {
-      await navigator.clipboard.writeText(report.rawText);
+      await navigator.clipboard.writeText(reportCopyText(report));
       setCopied(true);
       setTimeout(() => setCopied(false), 1500);
     } catch {
@@ -119,6 +176,8 @@ function ReportCard({
           {formatSentAt(report.sentAt)}
         </div>
       )}
+
+      <NoteRow note={report.note} onSave={(n) => onSaveNote(report.incidentId, n)} />
     </div>
   );
 }
@@ -153,9 +212,26 @@ export function EdcWhatsappView() {
     }
   }
 
+  // Guarda la nota (compartida con EDC → Escalados vía EscalatedIncident).
+  async function saveNote(incidentId: string, note: string) {
+    queryClient.setQueryData<EdcReport[]>(["edc-reports"], (old) =>
+      old ? old.map((r) => (r.incidentId === incidentId ? { ...r, note } : r)) : old
+    );
+    try {
+      await fetch("/api/incidents/escalated", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ incidentId, escalated: true, note }),
+      });
+    } finally {
+      queryClient.invalidateQueries({ queryKey: ["edc-reports"] });
+      queryClient.invalidateQueries({ queryKey: ["edc-escalados"] });
+    }
+  }
+
   async function copyAll() {
     if (!data || data.length === 0) return;
-    const all = data.map((r) => r.rawText).join("\n\n──────────\n\n");
+    const all = data.map((r) => reportCopyText(r)).join("\n\n──────────\n\n");
     try {
       await navigator.clipboard.writeText(all);
       setCopiedAll(true);
@@ -193,7 +269,7 @@ export function EdcWhatsappView() {
 
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
         {data.map((r) => (
-          <ReportCard key={r.incidentId} report={r} onDismiss={dismiss} />
+          <ReportCard key={r.incidentId} report={r} onDismiss={dismiss} onSaveNote={saveNote} />
         ))}
       </div>
     </div>

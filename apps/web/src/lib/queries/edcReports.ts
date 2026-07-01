@@ -5,6 +5,7 @@ export interface ActiveEdcReport {
   rawText: string;
   sentAt: Date;
   status: string; // estatus HPSM del incidente en la tabla de abiertos (OpenIncident)
+  note: string; // nota del equipo (compartida con EDC → Escalados; EscalatedIncident)
 }
 
 /**
@@ -18,13 +19,16 @@ export interface ActiveEdcReport {
  * (IMCARE...) no son de PEXA: se excluyen. Orden: mensaje más reciente primero.
  */
 export async function getActiveEdcReports(): Promise<ActiveEdcReport[]> {
-  const [reports, openRows] = await Promise.all([
+  const [reports, openRows, marks] = await Promise.all([
     db.edcReport.findMany({
       orderBy: { sentAt: "desc" },
       select: { incidentId: true, rawText: true, sentAt: true },
     }),
     db.openIncident.findMany({
       select: { incidentId: true, status: true },
+    }),
+    db.escalatedIncident.findMany({
+      select: { incidentId: true, note: true },
     }),
   ]);
 
@@ -34,10 +38,16 @@ export async function getActiveEdcReports(): Promise<ActiveEdcReport[]> {
   for (const o of openRows) {
     if (!statusById.has(o.incidentId)) statusById.set(o.incidentId, o.status);
   }
+  // Nota del equipo (misma que EDC → Escalados): EscalatedIncident.note.
+  const noteById = new Map(marks.map((m) => [m.incidentId, m.note ?? ""]));
 
   return reports
     .filter((r) => statusById.has(r.incidentId) && !r.incidentId.startsWith("IMCARE"))
-    .map((r) => ({ ...r, status: statusById.get(r.incidentId) ?? "" }));
+    .map((r) => ({
+      ...r,
+      status: statusById.get(r.incidentId) ?? "",
+      note: noteById.get(r.incidentId) ?? "",
+    }));
 }
 
 // Item para la tabla de EDC → Escalados: mismo formato que la tabla original de
