@@ -1,4 +1,8 @@
 # Prueba temporal: ¿se alcanza HPSM desde una IP de datacenter (nube)?
+# El veredicto se lee en las conclusiones de los pasos (API pública):
+#   alcanzable  -> conexión TCP/TLS llegó y hubo respuesta HTTP (con -k)
+#   http-ok     -> la respuesta fue 2xx/3xx
+#   tls-estricto-> el certificado valida sin -k (si falla, Playwright puede ignorarlo)
 # Se borra después de obtener el resultado.
 name: hpsm-probe
 on:
@@ -7,24 +11,19 @@ on:
     paths:
       - ".github/workflows/hpsm-probe.yml"
 
+env:
+  URL: "https://sm.cnoc.telmexit.com/sm/index.do?lang=en"
+
 jobs:
   probe:
     runs-on: ubuntu-latest
     steps:
-      - name: IP publica del runner
+      - name: alcanzable
+        run: curl -sSk -o /dev/null --max-time 30 -w "http=%{http_code} total=%{time_total}s\n" "$URL"
+      - name: http-ok
         run: |
-          echo "runner_ip=$(curl -s --max-time 10 https://api.ipify.org || echo desconocida)"
-      - name: Probe HPSM
-        run: |
-          URL="https://sm.cnoc.telmexit.com/sm/index.do?lang=en"
-          echo "== intento 1: normal =="
-          code=$(curl -sS -o /dev/null -w "%{http_code}" --max-time 30 "$URL"); rc=$?
-          echo "RESULT_NORMAL rc=$rc http=$code"
-          echo "== intento 2: sin validar cert (distingue TLS vs bloqueo) =="
-          code=$(curl -sSk -o /dev/null -w "%{http_code}" --max-time 30 "$URL"); rc=$?
-          echo "RESULT_INSECURE rc=$rc http=$code"
-          echo "== headers =="
-          curl -sSkI --max-time 30 "$URL" | head -15 || true
-          echo "== timing/verbose resumido =="
-          curl -sSk -o /dev/null --max-time 30 -w "dns=%{time_namelookup}s connect=%{time_connect}s tls=%{time_appconnect}s total=%{time_total}s\n" "$URL" || true
-          exit 0
+          code=$(curl -sSk -o /dev/null -w "%{http_code}" --max-time 30 "$URL")
+          echo "http=$code"
+          [ "$code" -ge 200 ] && [ "$code" -lt 400 ]
+      - name: tls-estricto
+        run: curl -sS -o /dev/null --max-time 30 "$URL"
