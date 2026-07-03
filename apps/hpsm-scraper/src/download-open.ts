@@ -51,7 +51,8 @@ async function main(): Promise<void> {
     // ── 2. Click en "All Open Incidents CARE" ────────────────────────────────
     logger.info(`Buscando "${FAVORITES_QUEUE}" en el panel de navegación...`);
     let queueClicked = false;
-    const deadline = Date.now() + 20_000;
+    const deadline = Date.now() + 45_000;
+    let lastExpand = 0;
     while (!queueClicked && Date.now() < deadline) {
       for (const frame of page.frames()) {
         const link = frame.locator(`text="${FAVORITES_QUEUE}"`).first();
@@ -62,7 +63,26 @@ async function main(): Promise<void> {
           break;
         }
       }
-      if (!queueClicked) await page.waitForTimeout(1_000);
+      if (!queueClicked) {
+        // El login fresco hereda el estado del panel de navegación de la última
+        // sesión humana: si Favorites quedó colapsado (p.ej. quedó activa otra
+        // sección como Miscellaneous), el favorito nunca aparece. Re-clickear
+        // la cabecera cada ~6s hasta que la sección abra.
+        if (Date.now() - lastExpand > 6_000) {
+          lastExpand = Date.now();
+          for (const frame of page.frames()) {
+            const favLink = frame.locator('text="Favorites and Dashboards"').first();
+            if (await favLink.isVisible({ timeout: 500 }).catch(() => false)) {
+              logger.info("Favorito no visible — re-expandiendo Favorites and Dashboards...");
+              await favLink.click({ force: true, timeout: 2_000 }).catch(() =>
+                favLink.evaluate((el) => (el as HTMLElement).click()).catch(() => {}),
+              );
+              break;
+            }
+          }
+        }
+        await page.waitForTimeout(1_000);
+      }
     }
     if (!queueClicked) {
       await page.screenshot({ path: "debug-open-step1-nofav.png", fullPage: true });
