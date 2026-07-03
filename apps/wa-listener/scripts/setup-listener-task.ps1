@@ -9,7 +9,13 @@
 #   - ExecutionTimeLimit = 0 (PT0S) -> SIN limite de tiempo; si no, Task
 #     Scheduler mataria el proceso a la hora.
 #   - MultipleInstances = IgnoreNew -> nunca dos copias a la vez.
-#   - Restart 3x cada 1 min si el proceso termina con error.
+#
+# El action NO llama `pnpm start` directo: llama run-listener-loop.ps1, que
+# relanza el listener el mismo si crashea (whatsapp-web.js tiene un bug
+# intermitente que mata el proceso Node en reconexion). El RestartCount/
+# RestartInterval de Task Scheduler resulto poco confiable con triggers
+# AtLogOn+Interactive (no reintento tras el crash del 2026-07-03), por eso el
+# reintento vive ahora DENTRO de la tarea en vez de depender de Task Scheduler.
 #
 # La sesion de WhatsApp ya quedo guardada en apps/wa-listener/.wwebjs_auth, asi
 # que NO vuelve a pedir QR. Es CRITICO que el WorkingDirectory sea la carpeta del
@@ -26,9 +32,10 @@ $taskName = "NOC-WaListener"
 
 New-Item -ItemType Directory -Force -Path $logDir | Out-Null
 
-# Comando: entra a la carpeta, corre `pnpm start` y vuelca stdout+stderr al log.
-$inner = "Set-Location '$appDir'; & '$pnpmCmd' start *>> '$logFile'"
-$argument = "-NonInteractive -WindowStyle Hidden -ExecutionPolicy Bypass -Command `"$inner`""
+# El action llama al script supervisor (loop infinito con retry), no `pnpm
+# start` directo. El propio loop vuelca stdout+stderr de cada intento al log.
+$loopScript = "$appDir\scripts\run-listener-loop.ps1"
+$argument = "-NonInteractive -WindowStyle Hidden -ExecutionPolicy Bypass -File `"$loopScript`""
 
 $action = New-ScheduledTaskAction -Execute $psExe -Argument $argument -WorkingDirectory $appDir
 $trigger = New-ScheduledTaskTrigger -AtLogOn -User "Admin"
@@ -38,7 +45,6 @@ $settings = New-ScheduledTaskSettingsSet `
     -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries `
     -StartWhenAvailable `
     -MultipleInstances IgnoreNew `
-    -RestartCount 3 -RestartInterval (New-TimeSpan -Minutes 1) `
     -ExecutionTimeLimit (New-TimeSpan -Seconds 0)
 $settings.Priority = 6
 
