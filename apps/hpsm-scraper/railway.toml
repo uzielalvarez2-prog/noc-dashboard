@@ -1,0 +1,7 @@
+[build]
+builder = "DOCKERFILE"
+dockerfilePath = "apps/hpsm-scraper/Dockerfile"
+
+[deploy]
+# El scheduler debe estar siempre vivo (cron interno)
+restartPolicyType = "ALWAYS"
