@@ -1,8 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Copy, Check, X, CopyCheck, StickyNote, Pencil } from "lucide-react";
+import { Copy, Check, X, CopyCheck, StickyNote, Pencil, Search } from "lucide-react";
 
 interface EdcReport {
   incidentId: string;
@@ -52,6 +52,18 @@ function renderWhatsappBold(text: string) {
       <span key={i}>{part}</span>
     )
   );
+}
+
+// Texto plano contra el que corre el buscador: todo lo que se ve en la
+// tarjeta (ID, mensaje, estatus, nota, fecha formateada), normalizado sin
+// acentos/mayúsculas para que "resuelto" matchee "Resuelto" o "RESUELTO".
+function reportSearchText(r: EdcReport): string {
+  return [r.incidentId, r.rawText, r.status, r.note, formatSentAt(r.sentAt)]
+    .filter(Boolean)
+    .join(" \n ")
+    .normalize("NFD")
+    .replace(/[̀-ͯ]/g, "")
+    .toLowerCase();
 }
 
 function formatSentAt(iso: string): string {
@@ -188,12 +200,27 @@ function ReportCard({
 export function EdcWhatsappView() {
   const queryClient = useQueryClient();
   const [copiedAll, setCopiedAll] = useState(false);
+  const [search, setSearch] = useState("");
 
   const { data, isLoading } = useQuery<EdcReport[]>({
     queryKey: ["edc-reports"],
     queryFn: fetchReports,
     refetchInterval: 60_000,
   });
+
+  // Filtra en cliente contra cualquier dato visible de la tarjeta (ID, texto
+  // del mensaje, estatus, nota, fecha). No toca el API: la lista completa ya
+  // está en caché (refetch de 60s), así que filtrar es instantáneo.
+  const filtered = useMemo(() => {
+    if (!data) return data;
+    const q = search
+      .trim()
+      .normalize("NFD")
+      .replace(/[̀-ͯ]/g, "")
+      .toLowerCase();
+    if (!q) return data;
+    return data.filter((r) => reportSearchText(r).includes(q));
+  }, [data, search]);
 
   // Quita la tarjeta del dashboard (borra el reporte). Optimista: la saca de la
   // caché de inmediato y persiste en la DB vía DELETE.
@@ -230,8 +257,8 @@ export function EdcWhatsappView() {
   }
 
   async function copyAll() {
-    if (!data || data.length === 0) return;
-    const all = data.map((r) => reportCopyText(r)).join("\n\n──────────\n\n");
+    if (!filtered || filtered.length === 0) return;
+    const all = filtered.map((r) => reportCopyText(r)).join("\n\n──────────\n\n");
     try {
       await navigator.clipboard.writeText(all);
       setCopiedAll(true);
@@ -255,23 +282,53 @@ export function EdcWhatsappView() {
 
   return (
     <div className="flex flex-col gap-4">
-      <div className="flex items-center justify-between">
-        <span className="text-xs text-text-muted">{data.length} reporte(s) activo(s)</span>
-        <button
-          type="button"
-          onClick={copyAll}
-          className="flex items-center gap-1 rounded-md border border-border px-3 py-1.5 text-xs text-text-muted transition-colors hover:border-accent hover:text-accent"
-        >
-          {copiedAll ? <CopyCheck className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
-          {copiedAll ? "Copiados" : "Copiar todos"}
-        </button>
+      <div className="flex items-center justify-between gap-3">
+        <div className="relative w-full max-w-xs">
+          <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-text-muted/60" />
+          <input
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Buscar en los reportes…"
+            className="w-full rounded-md border border-border bg-surface py-1.5 pl-8 pr-7 text-xs text-text-primary placeholder:text-text-muted/60 focus:border-accent focus:outline-none"
+          />
+          {search && (
+            <button
+              type="button"
+              onClick={() => setSearch("")}
+              title="Limpiar búsqueda"
+              aria-label="Limpiar búsqueda"
+              className="absolute right-2 top-1/2 -translate-y-1/2 text-text-muted hover:text-text-primary"
+            >
+              <X className="h-3 w-3" />
+            </button>
+          )}
+        </div>
+        <div className="flex shrink-0 items-center gap-3">
+          <span className="text-xs text-text-muted">
+            {search ? `${filtered?.length ?? 0} de ${data.length}` : `${data.length} reporte(s) activo(s)`}
+          </span>
+          <button
+            type="button"
+            onClick={copyAll}
+            className="flex items-center gap-1 rounded-md border border-border px-3 py-1.5 text-xs text-text-muted transition-colors hover:border-accent hover:text-accent"
+          >
+            {copiedAll ? <CopyCheck className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
+            {copiedAll ? "Copiados" : "Copiar todos"}
+          </button>
+        </div>
       </div>
 
-      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-        {data.map((r) => (
-          <ReportCard key={r.incidentId} report={r} onDismiss={dismiss} onSaveNote={saveNote} />
-        ))}
-      </div>
+      {filtered && filtered.length === 0 ? (
+        <div className="rounded-lg border border-dashed border-border py-12 text-center text-sm text-text-muted">
+          Sin resultados para “{search}”
+        </div>
+      ) : (
+        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+          {filtered?.map((r) => (
+            <ReportCard key={r.incidentId} report={r} onDismiss={dismiss} onSaveNote={saveNote} />
+          ))}
+        </div>
+      )}
     </div>
   );
 }
