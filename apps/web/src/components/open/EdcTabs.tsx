@@ -36,7 +36,7 @@ export function EdcTabs() {
           onClick={() => setTab("escalados")}
           className={subBtn(tab === "escalados")}
         >
-          Escalados
+          Total EDC
         </button>
       </div>
 

@@ -39,7 +39,7 @@ export function StatusBreakdown({
     <button
       type="button"
       onClick={() => onSortDirChange(dir)}
-      title={`Excel ordenado por apertura: ${label}`}
+      title={`Ordenar tabla y Excel por apertura: ${label}`}
       className={cn(
         "flex items-center gap-1 rounded-md px-2 py-1 text-[11px] font-medium transition-colors",
         sortDir === dir
@@ -57,7 +57,7 @@ export function StatusBreakdown({
       <div className="flex items-center justify-between gap-2">
         <h2 className="text-sm font-semibold text-text-primary">Por estatus</h2>
         <div className="flex items-center gap-1">
-          <span className="mr-1 hidden text-[11px] text-text-muted sm:inline">Orden del Excel:</span>
+          <span className="mr-1 hidden text-[11px] text-text-muted sm:inline">Orden:</span>
           {sortBtn("desc", "Reciente → antiguo", ArrowDownWideNarrow)}
           {sortBtn("asc", "Antiguo → reciente", ArrowUpNarrowWide)}
         </div>

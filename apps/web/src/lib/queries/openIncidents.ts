@@ -14,6 +14,8 @@ export interface OpenFilters {
   collapse?: boolean;
   /** Solo incidentes con antigüedad <= N horas (openTime >= ahora - N). */
   maxAgeHours?: number;
+  /** Orden por fecha de apertura. default "desc" (más reciente primero). */
+  order?: "asc" | "desc";
 }
 
 /**
@@ -87,13 +89,14 @@ export function buildOpenWhere(f: OpenFilters): Prisma.OpenIncidentWhereInput {
 export async function getOpenIncidents(f: OpenFilters) {
   const page = Math.max(1, f.page ?? 1);
   const where = buildOpenWhere(f);
+  const order: "asc" | "desc" = f.order === "asc" ? "asc" : "desc";
 
   if (f.collapse === false) {
     const limit = Math.min(500, Math.max(1, f.limit ?? 50));
     const [rows, total, distinctIds] = await Promise.all([
       db.openIncident.findMany({
         where,
-        orderBy: [{ openTime: "desc" }],
+        orderBy: [{ openTime: order }],
         skip: (page - 1) * limit,
         take: limit,
       }),
@@ -115,7 +118,7 @@ export async function getOpenIncidents(f: OpenFilters) {
 
   const limit = Math.min(200, Math.max(1, f.limit ?? 50));
   // Dataset acotado (~2.5k filas máx): traemos y colapsamos en memoria.
-  const all = await db.openIncident.findMany({ where, orderBy: [{ openTime: "desc" }] });
+  const all = await db.openIncident.findMany({ where, orderBy: [{ openTime: order }] });
 
   const byIncident = new Map<
     string,

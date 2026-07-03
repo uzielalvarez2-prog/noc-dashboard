@@ -97,12 +97,14 @@ export function OpenIncidentTable({
 
   useEffect(() => {
     setPage(1);
-  }, [group, statusFilter]);
+  }, [group, statusFilter, sortDir]);
 
   const params = new URLSearchParams();
   if (q) params.set("q", q);
   if (group !== "ALL") params.set("group", group);
   if (statusFilter) params.set("status", statusFilter);
+  // Mismo orden que el Excel: los botones "Reciente/Antiguo" ordenan la tabla.
+  params.set("order", sortDir);
   // 1 fila por incidente (collapse default): un IM que toca varios sitios se
   // muestra una sola vez con "Varios (N)" en Estado/Distrito y su # de sitios.
   params.set("page", String(page));

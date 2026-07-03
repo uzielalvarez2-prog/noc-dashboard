@@ -19,6 +19,7 @@ export async function GET(req: NextRequest) {
       limit: Number(sp.get("limit") ?? "50"),
       collapse: sp.get("collapse") !== "false",
       maxAgeHours: Number(sp.get("maxAgeHours") ?? "") || undefined,
+      order: sp.get("order") === "asc" ? "asc" : "desc",
     });
     return NextResponse.json(result);
   } catch (err) {

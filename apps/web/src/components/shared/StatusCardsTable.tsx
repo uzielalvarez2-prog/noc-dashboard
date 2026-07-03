@@ -38,6 +38,16 @@ function statusAccent(status: string): string {
   return "text-text-primary";
 }
 
+// Colores NEÓN por estatus (EDC): Vendor = rojo, Resolved = verde,
+// Work in progress = ámbar, el resto = azul.
+function statusNeon(status: string): string {
+  const s = status.toUpperCase();
+  if (s.includes("VENDOR")) return "text-red-500 drop-shadow-[0_0_8px_rgba(239,68,68,0.9)]";
+  if (s.includes("RESOLV") || s.includes("RESUELT")) return "text-green-400 drop-shadow-[0_0_8px_rgba(74,222,128,0.9)]";
+  if (s.includes("PROGRESS")) return "text-amber-400 drop-shadow-[0_0_8px_rgba(251,191,36,0.9)]";
+  return "text-blue-400 drop-shadow-[0_0_8px_rgba(96,165,250,0.9)]";
+}
+
 function NoteCell({ value, onSave }: { value: string; onSave: (note: string) => void }) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(value);
@@ -87,6 +97,7 @@ export function StatusCardsTable({
   onPatch,
   fileBase,
   alwaysShowTable = false,
+  neonStatus = false,
 }: {
   items: StatusCardItem[];
   isLoading: boolean;
@@ -96,7 +107,11 @@ export function StatusCardsTable({
   // Si true, la tabla se muestra siempre (aunque no haya una tarjeta de estatus
   // seleccionada); sin selección muestra todos los items.
   alwaysShowTable?: boolean;
+  // Si true, el número de cada tarjeta de estatus usa el esquema NEÓN
+  // (Vendor rojo / Resolved verde / Progress ámbar / resto azul).
+  neonStatus?: boolean;
 }) {
+  const statusColor = neonStatus ? statusNeon : statusAccent;
   const [selectedStatus, setSelectedStatus] = useState<string | null>(null);
   const [q, setQ] = useState("");
   const [exporting, setExporting] = useState(false);
@@ -145,11 +160,39 @@ export function StatusCardsTable({
   return (
     <div className="space-y-4">
       <div className="grid grid-cols-2 gap-3 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
-        <div className="flex flex-col items-start rounded-xl border border-warning/50 bg-warning/5 p-4 ring-1 ring-warning/40 shadow-[0_0_14px_2px_rgba(245,158,11,0.30)] backdrop-blur-md">
-          <p className="truncate text-xs font-medium uppercase tracking-wider text-warning/90">{totalLabel}</p>
-          <p className="mt-1 text-2xl font-bold text-warning drop-shadow-[0_0_7px_rgba(245,158,11,0.8)]">{items.length}</p>
-          <p className="mt-0.5 text-xs text-text-muted">únicos</p>
-        </div>
+        {alwaysShowTable ? (
+          // Tarjeta del total clicable: quita el filtro de estatus y muestra
+          // TODOS los incidentes en la tabla. Activa cuando no hay estatus elegido.
+          <button
+            type="button"
+            onClick={() => setSelectedStatus(null)}
+            title="Ver todos los estatus"
+            className={cn(
+              "group flex flex-col items-start rounded-xl border p-4 text-left backdrop-blur-md transition-all",
+              selectedStatus === null
+                ? "border-warning bg-warning/10 ring-2 ring-warning shadow-[0_0_14px_2px_rgba(245,158,11,0.30)]"
+                : "border-warning/50 bg-warning/5 ring-1 ring-warning/40 shadow-[0_0_14px_2px_rgba(245,158,11,0.30)] hover:border-warning"
+            )}
+          >
+            <div className="flex w-full items-center justify-between gap-2">
+              <p className="truncate text-xs font-medium uppercase tracking-wider text-warning/90">{totalLabel}</p>
+              <ChevronDown
+                className={cn(
+                  "h-3.5 w-3.5 shrink-0 transition-all",
+                  selectedStatus === null ? "rotate-180 text-warning" : "text-warning/40 group-hover:text-warning"
+                )}
+              />
+            </div>
+            <p className="mt-1 text-2xl font-bold text-warning drop-shadow-[0_0_7px_rgba(245,158,11,0.8)]">{items.length}</p>
+            <p className="mt-0.5 text-xs text-text-muted">únicos</p>
+          </button>
+        ) : (
+          <div className="flex flex-col items-start rounded-xl border border-warning/50 bg-warning/5 p-4 ring-1 ring-warning/40 shadow-[0_0_14px_2px_rgba(245,158,11,0.30)] backdrop-blur-md">
+            <p className="truncate text-xs font-medium uppercase tracking-wider text-warning/90">{totalLabel}</p>
+            <p className="mt-1 text-2xl font-bold text-warning drop-shadow-[0_0_7px_rgba(245,158,11,0.8)]">{items.length}</p>
+            <p className="mt-0.5 text-xs text-text-muted">únicos</p>
+          </div>
+        )}
         {byStatus.map(({ status, count }) => {
           const isSelected = selectedStatus === status;
           return (
@@ -176,7 +219,7 @@ export function StatusCardsTable({
                   )}
                 />
               </div>
-              <p className={cn("mt-1 text-2xl font-bold", statusAccent(status))}>{count}</p>
+              <p className={cn("mt-1 text-2xl font-bold", statusColor(status))}>{count}</p>
               <p className="mt-0.5 text-xs text-text-muted">incidentes</p>
             </button>
           );

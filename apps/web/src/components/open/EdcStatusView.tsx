@@ -105,6 +105,7 @@ export function EdcStatusView() {
       onPatch={patch}
       fileBase="escalados-edc"
       alwaysShowTable
+      neonStatus
     />
   );
 }
