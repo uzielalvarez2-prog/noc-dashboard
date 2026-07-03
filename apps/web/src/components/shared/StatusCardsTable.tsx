@@ -48,6 +48,16 @@ function statusNeon(status: string): string {
   return "text-blue-400 drop-shadow-[0_0_8px_rgba(96,165,250,0.9)]";
 }
 
+// Pastilla de estatus (dentro de la tabla) en el mismo esquema NEÓN que las
+// tarjetas: Vendor rojo, Resolved verde, Work in progress ámbar, resto azul.
+function statusBadgeNeon(status: string): string {
+  const s = status.toUpperCase();
+  if (s.includes("VENDOR")) return "border-red-500/50 bg-red-500/10 text-red-400";
+  if (s.includes("RESOLV") || s.includes("RESUELT")) return "border-green-500/50 bg-green-500/10 text-green-400";
+  if (s.includes("PROGRESS")) return "border-amber-500/50 bg-amber-500/10 text-amber-400";
+  return "border-blue-500/50 bg-blue-500/10 text-blue-400";
+}
+
 function NoteCell({ value, onSave }: { value: string; onSave: (note: string) => void }) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(value);
@@ -312,7 +322,11 @@ export function StatusCardsTable({
                       <td className={cn("whitespace-nowrap px-3 py-2.5 text-xs", rowText)}>{fmt(it.openTime)}</td>
                       <td className="px-3 py-2.5">
                         <span className={cn("inline-flex items-center rounded border px-2 py-0.5 text-xs font-semibold",
-                          it.flagged ? "border-critical/40 bg-critical-dim text-critical" : "border-warning/40 bg-warning-dim text-warning"
+                          neonStatus
+                            ? statusBadgeNeon(it.status)
+                            : it.flagged
+                            ? "border-critical/40 bg-critical-dim text-critical"
+                            : "border-warning/40 bg-warning-dim text-warning"
                         )}>
                           {it.status || "—"}
                         </span>
