@@ -1,13 +1,12 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import type { OpenStats } from "@/types/open";
 import { OpenKpis } from "./OpenKpis";
-import { StatusBreakdown } from "./StatusBreakdown";
+import { StatusBreakdown, ALL_STATUS } from "./StatusBreakdown";
 import { TopByDimension } from "./TopByDimension";
 import { OpenIncidentTable } from "./OpenIncidentTable";
-import { GlobalIncidentSearch } from "./GlobalIncidentSearch";
 import { EdcTabs } from "./EdcTabs";
 import { CriticosDownView } from "@/components/warroom/CriticosDownView";
 import { ContratoMarcoDownView } from "@/components/warroom/ContratoMarcoDownView";
@@ -16,26 +15,6 @@ import { cn } from "@/lib/utils";
 import { RefreshCw } from "lucide-react";
 
 const POLL_MS = 240_000;
-
-function useCountdown(dataUpdatedAt: number) {
-  const [remaining, setRemaining] = useState(POLL_MS / 1000);
-  useEffect(() => {
-    function tick() {
-      const elapsed = (Date.now() - dataUpdatedAt) / 1000;
-      setRemaining(Math.max(0, Math.round(POLL_MS / 1000 - elapsed)));
-    }
-    tick();
-    const id = setInterval(tick, 1000);
-    return () => clearInterval(id);
-  }, [dataUpdatedAt]);
-  return remaining;
-}
-
-function formatCountdown(s: number) {
-  const m = Math.floor(s / 60);
-  const sec = s % 60;
-  return m > 0 ? `${m}m ${sec}s` : `${sec}s`;
-}
 
 type Group = "PEXA" | "CECOR" | "EDC" | "WSP" | "CM";
 
@@ -63,7 +42,7 @@ function PexaCecorView({ group }: { group: "PEXA" | "CECOR" }) {
   const [selectedStatus, setSelectedStatus] = useState<string | null>(null);
   const maxAgeHours = recentOnly ? 1 : undefined;
 
-  const { data: stats, isFetching, refetch, dataUpdatedAt } = useQuery<OpenStats>({
+  const { data: stats, isFetching, refetch } = useQuery<OpenStats>({
     queryKey: ["open-stats", group],
     queryFn: () => fetchStats(group),
     refetchInterval: POLL_MS,
@@ -75,8 +54,6 @@ function PexaCecorView({ group }: { group: "PEXA" | "CECOR" }) {
     refetchInterval: POLL_MS,
   });
 
-  const countdown = useCountdown(dataUpdatedAt);
-
   const ageBtn = (active: boolean) =>
     cn(
       "rounded-md px-3 py-1 text-xs font-medium transition-colors",
@@ -86,9 +63,6 @@ function PexaCecorView({ group }: { group: "PEXA" | "CECOR" }) {
   return (
     <div className="space-y-5">
       <div className="flex items-center justify-end gap-3">
-        <span className="font-mono text-xs text-text-muted">
-          {isFetching ? "Actualizando…" : `Próxima actualización en ${formatCountdown(countdown)}`}
-        </span>
         <button
           type="button"
           onClick={() => void refetch()}
@@ -116,7 +90,13 @@ function PexaCecorView({ group }: { group: "PEXA" | "CECOR" }) {
         <div className="space-y-2">
           <div className="flex items-center gap-2">
             <h2 className="text-sm font-semibold text-text-primary">
-              Incidentes — <span className="text-accent">{selectedStatus}</span>
+              {selectedStatus === ALL_STATUS ? (
+                "Todos los incidentes abiertos"
+              ) : (
+                <>
+                  Incidentes — <span className="text-accent">{selectedStatus}</span>
+                </>
+              )}
             </h2>
             <button
               type="button"
@@ -126,7 +106,11 @@ function PexaCecorView({ group }: { group: "PEXA" | "CECOR" }) {
               Cerrar
             </button>
           </div>
-          <OpenIncidentTable group={group} sortDir={sortDir} statusFilter={selectedStatus} />
+          <OpenIncidentTable
+            group={group}
+            sortDir={sortDir}
+            statusFilter={selectedStatus === ALL_STATUS ? undefined : selectedStatus}
+          />
         </div>
       )}
 
@@ -199,8 +183,6 @@ export function OpenIncidentsView() {
 
   return (
     <div className="space-y-5">
-      <GlobalIncidentSearch />
-
       <div className="flex flex-wrap items-center gap-2">
         {GROUP_ORDER.map((g) => (
           <button key={g} type="button" onClick={() => setGroup(g)} className={groupBtn(g)}>

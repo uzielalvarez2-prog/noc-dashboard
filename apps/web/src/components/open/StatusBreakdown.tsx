@@ -5,6 +5,10 @@ import type { OpenStats } from "@/types/open";
 import type { SortDir } from "@/lib/exportOpenIncidents";
 import { cn } from "@/lib/utils";
 
+// Centinela para la tarjeta del total: seleccionarla muestra TODOS los
+// incidentes abiertos (sin filtro de estatus) en la tabla.
+export const ALL_STATUS = "__ALL__";
+
 function statusAccent(status: string): string {
   const s = status.toUpperCase();
   if (s.includes("RESOLV")) return "text-success";
@@ -66,15 +70,35 @@ export function StatusBreakdown({
       ) : (
         <div className="grid grid-cols-2 gap-3 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
           {showTotal && (
-            <div className="flex flex-col items-start rounded-xl border border-warning/50 bg-warning/5 p-4 ring-1 ring-warning/40 shadow-[0_0_14px_2px_rgba(245,158,11,0.30)] backdrop-blur-md">
-              <p className="truncate text-xs font-medium uppercase tracking-wider text-warning/90">
-                Incidentes abiertos
-              </p>
+            <button
+              type="button"
+              onClick={() => onStatusSelect(selectedStatus === ALL_STATUS ? null : ALL_STATUS)}
+              title="Ver todos los incidentes abiertos"
+              className={cn(
+                "group flex flex-col items-start rounded-xl border p-4 text-left backdrop-blur-md transition-all",
+                selectedStatus === ALL_STATUS
+                  ? "border-warning bg-warning/10 ring-2 ring-warning shadow-[0_0_14px_2px_rgba(245,158,11,0.30)]"
+                  : "border-warning/50 bg-warning/5 ring-1 ring-warning/40 shadow-[0_0_14px_2px_rgba(245,158,11,0.30)] hover:border-warning"
+              )}
+            >
+              <div className="flex w-full items-center justify-between gap-2">
+                <p className="truncate text-xs font-medium uppercase tracking-wider text-warning/90">
+                  Incidentes abiertos
+                </p>
+                <ChevronDown
+                  className={cn(
+                    "h-3.5 w-3.5 shrink-0 transition-all",
+                    selectedStatus === ALL_STATUS
+                      ? "rotate-180 text-warning"
+                      : "text-warning/40 group-hover:text-warning"
+                  )}
+                />
+              </div>
               <p className="mt-1 text-2xl font-bold text-warning drop-shadow-[0_0_7px_rgba(245,158,11,0.8)]">
                 {stats?.totalIncidents ?? "—"}
               </p>
               <p className="mt-0.5 text-xs text-text-muted">únicos</p>
-            </div>
+            </button>
           )}
           {byStatus.map(({ status, incidents }) => {
             const isSelected = selectedStatus === status;
