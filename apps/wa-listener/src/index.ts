@@ -6,6 +6,7 @@ import pkg from "whatsapp-web.js";
 import type { Message } from "whatsapp-web.js";
 import puppeteer from "puppeteer";
 import qrcode from "qrcode-terminal";
+import QRCode from "qrcode";
 import { config } from "./config.js";
 import { logger } from "./logger.js";
 import { postReport } from "./upload.js";
@@ -71,11 +72,17 @@ client.on("qr", (qr) => {
     "Escanea este QR con el WhatsApp del número de EMPRESA (Ajustes → Dispositivos vinculados → Vincular dispositivo). Solo la 1a vez."
   );
   // El QR ASCII se fragmenta en el visor de logs de Railway y el celular no lo
-  // lee. Como respaldo confiable, se imprime un ENLACE que abre el QR como imagen
-  // nítida en el navegador: copiar el link del log y abrirlo en la compu. El token
-  // del QR es efímero (~60s) y no es un secreto persistente.
-  const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(qr)}`;
-  logger.info(`QR como imagen (abre este link y escanéalo): ${qrUrl}`);
+  // lee. Como respaldo confiable se imprime el QR como DATA URL (PNG en base64):
+  // se copia la línea completa del log, se pega en la barra del navegador y se
+  // abre una imagen nítida del QR — sin depender de ningún servicio externo. El
+  // token del QR es efímero (~60s) y no es un secreto persistente.
+  QRCode.toDataURL(qr, { width: 300, margin: 2 })
+    .then((dataUrl) =>
+      logger.info(
+        `QR como imagen — copia TODO lo que sigue y pégalo en la barra del navegador:\n${dataUrl}`,
+      ),
+    )
+    .catch((e) => logger.error("No se pudo generar QR data-url", { error: (e as Error).message }));
   qrcode.generate(qr, { small: true });
 });
 
