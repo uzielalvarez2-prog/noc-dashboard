@@ -102,6 +102,10 @@ const client = new Client({
       "--disable-dev-shm-usage",
       "--disable-gpu",
     ],
+    // El contenedor de Railway es más lento que la PC: el backfill (fetchMessages
+    // de 50 mensajes) excedía el protocolTimeout default y crasheaba el cliente en
+    // bucle ("Runtime.callFunctionOn timed out"). Se sube a 5 min para dar margen.
+    protocolTimeout: 300_000,
     ...(executablePath ? { executablePath } : {}),
   },
 });
