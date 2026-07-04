@@ -70,6 +70,12 @@ client.on("qr", (qr) => {
   logger.info(
     "Escanea este QR con el WhatsApp del número de EMPRESA (Ajustes → Dispositivos vinculados → Vincular dispositivo). Solo la 1a vez."
   );
+  // El QR ASCII se fragmenta en el visor de logs de Railway y el celular no lo
+  // lee. Como respaldo confiable, se imprime un ENLACE que abre el QR como imagen
+  // nítida en el navegador: copiar el link del log y abrirlo en la compu. El token
+  // del QR es efímero (~60s) y no es un secreto persistente.
+  const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(qr)}`;
+  logger.info(`QR como imagen (abre este link y escanéalo): ${qrUrl}`);
   qrcode.generate(qr, { small: true });
 });
 
