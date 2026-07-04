@@ -12,7 +12,8 @@ import { postReport } from "./upload.js";
 const { Client, LocalAuth } = pkg;
 
 // IM + 2+ letras + dígitos (ej. IMPNOE000070). Misma regex que el API.
-const IM_RE = /IM[A-Z]{2,}\d+/;
+// Flag `g` para capturar TODOS los IM de un mensaje con matchAll.
+const IM_RE_GLOBAL = /IM[A-Z]{2,}\d+/g;
 
 // Usa el Chrome del sistema si existe (evita descargar los ~150 MB de Chromium
 // de puppeteer). CHROME_PATH en el .env tiene prioridad; si no, se prueban las
@@ -96,12 +97,14 @@ async function backfill() {
  * `isEdit` fuerza sentAt=ahora para que la edición gane sobre la versión previa.
  */
 async function handleMessage(msg: Message, body: string, isEdit = false) {
-  const match = body.match(IM_RE);
-  if (!match) return;
+  // Capturar TODOS los IM del mensaje (un mensaje puede listar varios).
+  const allMatches = [...body.matchAll(IM_RE_GLOBAL)].map((m) => m[0].toUpperCase());
+  if (allMatches.length === 0) return;
 
-  const incidentId = match[0].toUpperCase();
-  // Los incidentes CARE (IMCARE...) no son de PEXA — no se traen.
-  if (incidentId.startsWith("IMCARE")) return;
+  // Los incidentes CARE (IMCARE...) no son de PEXA — se saltan, pero NO se
+  // descarta el mensaje: los demás IM del mismo texto sí se procesan.
+  const incidentIds = [...new Set(allMatches)].filter((id) => !id.startsWith("IMCARE"));
+  if (incidentIds.length === 0) return;
 
   // Confirmar que el mensaje pertenece al grupo objetivo (no a otro chat).
   let chatName = "";
@@ -115,11 +118,13 @@ async function handleMessage(msg: Message, body: string, isEdit = false) {
 
   const sentAt = (isEdit ? new Date() : new Date(msg.timestamp * 1000)).toISOString();
 
-  try {
-    await postReport({ incidentId, rawText: body, sentAt });
-    logger.info("Reporte enviado al dashboard", { incidentId, edit: isEdit });
-  } catch (e) {
-    logger.error("Error enviando reporte", { incidentId, error: (e as Error).message });
+  for (const incidentId of incidentIds) {
+    try {
+      await postReport({ incidentId, rawText: body, sentAt });
+      logger.info("Reporte enviado al dashboard", { incidentId, edit: isEdit });
+    } catch (e) {
+      logger.error("Error enviando reporte", { incidentId, error: (e as Error).message });
+    }
   }
 }
 
