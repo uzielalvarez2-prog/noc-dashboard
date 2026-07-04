@@ -4,6 +4,7 @@ import { existsSync } from "node:fs";
 // importa como type-only (se borra en runtime, no rompe la carga del módulo).
 import pkg from "whatsapp-web.js";
 import type { Message } from "whatsapp-web.js";
+import puppeteer from "puppeteer";
 import qrcode from "qrcode-terminal";
 import { config } from "./config.js";
 import { logger } from "./logger.js";
@@ -15,18 +16,36 @@ const { Client, LocalAuth } = pkg;
 // Flag `g` para capturar TODOS los IM de un mensaje con matchAll.
 const IM_RE_GLOBAL = /IM[A-Z]{2,}\d+/g;
 
-// Usa el Chrome del sistema si existe (evita descargar los ~150 MB de Chromium
-// de puppeteer). CHROME_PATH en el .env tiene prioridad; si no, se prueban las
-// rutas estándar de Windows. Si no hay ninguno, puppeteer usa su Chromium bundle.
-const CHROME_CANDIDATES = [
-  process.env.CHROME_PATH,
-  "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe",
-  "C:\\Program Files (x86)\\Google\\Chrome\\Application\\chrome.exe",
-].filter((p): p is string => Boolean(p));
-const executablePath = CHROME_CANDIDATES.find((p) => existsSync(p));
+// Por defecto usa el Chromium propio de puppeteer (aislado): así NO choca con el
+// Chrome personal del usuario abierto en la PC — cuando compartían ejecutable, el
+// inject de whatsapp-web.js crasheaba con "Execution context was destroyed".
+// whatsapp-web.js usa puppeteer-CORE, que no auto-detecta browser: hay que darle
+// la ruta. puppeteer.executablePath() resuelve el Chromium instalado con
+// `puppeteer browsers install chrome`. CHROME_PATH (explícito y existente) manda.
+const explicitChrome = process.env.CHROME_PATH;
+let executablePath: string | undefined;
+if (explicitChrome && existsSync(explicitChrome)) {
+  executablePath = explicitChrome;
+} else {
+  try {
+    const p = puppeteer.executablePath();
+    executablePath = existsSync(p) ? p : undefined;
+  } catch {
+    executablePath = undefined;
+  }
+}
 
 const client = new Client({
   authStrategy: new LocalAuth({ dataPath: "./.wwebjs_auth" }),
+  // Fija una versión estable de WhatsApp Web servida remotamente. Sin esto, la
+  // librería carga la versión "live" que WhatsApp despliega, y cuando esa cambia
+  // el inject crashea con "Execution context was destroyed" (2026-07-04). El
+  // patrón webVersionCache remoto es la solución documentada de whatsapp-web.js.
+  webVersionCache: {
+    type: "remote",
+    remotePath:
+      "https://raw.githubusercontent.com/wppconnect-team/wa-version/main/html/2.3000.1042630100-alpha.html",
+  },
   puppeteer: {
     // --no-sandbox: necesario en varios entornos Windows/servidor sin GUI dedicada.
     args: ["--no-sandbox", "--disable-setuid-sandbox"],
@@ -34,7 +53,13 @@ const client = new Client({
   },
 });
 
-if (executablePath) logger.info("Usando Chrome del sistema", { executablePath });
+logger.info(
+  explicitChrome && executablePath === explicitChrome
+    ? `Usando Chrome del sistema (CHROME_PATH): ${executablePath}`
+    : executablePath
+      ? `Usando Chromium propio de puppeteer (aislado): ${executablePath}`
+      : "Sin executablePath — puppeteer-core intentará su default (puede fallar)",
+);
 
 client.on("qr", (qr) => {
   logger.info(
