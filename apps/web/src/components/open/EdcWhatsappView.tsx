@@ -3,6 +3,7 @@
 import { useMemo, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Copy, Check, X, CopyCheck, StickyNote, Pencil, Search } from "lucide-react";
+import { HpsmIncidentId } from "@/components/shared/HpsmIncidentId";
 
 interface EdcReport {
   incidentId: string;
@@ -152,12 +153,10 @@ function ReportCard({
     <div className="flex flex-col rounded-lg border border-border bg-surface p-4">
       <div className="mb-2 flex items-center justify-between gap-2">
         {/* Número de incidente coloreado por el estatus HPSM (verde/ámbar/rojo neón). */}
-        <span
-          title={report.status || undefined}
+        <HpsmIncidentId
+          incidentId={report.incidentId}
           className={`font-mono text-xs font-semibold ${statusNeonClass(report.status)}`}
-        >
-          {report.incidentId}
-        </span>
+        />
         <div className="flex items-center gap-1">
           <button
             type="button"

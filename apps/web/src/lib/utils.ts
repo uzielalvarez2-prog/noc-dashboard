@@ -62,6 +62,25 @@ export function formatDateExcel(date: Date | string): string {
   return formatYmdHm(date, "America/Mexico_City");
 }
 
+/**
+ * Arma el "deep-link" del Web Tier de HPSM que abre un incidente directo.
+ * `probsummary` es la tabla de Incidentes y `number` el campo del folio; el
+ * valor que guardamos en `incidentId` es idéntico al que se teclea en el
+ * buscador de HPSM, así que no hay que transformarlo.
+ *
+ * Si ya hay sesión activa de HPSM en el navegador, cae directo en el incidente;
+ * si no, HPSM manda primero al login (comportamiento normal del Web Tier).
+ *
+ * La base se puede sobreescribir con NEXT_PUBLIC_HPSM_URL sin recompilar lógica.
+ */
+const HPSM_BASE_URL =
+  process.env.NEXT_PUBLIC_HPSM_URL ?? "https://sm.cnoc.telmexit.com/sm/index.do";
+
+export function hpsmIncidentUrl(incidentId: string): string {
+  const query = `number="${incidentId.trim()}"`;
+  return `${HPSM_BASE_URL}?ctx=docEngine&file=probsummary&query=${encodeURIComponent(query)}`;
+}
+
 export function formatRelativeTime(date: Date | string): string {
   const now = new Date();
   const target = new Date(date);

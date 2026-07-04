@@ -4,6 +4,7 @@ import { useMemo, useState } from "react";
 import { ChevronDown, Flag, X, Check, Pencil, Search, Download, Loader2 } from "lucide-react";
 import { cn, formatHpsmExcel } from "@/lib/utils";
 import { downloadXLSX } from "@/lib/excelExport";
+import { HpsmIncidentId } from "@/components/shared/HpsmIncidentId";
 
 export interface StatusCardItem {
   incidentId: string;
@@ -312,7 +313,7 @@ export function StatusCardsTable({
                         </button>
                       </td>
                       <td className={cn("px-3 py-2.5 font-mono text-xs font-semibold", rowText)}>
-                        {it.incidentId}
+                        <HpsmIncidentId incidentId={it.incidentId} />
                         {!!it.recurrence && it.recurrence > 1 && (
                           <span title={`${it.recurrence} caídas en 7 días`} className="ml-1.5 rounded bg-warning/15 px-1 text-[10px] font-bold text-warning">
                             ⟳{it.recurrence}

@@ -6,6 +6,7 @@ import { Search, ChevronLeft, ChevronRight, RefreshCw, Star, Download } from "lu
 import type { OpenListResponse } from "@/types/open";
 import { fetchEscalated, type EscalatedResponse } from "@/components/dashboard/EscalatedPanel";
 import { cn, formatDate, formatHpsm } from "@/lib/utils";
+import { HpsmIncidentId } from "@/components/shared/HpsmIncidentId";
 import { exportOpenIncidents, type SortDir } from "@/lib/exportOpenIncidents";
 
 const COLUMNS = [
@@ -239,7 +240,12 @@ export function OpenIncidentTable({
                       className="h-3.5 w-3.5 cursor-pointer accent-[#f59e0b]"
                     />
                   </td>
-                  <td className="px-3 py-2 font-mono text-xs text-text-muted">{r.incidentId}</td>
+                  <td className="px-3 py-2">
+                    <HpsmIncidentId
+                      incidentId={r.incidentId}
+                      className="font-mono text-xs text-text-muted"
+                    />
+                  </td>
                   <td className="px-3 py-2 font-mono text-xs text-text-muted">{formatHpsm(r.openTime)}</td>
                   <td className="px-3 py-2 text-xs text-text-primary">
                     <span className="block max-w-[12rem] truncate" title={r.company}>
