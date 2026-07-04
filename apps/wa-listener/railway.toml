@@ -1,0 +1,12 @@
+[build]
+builder = "DOCKERFILE"
+dockerfilePath = "apps/wa-listener/Dockerfile"
+
+[deploy]
+# El listener debe estar siempre vivo (escucha continua del grupo de WhatsApp).
+restartPolicyType = "ALWAYS"
+
+# La sesión de WhatsApp (LocalAuth) se monta en un volumen persistente en /data
+# para que sobreviva a los redeploys. El volumen se crea desde el panel de Railway
+# (Volumes → Mount path: /data), no se puede declarar aquí. WA_SESSION_DIR ya
+# apunta a /data/.wwebjs_auth vía el Dockerfile.

@@ -35,8 +35,13 @@ if (explicitChrome && existsSync(explicitChrome)) {
   }
 }
 
+// dataPath de la sesión de WhatsApp. En local es "./.wwebjs_auth"; en la nube
+// (Railway) se apunta a un VOLUMEN persistente vía WA_SESSION_DIR para que la
+// sesión sobreviva a los redeploys (si no, cada deploy pediría re-escanear QR).
+const sessionDir = process.env.WA_SESSION_DIR ?? "./.wwebjs_auth";
+
 const client = new Client({
-  authStrategy: new LocalAuth({ dataPath: "./.wwebjs_auth" }),
+  authStrategy: new LocalAuth({ dataPath: sessionDir }),
   // Fija una versión estable de WhatsApp Web servida remotamente. Sin esto, la
   // librería carga la versión "live" que WhatsApp despliega, y cuando esa cambia
   // el inject crashea con "Execution context was destroyed" (2026-07-04). El
@@ -154,4 +159,7 @@ async function handleMessage(msg: Message, body: string, isEdit = false) {
 }
 
 client.initialize();
-logger.info("Inicializando wa-listener…", { dashboard: config.dashboardUrl });
+logger.info("Inicializando wa-listener…", {
+  dashboard: config.dashboardUrl,
+  sessionDir,
+});
