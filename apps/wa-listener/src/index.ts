@@ -1,4 +1,5 @@
-import { existsSync } from "node:fs";
+import { existsSync, rmSync, readdirSync, statSync } from "node:fs";
+import { join } from "node:path";
 // whatsapp-web.js es CommonJS: Node no expone sus clases como named exports vía
 // ESM, así que se importa el default y se desestructura. El tipo Message se
 // importa como type-only (se borra en runtime, no rompe la carga del módulo).
@@ -41,6 +42,43 @@ if (explicitChrome && existsSync(explicitChrome)) {
 // sesión sobreviva a los redeploys (si no, cada deploy pediría re-escanear QR).
 const sessionDir = process.env.WA_SESSION_DIR ?? "./.wwebjs_auth";
 
+// Chromium marca el perfil con un SingletonLock/SingletonSocket cuando arranca; si
+// el contenedor murió sin cerrar limpio (o el perfil se copió con el lock puesto),
+// el siguiente arranque falla con "profile appears to be in use by another Chromium
+// process". En un contenedor recién arrancado NUNCA hay otro Chromium real usando
+// el perfil, así que se borran estos locks al iniciar. LocalAuth anida el perfil en
+// subcarpetas de nombre variable, así que se busca el lock recursivamente.
+const LOCK_NAMES = new Set(["SingletonLock", "SingletonSocket", "SingletonCookie"]);
+function clearChromiumLocks(dir: string): void {
+  if (!existsSync(dir)) return;
+  let entries: string[];
+  try {
+    entries = readdirSync(dir);
+  } catch {
+    return;
+  }
+  for (const entry of entries) {
+    const full = join(dir, entry);
+    if (LOCK_NAMES.has(entry)) {
+      try {
+        rmSync(full, { force: true, recursive: true });
+        logger.info("Lock de Chromium eliminado", { path: full });
+      } catch {
+        /* no-op */
+      }
+      continue;
+    }
+    let isDir = false;
+    try {
+      isDir = statSync(full).isDirectory();
+    } catch {
+      isDir = false;
+    }
+    if (isDir) clearChromiumLocks(full);
+  }
+}
+clearChromiumLocks(sessionDir);
+
 const client = new Client({
   authStrategy: new LocalAuth({ dataPath: sessionDir }),
   // Fija una versión estable de WhatsApp Web servida remotamente. Sin esto, la
@@ -54,7 +92,16 @@ const client = new Client({
   },
   puppeteer: {
     // --no-sandbox: necesario en varios entornos Windows/servidor sin GUI dedicada.
-    args: ["--no-sandbox", "--disable-setuid-sandbox"],
+    // --disable-dev-shm-usage: en contenedores (Railway) /dev/shm es diminuto y
+    //   Chromium crashea al arrancar sin este flag; lo manda a /tmp. Imprescindible
+    //   para que el evento 'qr' llegue a dispararse en la nube.
+    // --disable-gpu / --single-process: headless sin GPU en contenedor.
+    args: [
+      "--no-sandbox",
+      "--disable-setuid-sandbox",
+      "--disable-dev-shm-usage",
+      "--disable-gpu",
+    ],
     ...(executablePath ? { executablePath } : {}),
   },
 });
