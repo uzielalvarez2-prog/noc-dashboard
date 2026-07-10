@@ -25,23 +25,52 @@ let running: string | null = null;
 
 const sleep = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms));
 
+/**
+ * EAGAIN en spawn = el contenedor se quedó sin recursos (memoria/PIDs) para
+ * lanzar procesos nuevos — no es un fallo de ESTA corrida, es el contenedor
+ * entero degradado. Reintentar aquí no arregla nada; hay que tirar el proceso
+ * completo para que Railway (restartPolicyType=ALWAYS) levante uno fresco.
+ */
+function isResourceExhausted(err: NodeJS.ErrnoException): boolean {
+  return err.code === "EAGAIN" || err.code === "ENOMEM";
+}
+
 function spawnScript(label: string, script: string, timeoutMs: number): Promise<number> {
   return new Promise((resolve) => {
+    // detached: true → el hijo arranca su propio grupo de procesos, así el
+    // timeout puede matar al grupo COMPLETO (incluye Chromium/Playwright),
+    // no solo al proceso tsx. Sin esto, un SIGKILL al hijo puede dejar
+    // Chromium huérfano corriendo — eso es lo que agota el contenedor.
     const child = spawn(process.execPath, [TSX_CLI, script], {
       stdio: "inherit",
       env: process.env,
+      detached: true,
     });
     const timer = setTimeout(() => {
-      logger.error(`${label}: excedió ${timeoutMs / 60_000} min — matando proceso hijo`);
-      child.kill("SIGKILL");
+      logger.error(`${label}: excedió ${timeoutMs / 60_000} min — matando grupo de procesos`);
+      if (child.pid) {
+        try {
+          process.kill(-child.pid, "SIGKILL");
+        } catch (err) {
+          logger.error(`${label}: fallo matando grupo de procesos`, { err: String(err) });
+        }
+      }
     }, timeoutMs);
     child.on("exit", (code) => {
       clearTimeout(timer);
       resolve(code ?? 1);
     });
-    child.on("error", (err) => {
+    child.on("error", (err: NodeJS.ErrnoException) => {
       clearTimeout(timer);
       logger.error(`${label}: error al lanzar proceso`, { err: String(err) });
+      if (isResourceExhausted(err)) {
+        logger.error(
+          `${label}: contenedor sin recursos (${err.code}) — reiniciando proceso para que Railway levante uno fresco`,
+        );
+        // Pequeña espera para que el log anterior llegue a stdout antes de morir.
+        setTimeout(() => process.exit(1), 500);
+        return;
+      }
       resolve(1);
     });
   });

@@ -5,6 +5,13 @@ FROM node:20-bookworm
 
 WORKDIR /app
 
+# tini como PID 1: recoge procesos zombie/huérfanos (Chromium vía Playwright)
+# y reenvía señales correctamente. Sin esto, un timeout mata al script pero
+# los subprocesos de Chromium pueden quedar huérfanos acumulando memoria/PIDs
+# hasta agotar el contenedor (síntoma: "spawn ... EAGAIN").
+RUN apt-get update && apt-get install -y --no-install-recommends tini \
+    && rm -rf /var/lib/apt/lists/*
+
 RUN corepack enable && corepack prepare pnpm@10 --activate
 
 # Manifests del workspace (contexto de build = raíz del repo).
@@ -26,4 +33,5 @@ ENV DOWNLOAD_DIR=/tmp/noc-csvs
 
 WORKDIR /app/apps/hpsm-scraper
 
+ENTRYPOINT ["/usr/bin/tini", "--"]
 CMD ["node_modules/.bin/tsx", "src/scheduler.ts"]
