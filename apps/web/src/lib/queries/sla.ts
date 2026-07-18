@@ -1,4 +1,5 @@
 import { db } from "@/lib/db";
+import { toOperatorLogin } from "@/lib/operatorLogin";
 
 const GROUPS = ["PEXA", "CECOR"];
 
@@ -35,7 +36,7 @@ export async function getSLAMetrics() {
 }
 
 export async function getSLABreaches() {
-  return db.closedIncident.findMany({
+  const rows = await db.closedIncident.findMany({
     where: { slaBreached: true },
     orderBy: [{ resolutionMins: "desc" }],
     select: {
@@ -49,6 +50,7 @@ export async function getSLABreaches() {
     },
     take: 100,
   });
+  return rows.map((r) => ({ ...r, closedBy: toOperatorLogin(r.closedBy) }));
 }
 
 export async function getSLATrend(): Promise<

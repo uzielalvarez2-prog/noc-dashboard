@@ -1,5 +1,6 @@
 import { db } from "@/lib/db";
 import type { Prisma } from "@prisma/client";
+import { toOperatorLogin } from "@/lib/operatorLogin";
 
 export interface ClosedFilters {
   group?: string; // PEXA | CECOR | ALL
@@ -41,7 +42,7 @@ export async function getClosedStats(f: ClosedFilters = {}) {
       sumMins += r.resolutionMins;
       if (r.slaBreached) vencidos++;
     }
-    const u = r.closedBy || "(sin dato)";
+    const u = r.closedBy ? toOperatorLogin(r.closedBy) : "(sin dato)";
     const c = r.resCause || "(sin dato)";
     userMap.set(u, (userMap.get(u) ?? 0) + 1);
     causeMap.set(c, (causeMap.get(c) ?? 0) + 1);

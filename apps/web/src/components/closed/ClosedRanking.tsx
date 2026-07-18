@@ -31,12 +31,6 @@ function analystColor(count: number): string {
   return "#ef4444";
 }
 
-// "NOMBRE SEGUNDO APELLIDO1 APELLIDO2" → "NOMBRE APELLIDO1" para que quepa
-function shortName(full: string): string {
-  const parts = full.trim().split(/\s+/);
-  return parts.length <= 2 ? full : `${parts[0]} ${parts[parts.length - 2]}`;
-}
-
 function escapeHtml(s: string): string {
   return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 }
@@ -129,8 +123,7 @@ export function ClosedRanking({
       const color = barColor(idx, r.count);
       const y = TITLE_H + idx * (ROW_H + GAP);
       const barW = Math.max(2, (r.count / max) * barMaxW);
-      const label = variant === "analyst" ? shortName(r.name) : r.name;
-      const display = label.length > 23 ? label.slice(0, 21) + "…" : label;
+      const display = r.name.length > 23 ? r.name.slice(0, 21) + "…" : r.name;
 
       ctx.fillStyle = pal.text;
       ctx.font = "11px Arial,sans-serif";
@@ -212,7 +205,7 @@ export function ClosedRanking({
           return (
             <div key={r.name} className="flex items-center gap-2">
               <span className="w-40 shrink-0 truncate text-xs text-text-primary" title={r.name}>
-                {variant === "analyst" ? shortName(r.name) : r.name}
+                {r.name}
               </span>
               <div className="relative h-4 flex-1 overflow-hidden rounded bg-surface-elevated/60">
                 <div
