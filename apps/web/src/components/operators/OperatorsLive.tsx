@@ -6,6 +6,7 @@ import type { OperatorStats } from "@/lib/queries/operators";
 import { OperatorCard } from "./OperatorCard";
 import { ShiftSummary } from "./ShiftSummary";
 import { downloadXLSX } from "@/lib/excelExport";
+import { cn } from "@/lib/utils";
 
 async function fetchOperators(): Promise<OperatorStats[]> {
   const res = await fetch("/api/operators");
@@ -32,6 +33,37 @@ function buildPivot(ops: OperatorStats[]): { headers: string[]; rows: (string | 
   return { headers, rows };
 }
 
+function OperatorGroupSection({
+  group,
+  operators,
+}: {
+  group: "PEXA" | "CECOR";
+  operators: OperatorStats[];
+}) {
+  if (operators.length === 0) return null;
+  const dotClass = group === "PEXA" ? "bg-accent" : "bg-warning";
+  const textClass = group === "PEXA" ? "text-accent" : "text-warning";
+
+  return (
+    <div className="space-y-3">
+      <div className="flex items-center gap-2">
+        <span className={cn("h-2.5 w-2.5 rounded-full", dotClass)} />
+        <h3 className={cn("text-sm font-semibold uppercase tracking-wider", textClass)}>
+          {group}
+        </h3>
+        <span className="rounded-full bg-surface-elevated px-2 py-0.5 font-mono text-xs text-text-muted">
+          {operators.length}
+        </span>
+      </div>
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+        {operators.map((op) => (
+          <OperatorCard key={`${group}-${op.login}`} op={op} />
+        ))}
+      </div>
+    </div>
+  );
+}
+
 export function OperatorsLive({ initial }: { initial: OperatorStats[] }) {
   const { data = initial } = useQuery<OperatorStats[]>({
     queryKey: ["operators"],
@@ -44,6 +76,9 @@ export function OperatorsLive({ initial }: { initial: OperatorStats[] }) {
     const { headers, rows } = buildPivot(data);
     downloadXLSX("operadores-en-vivo.xlsx", "Operadores", headers, rows);
   }
+
+  const pexaOps = data.filter((op) => op.groups.includes("PEXA"));
+  const cecorOps = data.filter((op) => op.groups.includes("CECOR"));
 
   return (
     <div className="space-y-6">
@@ -62,11 +97,8 @@ export function OperatorsLive({ initial }: { initial: OperatorStats[] }) {
               <Download className="h-3.5 w-3.5" /> Descargar tabla dinámica (Excel)
             </button>
           </div>
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-            {data.map((op) => (
-              <OperatorCard key={op.login} op={op} />
-            ))}
-          </div>
+          <OperatorGroupSection group="PEXA" operators={pexaOps} />
+          <OperatorGroupSection group="CECOR" operators={cecorOps} />
         </>
       ) : (
         <div className="rounded-lg border border-dashed border-border py-16 text-center">
