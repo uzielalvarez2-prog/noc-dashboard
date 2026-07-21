@@ -7,8 +7,9 @@ import { logger } from "./logger.js";
 /**
  * Scheduler para correr el scraper en la nube (Railway) sin Task Scheduler.
  * Replica las tareas de Windows:
- *   - run-open:   cada 5 min, 06:00-23:00 CDMX
- *   - run-closed: 14:02 y 22:12 CDMX (espera hasta 5 min si open está corriendo)
+ *   - run-open:          cada 5 min, 06:00-23:00 CDMX
+ *   - run-closed PEXA:   14:02 y 22:12 CDMX (espera hasta 5 min si open está corriendo)
+ *   - run-closed CECOR:  21:00 CDMX (ventana de consulta 07:00-21:00 vía env override)
  * Cada corrida es un proceso hijo (aislamiento: un cuelgue no tumba el scheduler)
  * con timeout duro — si excede, se mata y la siguiente corrida del cron recupera.
  */
@@ -35,7 +36,12 @@ function isResourceExhausted(err: NodeJS.ErrnoException): boolean {
   return err.code === "EAGAIN" || err.code === "ENOMEM";
 }
 
-function spawnScript(label: string, script: string, timeoutMs: number): Promise<number> {
+function spawnScript(
+  label: string,
+  script: string,
+  timeoutMs: number,
+  envOverride: NodeJS.ProcessEnv = {},
+): Promise<number> {
   return new Promise((resolve) => {
     // detached: true → el hijo arranca su propio grupo de procesos, así el
     // timeout puede matar al grupo COMPLETO (incluye Chromium/Playwright),
@@ -43,7 +49,7 @@ function spawnScript(label: string, script: string, timeoutMs: number): Promise<
     // Chromium huérfano corriendo — eso es lo que agota el contenedor.
     const child = spawn(process.execPath, [TSX_CLI, script], {
       stdio: "inherit",
-      env: process.env,
+      env: { ...process.env, ...envOverride },
       detached: true,
     });
     const timer = setTimeout(() => {
@@ -81,6 +87,7 @@ async function runJob(
   script: string,
   timeoutMs: number,
   waitIfBusyMs = 0,
+  envOverride: NodeJS.ProcessEnv = {},
 ): Promise<void> {
   if (running) {
     if (waitIfBusyMs <= 0) {
@@ -102,7 +109,7 @@ async function runJob(
       logger.info(`${label}: DRY — no se ejecuta`);
       return;
     }
-    const code = await spawnScript(label, script, timeoutMs);
+    const code = await spawnScript(label, script, timeoutMs, envOverride);
     const secs = Math.round((Date.now() - t0) / 1_000);
     logger.info(`${label}: fin exit=${code} (${secs}s)`);
   } finally {
@@ -117,20 +124,32 @@ cron.schedule("*/5 6-22 * * *", () => void runJob("run-open", "src/run-open.ts",
 cron.schedule("0 23 * * *", () => void runJob("run-open", "src/run-open.ts", OPEN_TIMEOUT_MS), {
   timezone: TZ,
 });
-// Cerrados: 14:02 y 22:12 (mismos horarios que Task Scheduler; :02/:12 fuera de la rejilla de 5 min)
+// Cerrados PEXA: 14:02 y 22:12 (mismos horarios que Task Scheduler; :02/:12 fuera de la rejilla de 5 min)
 cron.schedule(
   "2 14 * * *",
-  () => void runJob("run-closed", "src/run-closed.ts", CLOSED_TIMEOUT_MS, 5 * 60_000),
+  () => void runJob("run-closed(PEXA)", "src/run-closed.ts", CLOSED_TIMEOUT_MS, 5 * 60_000),
   { timezone: TZ },
 );
 cron.schedule(
   "12 22 * * *",
-  () => void runJob("run-closed", "src/run-closed.ts", CLOSED_TIMEOUT_MS, 5 * 60_000),
+  () => void runJob("run-closed(PEXA)", "src/run-closed.ts", CLOSED_TIMEOUT_MS, 5 * 60_000),
+  { timezone: TZ },
+);
+// Cerrados CECOR: 21:00 (:00 se sale de la rejilla */5 de open? no — 21:00 sí cae en ella,
+// por eso waitIfBusyMs=5min deja que un run-open en curso termine antes de arrancar).
+// Ventana de consulta acotada a 07:00-21:00 vía HPSM_CLOSED_END_TIME para el hijo.
+cron.schedule(
+  "0 21 * * *",
+  () =>
+    void runJob("run-closed(CECOR)", "src/run-closed.ts", CLOSED_TIMEOUT_MS, 5 * 60_000, {
+      HPSM_CLOSED_GROUP: "CECOR",
+      HPSM_CLOSED_END_TIME: "21:00",
+    }),
   { timezone: TZ },
 );
 
 logger.info(
-  `scheduler: iniciado (TZ ${TZ}) — open */5 06:00-23:00, closed 14:02 y 22:12${DRY ? " [DRY]" : ""}`,
+  `scheduler: iniciado (TZ ${TZ}) — open */5 06:00-23:00, closed PEXA 14:02 y 22:12, closed CECOR 21:00${DRY ? " [DRY]" : ""}`,
 );
 logger.info(`scheduler: tsx=${TSX_CLI}`);
 

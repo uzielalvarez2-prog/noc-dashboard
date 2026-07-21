@@ -251,7 +251,7 @@ async function main(): Promise<void> {
     await formFrame.locator('[name="var/adv.close.end"]').fill(beforeStr, { force: true });
 
     await page.screenshot({ path: "debug-closed-step2-filled.png", fullPage: true });
-    logger.info(`Form llenado: PEXA, Closed, ${afterStr} – ${beforeStr}`);
+    logger.info(`Form llenado: ${config.closed.group}, Closed, ${afterStr} – ${beforeStr}`);
 
     // ── 4. Clic en botón Search del toolbar ───────────────────────────────────
     // :text-is() = exact match — NO matchea el tab "Text Search"
