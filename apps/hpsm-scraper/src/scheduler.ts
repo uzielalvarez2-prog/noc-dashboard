@@ -21,6 +21,7 @@ const DRY = process.env.SCHEDULER_DRY === "1";
 
 const OPEN_TIMEOUT_MS = 12 * 60_000; // corrida sana ~2 min; degradada ~10 min
 const CLOSED_TIMEOUT_MS = 30 * 60_000; // el export de cerrados tarda ~13 min normal
+const SISA_TIMEOUT_MS = 12 * 60_000; // mismo margen que open — sesión HPSM completa propia
 
 let running: string | null = null;
 
@@ -117,11 +118,19 @@ async function runJob(
   }
 }
 
+// SISA se encadena SIEMPRE después de run-open (nunca en paralelo): ambos usan
+// la misma sesión única de login HPSM, y correrlos a la vez arriesga colisión
+// ("Maximum active logins"). runJob ya serializa vía el flag `running`.
+async function runOpenThenSisa(): Promise<void> {
+  await runJob("run-open", "src/run-open.ts", OPEN_TIMEOUT_MS);
+  await runJob("run-sisa", "src/run-sisa.ts", SISA_TIMEOUT_MS);
+}
+
 // Abiertos: cada 5 min de 06:00 a 22:55 + la de las 23:00
-cron.schedule("*/5 6-22 * * *", () => void runJob("run-open", "src/run-open.ts", OPEN_TIMEOUT_MS), {
+cron.schedule("*/5 6-22 * * *", () => void runOpenThenSisa(), {
   timezone: TZ,
 });
-cron.schedule("0 23 * * *", () => void runJob("run-open", "src/run-open.ts", OPEN_TIMEOUT_MS), {
+cron.schedule("0 23 * * *", () => void runOpenThenSisa(), {
   timezone: TZ,
 });
 // Cerrados PEXA: 14:02 y 22:12 (mismos horarios que Task Scheduler; :02/:12 fuera de la rejilla de 5 min)
@@ -149,7 +158,7 @@ cron.schedule(
 );
 
 logger.info(
-  `scheduler: iniciado (TZ ${TZ}) — open */5 06:00-23:00, closed PEXA 14:02 y 22:12, closed CECOR 21:00${DRY ? " [DRY]" : ""}`,
+  `scheduler: iniciado (TZ ${TZ}) — open+sisa */5 06:00-23:00, closed PEXA 14:02 y 22:12, closed CECOR 21:00${DRY ? " [DRY]" : ""}`,
 );
 logger.info(`scheduler: tsx=${TSX_CLI}`);
 
@@ -160,7 +169,7 @@ const hourMx = Number(
   ),
 );
 if (process.env.RUN_ON_BOOT !== "false" && hourMx >= 6 && hourMx < 23) {
-  void runJob("run-open(arranque)", "src/run-open.ts", OPEN_TIMEOUT_MS);
+  void runOpenThenSisa();
 } else {
   logger.info("scheduler: fuera de ventana o RUN_ON_BOOT=false — sin corrida de arranque");
 }

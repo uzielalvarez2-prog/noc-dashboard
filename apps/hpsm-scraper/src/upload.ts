@@ -9,7 +9,7 @@ import { logger } from "./logger.js";
  * @param csvPath   Ruta local al archivo CSV
  * @param groups    Grupo(s) a filtrar, separados por coma: "PEXA" o "PEXA,CECOR"
  */
-export async function uploadCsv(csvPath: string, groups: string, type: "open" | "closed" = "open"): Promise<void> {
+export async function uploadCsv(csvPath: string, groups: string, type: "open" | "closed" | "sisa" = "open"): Promise<void> {
   const content = readFileSync(csvPath);
   const formData = new FormData();
   formData.append(
@@ -17,9 +17,13 @@ export async function uploadCsv(csvPath: string, groups: string, type: "open" | 
     new Blob([content], { type: "text/csv" }),
     basename(csvPath),
   );
-  formData.append("group", groups);
+  // El endpoint de SISA no filtra por grupo (no tiene ese parámetro).
+  if (type !== "sisa") formData.append("group", groups);
 
-  const url = `${config.dashboardUrl}/api/incidents/${type}/upload`;
+  const url =
+    type === "sisa"
+      ? `${config.dashboardUrl}/api/sisa/upload`
+      : `${config.dashboardUrl}/api/incidents/${type}/upload`;
   logger.info(`Subiendo CSV al dashboard`, { url, groups, file: basename(csvPath) });
 
   const res = await fetch(url, {

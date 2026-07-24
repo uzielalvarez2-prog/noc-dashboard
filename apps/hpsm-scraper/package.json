@@ -6,8 +6,11 @@
   "scripts": {
     "download:open": "tsx src/download-open.ts",
     "download:closed": "tsx src/download-closed.ts",
+    "download:sisa": "tsx src/download-sisa.ts",
+    "diagnose:sisa": "tsx src/diagnose-sisa.ts",
     "run:open": "tsx src/run-open.ts",
     "run:closed": "tsx src/run-closed.ts",
+    "run:sisa": "tsx src/run-sisa.ts",
     "install-browsers": "playwright install chromium",
     "build": "tsc"
   },
