@@ -4,7 +4,7 @@ import { useState, useRef } from "react";
 import { Upload, CheckCircle, AlertTriangle } from "lucide-react";
 import { useQueryClient } from "@tanstack/react-query";
 
-type Kind = "open" | "closed";
+type Kind = "open" | "closed" | "sisa";
 type Group = "PEXA" | "CECOR";
 
 interface UploadResult {
@@ -29,7 +29,11 @@ export function CSVUpload() {
     const form = new FormData();
     form.append("file", file);
     const endpoint =
-      kind === "open" ? "/api/incidents/open/upload" : "/api/incidents/closed/upload";
+      kind === "open"
+        ? "/api/incidents/open/upload"
+        : kind === "closed"
+        ? "/api/incidents/closed/upload"
+        : "/api/sisa/upload";
     if (kind === "closed") form.append("group", group);
 
     try {
@@ -40,6 +44,7 @@ export function CSVUpload() {
         qc.invalidateQueries({ queryKey: ["open-incidents"] });
         qc.invalidateQueries({ queryKey: ["open-stats"] });
         qc.invalidateQueries({ queryKey: ["closed-stats"] });
+        qc.invalidateQueries({ queryKey: ["sisa"] });
       }
     } catch {
       setResult({ ok: false, error: "Error de conexión" });
@@ -83,6 +88,9 @@ export function CSVUpload() {
         <button type="button" className={tabBtn("closed", "Cerrados")} onClick={() => { setKind("closed"); setResult(null); }}>
           Cerrados
         </button>
+        <button type="button" className={tabBtn("sisa", "SISA")} onClick={() => { setKind("sisa"); setResult(null); }}>
+          SISA
+        </button>
       </div>
 
       {/* Selector de grupo (solo cerrados; los abiertos traen el grupo en el CSV) */}
@@ -118,11 +126,13 @@ export function CSVUpload() {
       >
         <Upload className="mx-auto mb-3 h-8 w-8 text-text-muted" />
         <p className="text-sm font-medium text-text-primary">
-          Arrastra el CSV de {kind === "open" ? "abiertos" : `cerrados (${group})`} aquí o haz clic
+          Arrastra el CSV de {kind === "open" ? "abiertos" : kind === "sisa" ? "SISA (Vendor Ticket)" : `cerrados (${group})`} aquí o haz clic
         </p>
         <p className="mt-1 text-xs text-text-muted">
           {kind === "open"
             ? "Se filtran PEXA + CECOR, se quitan duplicados y se reemplaza el tablero."
+            : kind === "sisa"
+            ? "Toma el Vendor Ticket y lo cruza con los incidentes abiertos. Reemplaza el tablero SISA."
             : "Calcula el SLA de 4 h con la hora de apertura y cierre."}
         </p>
         <input ref={fileRef} type="file" accept=".csv" className="hidden" onChange={handleFile} />

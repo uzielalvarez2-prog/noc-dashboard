@@ -265,6 +265,21 @@ model KnowledgeDoc {
   @@index([category])
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// SISA: tickets del vendor (columna "Vendor Ticket" del export de HPSM). Snapshot
+// reemplazable igual que OpenIncident — cada carga borra y reemplaza completo.
+// incidentId es el prefijo antes del guion del "Id" del CSV (IM4CH000897-001 →
+// IM4CH000897). El "Asignado" NO se guarda aquí: se toma en vivo de OpenIncident
+// al consultar, y solo se muestran los que siguen coincidiendo con un abierto.
+// ─────────────────────────────────────────────────────────────────────────────
+model SisaTicket {
+  incidentId   String   @id
+  company      String   @default("")
+  vendor       String   @default("") // CASE
+  vendorTicket String   @default("") // SISA
+  uploadedAt   DateTime @default(now())
+}
+
 enum Severity {
   CRITICAL
   HIGH

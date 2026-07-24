@@ -10,13 +10,14 @@ import { OpenIncidentTable } from "./OpenIncidentTable";
 import { EdcTabs } from "./EdcTabs";
 import { CriticosDownView } from "@/components/warroom/CriticosDownView";
 import { ContratoMarcoDownView } from "@/components/warroom/ContratoMarcoDownView";
+import { SisaView } from "@/components/sisa/SisaView";
 import type { SortDir } from "@/lib/exportOpenIncidents";
 import { cn } from "@/lib/utils";
 import { RefreshCw } from "lucide-react";
 
 const POLL_MS = 240_000;
 
-type Group = "PEXA" | "CECOR" | "EDC" | "WSP" | "CM";
+type Group = "PEXA" | "CECOR" | "EDC" | "WSP" | "CM" | "SISA";
 
 const GROUP_LABELS: Record<Group, string> = {
   PEXA: "PEXA",
@@ -24,6 +25,7 @@ const GROUP_LABELS: Record<Group, string> = {
   EDC: "EDC",
   WSP: "WSP. Clientes",
   CM: "Contrato Marco",
+  SISA: "SISA",
 };
 
 async function fetchStats(group: string, maxAgeHours?: number): Promise<OpenStats> {
@@ -152,8 +154,8 @@ function PexaCecorView({ group }: { group: "PEXA" | "CECOR" }) {
   );
 }
 
-// Orden visual pedido: EDC, PEXA, WSP. Clientes, Contrato Marco, CECOR.
-const GROUP_ORDER: Group[] = ["EDC", "PEXA", "WSP", "CM", "CECOR"];
+// Orden visual pedido: EDC, PEXA, WSP. Clientes, Contrato Marco, CECOR, SISA.
+const GROUP_ORDER: Group[] = ["EDC", "PEXA", "WSP", "CM", "CECOR", "SISA"];
 
 // Estilo "neon pill" (igual criterio que los botones de War Room): borde y
 // fondo del color siempre visibles, atenuados por opacity cuando no está
@@ -164,6 +166,7 @@ const GROUP_STYLE: Record<Group, { border: string; bg: string; text: string; rin
   WSP: { border: "border-rose-500/50", bg: "bg-rose-500/10", text: "text-rose-400", ring: "ring-rose-500", glow: "shadow-[0_0_10px_2px_rgba(244,63,94,0.4)]" },
   CM: { border: "border-amber-500/50", bg: "bg-amber-500/10", text: "text-amber-400", ring: "ring-amber-500", glow: "shadow-[0_0_10px_2px_rgba(245,158,11,0.4)]" },
   CECOR: { border: "border-blue-400/50", bg: "bg-blue-500/10", text: "text-blue-300", ring: "ring-blue-400", glow: "shadow-[0_0_10px_2px_rgba(96,165,250,0.4)]" },
+  SISA: { border: "border-violet-500/50", bg: "bg-violet-500/10", text: "text-violet-300", ring: "ring-violet-500", glow: "shadow-[0_0_10px_2px_rgba(139,92,246,0.4)]" },
 };
 
 export function OpenIncidentsView() {
@@ -200,6 +203,8 @@ export function OpenIncidentsView() {
       {group === "WSP" && <CriticosDownView />}
 
       {group === "CM" && <ContratoMarcoDownView />}
+
+      {group === "SISA" && <SisaView />}
     </div>
   );
 }
