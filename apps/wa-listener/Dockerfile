@@ -45,4 +45,8 @@ ENV WA_SESSION_DIR=/data/.wwebjs_auth
 
 WORKDIR /app/apps/wa-listener
 
+# Puerto del servidor HTTP de envío (dashboard → WhatsApp). Railway inyecta PORT
+# en runtime y enruta el dominio público a él; EXPOSE es documentativo.
+EXPOSE 8080
+
 CMD ["node_modules/.bin/tsx", "src/index.ts"]

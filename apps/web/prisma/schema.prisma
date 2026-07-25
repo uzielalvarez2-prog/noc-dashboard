@@ -280,6 +280,42 @@ model SisaTicket {
   uploadedAt   DateTime @default(now())
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// WHATSAPP — GRUPOS DESTINO: whitelist de grupos a los que el dashboard puede
+// enviar mensajes (vía wa-listener). Se agregan "poco a poco" desde la UI, por
+// eso es tabla y no lista fija. `name` debe ser el nombre EXACTO del grupo en
+// WhatsApp (con acentos/mayúsculas); wa-listener lo resuelve a chatId por nombre.
+// ─────────────────────────────────────────────────────────────────────────────
+model WhatsappGroup {
+  id        String   @id @default(cuid())
+  name      String   @unique // nombre EXACTO del grupo en WhatsApp
+  enabled   Boolean  @default(true)
+  note      String?
+  createdBy String   @default("")
+  createdAt DateTime @default(now())
+
+  @@index([enabled])
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// WHATSAPP — MENSAJES ENVIADOS: bitácora de lo que se manda desde el dashboard
+// (quién, a qué grupo, qué texto, si salió bien). Bajo volumen. Complementa el
+// AuditLog: aquí queda el texto completo para trazabilidad operativa.
+// ─────────────────────────────────────────────────────────────────────────────
+model WhatsappSentMessage {
+  id        String   @id @default(cuid())
+  groupName String
+  text      String
+  sentBy    String // userId
+  sentByName String  @default("")
+  ok        Boolean  @default(false)
+  error     String?
+  createdAt DateTime @default(now())
+
+  @@index([createdAt])
+  @@index([sentBy])
+}
+
 enum Severity {
   CRITICAL
   HIGH

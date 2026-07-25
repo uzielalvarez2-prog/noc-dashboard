@@ -11,6 +11,7 @@ import QRCode from "qrcode";
 import { config } from "./config.js";
 import { logger } from "./logger.js";
 import { postReport } from "./upload.js";
+import { startSendServer } from "./server.js";
 
 const { Client, LocalAuth } = pkg;
 
@@ -118,6 +119,10 @@ logger.info(
       : "Sin executablePath — puppeteer-core intentará su default (puede fallar)",
 );
 
+// true una vez que el evento 'ready' disparó (client autenticado y operativo).
+// El servidor HTTP de envío lo consulta para no intentar mandar antes de tiempo.
+let clientReady = false;
+
 client.on("qr", (qr) => {
   logger.info(
     "Escanea este QR con el WhatsApp del número de EMPRESA (Ajustes → Dispositivos vinculados → Vincular dispositivo). Solo la 1a vez."
@@ -139,9 +144,13 @@ client.on("qr", (qr) => {
 
 client.on("authenticated", () => logger.info("Sesión de WhatsApp autenticada."));
 client.on("auth_failure", (msg) => logger.error("Fallo de autenticación", { msg }));
-client.on("disconnected", (reason) => logger.warn("Cliente desconectado", { reason }));
+client.on("disconnected", (reason) => {
+  clientReady = false;
+  logger.warn("Cliente desconectado", { reason });
+});
 
 client.on("ready", async () => {
+  clientReady = true;
   logger.info("Cliente listo.", { group: config.groupName });
   try {
     await backfill();
@@ -166,18 +175,36 @@ client.on("message_edit", (msg, newBody) => {
   void handleMessage(msg, text, true);
 });
 
-/** Localiza el chat del grupo objetivo por nombre exacto. */
-async function resolveGroup() {
+/** Localiza el chat de un grupo por nombre EXACTO. */
+async function resolveGroupByName(name: string) {
   const chats = await client.getChats();
-  const chat = chats.find((c) => c.isGroup && c.name === config.groupName);
-  if (!chat) logger.error("No se encontró el grupo (revisa WA_GROUP_NAME)", { group: config.groupName });
-  return chat;
+  return chats.find((c) => c.isGroup && c.name === name);
+}
+
+/**
+ * Envía un texto a un grupo por su nombre exacto. Usado por el servidor HTTP
+ * (server.ts) cuando el dashboard pide mandar un mensaje. Reusa el MISMO client
+ * ya autenticado — no se abre una segunda sesión de WhatsApp.
+ * Lanza si el grupo no existe o si el cliente aún no está listo.
+ */
+export async function sendToGroup(groupName: string, text: string): Promise<void> {
+  const chat = await resolveGroupByName(groupName);
+  if (!chat) throw new Error(`Grupo no encontrado: ${groupName}`);
+  await client.sendMessage(chat.id._serialized, text);
+  logger.info("Mensaje enviado a grupo", { group: groupName, chars: text.length });
+}
+
+export function isClientReady(): boolean {
+  return clientReady;
 }
 
 /** Al arrancar, relee los últimos N mensajes para recuperar lo perdido. */
 async function backfill() {
-  const chat = await resolveGroup();
-  if (!chat) return;
+  const chat = await resolveGroupByName(config.groupName);
+  if (!chat) {
+    logger.error("No se encontró el grupo (revisa WA_GROUP_NAME)", { group: config.groupName });
+    return;
+  }
   const messages = await chat.fetchMessages({ limit: config.backfillLimit });
   logger.info("Backfill: releyendo mensajes recientes", { fetched: messages.length });
   for (const msg of messages) {
@@ -221,6 +248,11 @@ async function handleMessage(msg: Message, body: string, isEdit = false) {
     }
   }
 }
+
+// Servidor HTTP de envío (flujo dashboard → WhatsApp). Arranca de inmediato para
+// responder /health aunque el client aún esté vinculándose; los envíos esperan a
+// que isClientReady() sea true.
+startSendServer({ sendToGroup, isReady: isClientReady });
 
 client.initialize();
 logger.info("Inicializando wa-listener…", {
