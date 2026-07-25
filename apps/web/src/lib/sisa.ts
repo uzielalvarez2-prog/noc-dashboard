@@ -24,7 +24,17 @@ export interface SisaEdcInput {
   company: string; // Empresa/Cliente (viene de Abiertos/PEXA, cruzado por IM)
   vendorTicket: string; // folio SISA
   vendor: string; // CASE
+  district: string; // Distrito (viene de Abiertos) — se pega al CASE en el Ticket
+  serviceId: string; // Servicio (viene de Abiertos) — referencia en "Servicio afectado"
   openTime: string | Date; // Apertura (viene de Abiertos)
+}
+
+// SOLO para el formato EDC: Monterrey → Mty, Guadalajara → Gdl.
+// En la columna CASE de la tabla se dejan completos (no se toca aquí).
+export function abreviarCaseEdc(caseVal: string): string {
+  return (caseVal ?? "")
+    .replace(/Guadalajara/gi, "Gdl")
+    .replace(/Monterrey/gi, "Mty");
 }
 
 const MESES_EDC = ["Ene", "Feb", "Mar", "Abr", "May", "Jun", "Jul", "Ago", "Sep", "Oct", "Nov", "Dic"];
@@ -46,19 +56,30 @@ export function formatInicioEdc(date: string | Date): string {
 // Pre-llena lo que SISA + Abiertos ya tienen; deja en blanco lo que es manual
 // por incidente (Alto impacto, Estatus) para completar antes de enviar.
 export function buildEdcText(it: SisaEdcInput): string {
-  const caseVal = (it.vendor ?? "").trim();
-  const ticketLine = caseVal
-    ? `Ticket: ${it.vendorTicket} | CASE ${caseVal}`
+  // Ticket: "{folio SISA} | CASE {CASE abreviado}-{Distrito}".
+  // El campo vendor a veces ya trae el prefijo "CASE" — se quita para no duplicarlo.
+  const rawCase = (it.vendor ?? "").trim().replace(/^CASE\s+/i, "");
+  const caseAbbr = abreviarCaseEdc(rawCase);
+  const district = (it.district ?? "").trim();
+  const caseLabel = [caseAbbr, district].filter(Boolean).join("-");
+  const ticketLine = caseLabel
+    ? `Ticket: ${it.vendorTicket} | CASE ${caseLabel}`
     : `Ticket: ${it.vendorTicket}`;
-  // "Alto impacto", "Servicio afectado" y "Estatus" quedan en blanco a propósito:
-  // son detalle manual por incidente que se completa antes de enviar al grupo.
+  // "Servicio afectado": menú de tipos (IDN | VPN | IDE) seguido de la
+  // referencia real del servicio (viene de la columna Servicio / serviceId).
+  const servicio = (it.serviceId ?? "").trim();
+  const servicioLine = servicio
+    ? `Servicio afectado: IDN | VPN | IDE ${servicio}`
+    : `Servicio afectado: IDN | VPN | IDE`;
+  // "Alto impacto" y "Estatus" traen opciones por defecto (separadas por " | ")
+  // que se depuran a mano antes de enviar al grupo.
   return [
     `*Incidente crítico:* ${it.incidentId}`,
     `Cliente: *${it.company || ""}*`,
-    `Alto impacto: `,
-    `Servicio afectado: `,
+    `Alto impacto: Sin respaldo`,
+    servicioLine,
     ticketLine,
     `Inicio: ${formatInicioEdc(it.openTime)}`,
-    `Estatus: `,
+    `Estatus: ONT fuera de gestión | Demarcador fuera de gestión`,
   ].join("\n");
 }

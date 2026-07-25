@@ -17,6 +17,8 @@ interface SisaItem {
   assignee: string | null;
   group: string;
   openTime: string;
+  district: string;
+  serviceId: string;
 }
 
 async function fetchSisa(): Promise<{ items: SisaItem[] }> {
@@ -69,8 +71,8 @@ function StatusBadge({ status }: { status: string }) {
   return <span className={cn("font-medium", NEON[statusCat(status)].badge)}>{status || "—"}</span>;
 }
 
-const EXPORT_COLS = ["Incidente", "Apertura", "Empresa", "CASE", "SISA", "Asignado", "Estatus"];
-const COLUMNS = ["Incidente", "Apertura", "Empresa", "CASE", "SISA", "Asignado", "Estatus", "EDC"];
+const EXPORT_COLS = ["Incidente", "Apertura", "Empresa", "Servicio", "Distrito", "CASE", "SISA", "Asignado", "Estatus"];
+const COLUMNS = ["Incidente", "Apertura", "Empresa", "Servicio", "Distrito", "CASE", "SISA", "Asignado", "Estatus", "EDC"];
 
 export function SisaView() {
   const [q, setQ] = useState("");
@@ -93,7 +95,7 @@ export function SisaView() {
     const needle = q.trim().toLowerCase();
     if (!needle) return items;
     return items.filter((it) =>
-      [it.incidentId, it.company, it.vendor, it.vendorTicket, it.assignee ?? "", it.status]
+      [it.incidentId, it.company, it.serviceId, it.district, it.vendor, it.vendorTicket, it.assignee ?? "", it.status]
         .join(" ")
         .toLowerCase()
         .includes(needle)
@@ -153,6 +155,8 @@ export function SisaView() {
         it.incidentId,
         formatHpsm(it.openTime),
         it.company,
+        it.serviceId,
+        it.district,
         it.vendor,
         it.vendorTicket,
         it.assignee ?? "—",
@@ -334,6 +338,16 @@ export function SisaView() {
                     <td className="px-3 py-2 text-xs text-text-primary">
                       <span className="block max-w-[16rem] truncate" title={it.company}>
                         {it.company || "—"}
+                      </span>
+                    </td>
+                    <td className="px-3 py-2 font-mono text-xs text-text-muted">
+                      <span className="block max-w-[11rem] truncate" title={it.serviceId}>
+                        {it.serviceId || "—"}
+                      </span>
+                    </td>
+                    <td className="px-3 py-2 text-xs text-text-primary">
+                      <span className="block max-w-[10rem] truncate" title={it.district}>
+                        {it.district || "—"}
                       </span>
                     </td>
                     <td className="px-3 py-2 text-xs text-text-primary">{it.vendor || "—"}</td>

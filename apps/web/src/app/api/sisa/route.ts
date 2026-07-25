@@ -25,6 +25,8 @@ export async function GET(req: NextRequest) {
         group: true,
         openTime: true,
         company: true,
+        district: true,
+        serviceId: true,
       },
     });
 
@@ -36,6 +38,8 @@ export async function GET(req: NextRequest) {
       group: string;
       openTime: Date;
       company: string;
+      district: string;
+      serviceId: string;
     };
     const openById = new Map<string, OpenInfo>();
     for (const o of open) {
@@ -57,6 +61,8 @@ export async function GET(req: NextRequest) {
           assignee: o.assignee,
           group: o.group,
           openTime: o.openTime,
+          district: o.district,
+          serviceId: o.serviceId,
         };
       });
 
