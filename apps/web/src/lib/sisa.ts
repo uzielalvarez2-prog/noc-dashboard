@@ -52,6 +52,19 @@ export function formatInicioEdc(date: string | Date): string {
   return `${dd}/${mmm}/${yyyy}, ${hh}:${mi} horas`;
 }
 
+// Tipo de servicio según el prefijo del folio (columna Servicio de Abiertos):
+// numérico -> IDN, empieza con C/T/A -> IDE, empieza con D -> VPN.
+// Ejemplos: "5521240618" -> IDN; "A32-1705-004", "TCB-2109-0003-C02-2111-0156" -> IDE;
+// "D04-1601-0001" -> VPN.
+export function tipoServicioEdc(serviceId: string): "IDN" | "IDE" | "VPN" | null {
+  const s = (serviceId ?? "").trim();
+  if (!s) return null;
+  if (/^\d/.test(s)) return "IDN";
+  if (/^[CTA]/i.test(s)) return "IDE";
+  if (/^D/i.test(s)) return "VPN";
+  return null;
+}
+
 // Texto en el formato que el equipo publica en el grupo STAFF SUPERVISIÓN.
 // Pre-llena lo que SISA + Abiertos ya tienen; deja en blanco lo que es manual
 // por incidente (Alto impacto, Estatus) para completar antes de enviar.
@@ -65,11 +78,12 @@ export function buildEdcText(it: SisaEdcInput): string {
   const ticketLine = caseLabel
     ? `Ticket: ${it.vendorTicket} | CASE ${caseLabel}`
     : `Ticket: ${it.vendorTicket}`;
-  // "Servicio afectado": menú de tipos (IDN | VPN | IDE) seguido de la
+  // "Servicio afectado": tipo resuelto por prefijo (IDN/IDE/VPN) seguido de la
   // referencia real del servicio (viene de la columna Servicio / serviceId).
   const servicio = (it.serviceId ?? "").trim();
+  const tipo = tipoServicioEdc(servicio);
   const servicioLine = servicio
-    ? `Servicio afectado: IDN | VPN | IDE ${servicio}`
+    ? `Servicio afectado: ${tipo ?? "IDN | VPN | IDE"} ${servicio}`
     : `Servicio afectado: IDN | VPN | IDE`;
   // "Alto impacto" y "Estatus" traen opciones por defecto (separadas por " | ")
   // que se depuran a mano antes de enviar al grupo.
