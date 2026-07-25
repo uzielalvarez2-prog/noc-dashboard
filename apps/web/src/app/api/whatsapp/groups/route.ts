@@ -23,11 +23,11 @@ export async function GET(req: NextRequest) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// POST — agregar un grupo a la whitelist. Solo SUPERVISOR/ADMIN. El `name` debe
-// coincidir EXACTO con el nombre del grupo en WhatsApp (wa-listener lo resuelve
-// por nombre). Idempotente por nombre (upsert): re-agregar reactiva/actualiza.
+// PATCH — editar un grupo existente (nota / habilitar-deshabilitar). Solo
+// SUPERVISOR/ADMIN. Los grupos NO se agregan a mano: se auto-descubren cuando
+// wa-listener ve un mensaje de ellos. Aquí solo se ajusta lo administrable.
 // ─────────────────────────────────────────────────────────────────────────────
-export async function POST(req: NextRequest) {
+export async function PATCH(req: NextRequest) {
   const session = getSessionFromRequest(req);
   if (!session) return NextResponse.json({ error: "No autorizado" }, { status: 401 });
   if (!canAccessSettings(session.role)) {
@@ -35,34 +35,33 @@ export async function POST(req: NextRequest) {
   }
 
   const body = (await req.json().catch(() => null)) as {
-    name?: unknown;
+    id?: unknown;
     note?: unknown;
     enabled?: unknown;
   } | null;
 
-  const name = typeof body?.name === "string" ? body.name.trim() : "";
-  const note = typeof body?.note === "string" ? body.note.trim() : "";
-  const enabled = typeof body?.enabled === "boolean" ? body.enabled : true;
-  if (!name) return NextResponse.json({ error: "El nombre del grupo es requerido" }, { status: 400 });
+  const id = typeof body?.id === "string" ? body.id.trim() : "";
+  if (!id) return NextResponse.json({ error: "id requerido" }, { status: 400 });
 
-  const group = await db.whatsappGroup.upsert({
-    where: { name },
-    create: { name, note: note || null, enabled, createdBy: session.id },
-    update: { note: note || null, enabled },
-  });
+  const data: { note?: string | null; enabled?: boolean } = {};
+  if (typeof body?.note === "string") data.note = body.note.trim() || null;
+  if (typeof body?.enabled === "boolean") data.enabled = body.enabled;
+
+  const group = await db.whatsappGroup.update({ where: { id }, data }).catch(() => null);
+  if (!group) return NextResponse.json({ error: "Grupo no encontrado" }, { status: 404 });
 
   await db.auditLog
     .create({
       data: {
         userId: session.id,
-        action: "UPSERT_WHATSAPP_GROUP",
+        action: "UPDATE_WHATSAPP_GROUP",
         targetId: group.id,
         metadata: { name: group.name, enabled: group.enabled },
       },
     })
     .catch(() => {});
 
-  return NextResponse.json({ group }, { status: 201 });
+  return NextResponse.json({ group });
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

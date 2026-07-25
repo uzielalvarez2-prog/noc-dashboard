@@ -14,7 +14,7 @@ export interface SendResult {
 
 /** Reenvía un envío a wa-listener. No lanza: devuelve {ok,status,error}. */
 export async function sendWhatsappViaListener(
-  groupName: string,
+  chatId: string,
   text: string,
 ): Promise<SendResult> {
   if (!WA_LISTENER_URL) {
@@ -33,7 +33,7 @@ export async function sendWhatsappViaListener(
         "Content-Type": "application/json",
         "x-internal-key": INTERNAL_API_KEY,
       },
-      body: JSON.stringify({ groupName, text }),
+      body: JSON.stringify({ chatId, text }),
       // El listener puede tardar en resolver chats; damos margen pero acotado.
       signal: AbortSignal.timeout(20_000),
     });

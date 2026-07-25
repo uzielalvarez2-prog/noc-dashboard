@@ -281,18 +281,21 @@ model SisaTicket {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// WHATSAPP — GRUPOS DESTINO: whitelist de grupos a los que el dashboard puede
-// enviar mensajes (vía wa-listener). Se agregan "poco a poco" desde la UI, por
-// eso es tabla y no lista fija. `name` debe ser el nombre EXACTO del grupo en
-// WhatsApp (con acentos/mayúsculas); wa-listener lo resuelve a chatId por nombre.
+// WHATSAPP — GRUPOS DESTINO: grupos a los que el dashboard puede enviar mensajes
+// (vía wa-listener). Se AUTO-DESCUBREN: cada vez que wa-listener ve un mensaje de
+// un grupo, registra su chatId + nombre aquí (upsert por chatId). El envío usa el
+// `chatId` directo (xxxx@g.us) — NO getChats(), que está roto por la versión de
+// WhatsApp Web. `enabled` permite ocultar un grupo del selector sin borrarlo.
 // ─────────────────────────────────────────────────────────────────────────────
 model WhatsappGroup {
-  id        String   @id @default(cuid())
-  name      String   @unique // nombre EXACTO del grupo en WhatsApp
-  enabled   Boolean  @default(true)
-  note      String?
-  createdBy String   @default("")
-  createdAt DateTime @default(now())
+  id         String   @id @default(cuid())
+  chatId     String   @unique // identificador real del grupo (xxxx@g.us) — llave de envío
+  name       String   @default("") // nombre visible del grupo (último visto)
+  enabled    Boolean  @default(true)
+  note       String?
+  createdBy  String   @default("") // "" cuando lo descubrió el listener
+  createdAt  DateTime @default(now())
+  lastSeenAt DateTime @default(now())
 
   @@index([enabled])
 }

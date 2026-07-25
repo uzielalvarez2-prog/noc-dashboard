@@ -10,7 +10,7 @@ import qrcode from "qrcode-terminal";
 import QRCode from "qrcode";
 import { config } from "./config.js";
 import { logger } from "./logger.js";
-import { postReport } from "./upload.js";
+import { postReport, postDiscoveredGroup } from "./upload.js";
 import { startSendServer } from "./server.js";
 
 const { Client, LocalAuth } = pkg;
@@ -188,6 +188,7 @@ client.on("ready", async () => {
 // suele reportar desde este mismo teléfono); 'message' solo dispararía con
 // mensajes de terceros y perdería los propios.
 client.on("message_create", (msg) => {
+  void discoverGroupFrom(msg);
   void handleMessage(msg, msg.body ?? "");
 });
 
@@ -200,54 +201,51 @@ client.on("message_edit", (msg, newBody) => {
   void handleMessage(msg, text, true);
 });
 
-/** Localiza el chat de un grupo por nombre EXACTO. */
-async function resolveGroupByName(name: string) {
-  const chats = await client.getChats();
-  return chats.find((c) => c.isGroup && c.name === name);
-}
-
 /**
- * Envía un texto a un grupo por su nombre exacto. Usado por el servidor HTTP
+ * Envía un texto a un grupo por su chatId (xxxx@g.us). Usado por el servidor HTTP
  * (server.ts) cuando el dashboard pide mandar un mensaje. Reusa el MISMO client
  * ya autenticado — no se abre una segunda sesión de WhatsApp.
  *
- * Todo va envuelto en try/catch que RE-LANZA con un mensaje explícito: así un
- * fallo de Puppeteer (getChats/sendMessage) nunca se propaga como una excepción
- * truncada ni tumba el proceso, y el server puede responder un 502 con detalle.
- * El error original se loguea completo (con stack) para diagnóstico.
+ * IMPORTANTE: envía por chatId DIRECTO, sin client.getChats(). getChats() hace un
+ * evaluate profundo de Store.Chat que revienta con la versión de WhatsApp Web que
+ * sirve actualmente ("r" de Puppeteer). sendMessage(chatId, text) no depende de
+ * eso — por eso el envío funciona aunque getChats no.
  */
-export async function sendToGroup(groupName: string, text: string): Promise<void> {
-  let chat;
+export async function sendToGroup(chatId: string, text: string): Promise<void> {
   try {
-    chat = await resolveGroupByName(groupName);
-  } catch (e) {
-    logger.error("getChats falló al resolver grupo", {
-      group: groupName,
-      error: e instanceof Error ? e.stack ?? e.message : String(e),
-    });
-    throw new Error(`No se pudo consultar los chats de WhatsApp: ${errMsg(e)}`);
-  }
-  if (!chat) throw new Error(`Grupo no encontrado: ${groupName}`);
-
-  try {
-    await client.sendMessage(chat.id._serialized, text);
+    await client.sendMessage(chatId, text);
   } catch (e) {
     logger.error("sendMessage falló", {
-      group: groupName,
+      chatId,
       error: e instanceof Error ? e.stack ?? e.message : String(e),
     });
     throw new Error(`No se pudo enviar el mensaje: ${errMsg(e)}`);
   }
-  logger.info("Mensaje enviado a grupo", { group: groupName, chars: text.length });
+  logger.info("Mensaje enviado a grupo", { chatId, chars: text.length });
 }
 
 export function isClientReady(): boolean {
   return clientReady;
 }
 
-/** Al arrancar, relee los últimos N mensajes para recuperar lo perdido. */
+/**
+ * Al arrancar, relee los últimos N mensajes para recuperar lo perdido.
+ * Necesita client.getChats() para localizar el grupo, y esa API está rota con la
+ * versión de WhatsApp Web actual (revienta con "r"). Se envuelve en try/catch:
+ * si falla, se loguea y se sigue — la recepción EN VIVO (message_create, que usa
+ * msg.getChat(), no getChats) no se ve afectada.
+ */
 async function backfill() {
-  const chat = await resolveGroupByName(config.groupName);
+  let chat;
+  try {
+    const chats = await client.getChats();
+    chat = chats.find((c) => c.isGroup && c.name === config.groupName);
+  } catch (e) {
+    logger.warn("Backfill omitido: getChats no disponible (recepción en vivo sigue OK)", {
+      error: errMsg(e),
+    });
+    return;
+  }
   if (!chat) {
     logger.error("No se encontró el grupo (revisa WA_GROUP_NAME)", { group: config.groupName });
     return;
@@ -256,6 +254,35 @@ async function backfill() {
   logger.info("Backfill: releyendo mensajes recientes", { fetched: messages.length });
   for (const msg of messages) {
     await handleMessage(msg, msg.body ?? "");
+  }
+}
+
+// Auto-descubrimiento de grupos: caché en memoria de chatIds ya registrados en el
+// dashboard (por nombre+chatId) para no hacer un POST por cada mensaje. Solo se
+// registra la PRIMERA vez que se ve un grupo (o si cambió el nombre). Reusa el
+// mismo msg.getChat() que la lectura ya hace — no toca getChats() (que está roto).
+const seenGroups = new Map<string, string>(); // chatId -> último nombre registrado
+
+async function recordGroupSeen(chatId: string, name: string): Promise<void> {
+  if (!chatId.endsWith("@g.us")) return; // solo grupos
+  if (seenGroups.get(chatId) === name) return; // ya registrado con este nombre
+  try {
+    await postDiscoveredGroup(chatId, name);
+    seenGroups.set(chatId, name);
+    logger.info("Grupo registrado (auto-descubrimiento)", { chatId, name });
+  } catch (e) {
+    // No cachear si falló: se reintenta con el próximo mensaje del grupo.
+    logger.warn("No se pudo registrar grupo (se reintentará)", { chatId, error: errMsg(e) });
+  }
+}
+
+/** Obtiene el chat del mensaje (msg.getChat, que SÍ funciona) y registra el grupo. */
+async function discoverGroupFrom(msg: Message): Promise<void> {
+  try {
+    const chat = await msg.getChat();
+    if (chat.isGroup) await recordGroupSeen(chat.id._serialized, chat.name ?? "");
+  } catch {
+    /* si getChat falla para este mensaje, se ignora; otro mensaje lo registrará */
   }
 }
 

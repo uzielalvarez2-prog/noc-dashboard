@@ -18,22 +18,22 @@ export async function POST(req: NextRequest) {
   if (!session) return NextResponse.json({ error: "No autorizado" }, { status: 401 });
 
   const body = (await req.json().catch(() => null)) as {
-    groupName?: unknown;
+    chatId?: unknown;
     text?: unknown;
   } | null;
 
-  const groupName = typeof body?.groupName === "string" ? body.groupName.trim() : "";
+  const chatId = typeof body?.chatId === "string" ? body.chatId.trim() : "";
   const text = typeof body?.text === "string" ? body.text : "";
 
-  if (!groupName) return NextResponse.json({ error: "Selecciona un grupo" }, { status: 400 });
+  if (!chatId) return NextResponse.json({ error: "Selecciona un grupo" }, { status: 400 });
   if (!text.trim()) return NextResponse.json({ error: "El mensaje está vacío" }, { status: 400 });
   if (text.length > MAX_TEXT_LEN) {
     return NextResponse.json({ error: `El mensaje excede ${MAX_TEXT_LEN} caracteres` }, { status: 400 });
   }
 
-  // Whitelist: el grupo debe existir y estar habilitado. Nunca confiamos en el
-  // nombre que manda el cliente sin validarlo contra la base.
-  const group = await db.whatsappGroup.findUnique({ where: { name: groupName } });
+  // Whitelist: el grupo debe existir (por chatId) y estar habilitado. Nunca
+  // confiamos en el chatId que manda el cliente sin validarlo contra la base.
+  const group = await db.whatsappGroup.findUnique({ where: { chatId } });
   if (!group || !group.enabled) {
     return NextResponse.json({ error: "Grupo no permitido o deshabilitado" }, { status: 403 });
   }
@@ -45,13 +45,13 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  const result = await sendWhatsappViaListener(groupName, text);
+  const result = await sendWhatsappViaListener(chatId, text);
 
-  // Bitácora operativa (siempre, ok o error).
+  // Bitácora operativa (siempre, ok o error). Guarda el nombre para legibilidad.
   await db.whatsappSentMessage
     .create({
       data: {
-        groupName,
+        groupName: group.name,
         text,
         sentBy: session.id,
         sentByName: session.name ?? "",
@@ -67,8 +67,8 @@ export async function POST(req: NextRequest) {
       data: {
         userId: session.id,
         action: "SEND_WHATSAPP",
-        targetId: groupName,
-        metadata: { ok: result.ok, chars: text.length, error: result.error ?? null },
+        targetId: group.name,
+        metadata: { ok: result.ok, chars: text.length, chatId, error: result.error ?? null },
       },
     })
     .catch(() => {});

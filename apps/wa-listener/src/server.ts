@@ -11,7 +11,7 @@ import { logger } from "./logger.js";
 // delegamos. `isReady` evita intentar mandar antes de que el client esté listo.
 
 interface SendDeps {
-  sendToGroup: (groupName: string, text: string) => Promise<void>;
+  sendToGroup: (chatId: string, text: string) => Promise<void>;
   isReady: () => boolean;
 }
 
@@ -75,10 +75,10 @@ export function startSendServer({ sendToGroup, isReady }: SendDeps): void {
         return;
       }
 
-      const b = (body ?? {}) as { groupName?: unknown; text?: unknown };
-      const groupName = typeof b.groupName === "string" ? b.groupName.trim() : "";
+      const b = (body ?? {}) as { chatId?: unknown; text?: unknown };
+      const chatId = typeof b.chatId === "string" ? b.chatId.trim() : "";
       const text = typeof b.text === "string" ? b.text : "";
-      if (!groupName) return json(400, { error: "groupName requerido" });
+      if (!chatId) return json(400, { error: "chatId requerido" });
       if (!text.trim()) return json(400, { error: "text vacío" });
 
       if (!isReady()) {
@@ -86,11 +86,11 @@ export function startSendServer({ sendToGroup, isReady }: SendDeps): void {
       }
 
       try {
-        await sendToGroup(groupName, text);
+        await sendToGroup(chatId, text);
         json(200, { ok: true });
       } catch (e) {
         const msg = (e as Error).message;
-        logger.error("Fallo al enviar mensaje", { group: groupName, error: msg });
+        logger.error("Fallo al enviar mensaje", { chatId, error: msg });
         json(502, { error: msg });
       }
     })();

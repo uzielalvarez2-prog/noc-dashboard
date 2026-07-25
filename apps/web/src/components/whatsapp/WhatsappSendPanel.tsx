@@ -2,11 +2,12 @@
 
 import { useEffect, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Send, Loader2, CheckCircle2, AlertCircle, Plus, Trash2, Settings2, X } from "lucide-react";
+import { Send, Loader2, CheckCircle2, AlertCircle, Trash2, Settings2, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
 interface Group {
   id: string;
+  chatId: string;
   name: string;
   enabled: boolean;
   note: string | null;
@@ -31,10 +32,11 @@ export function WhatsappSendPanel() {
   const { data, isLoading } = useQuery({
     queryKey: ["whatsapp-groups"],
     queryFn: () => fetchGroups(false),
+    refetchInterval: 30_000, // refresca por si aparece un grupo recién descubierto
   });
   const groups = data?.groups ?? [];
 
-  const [groupName, setGroupName] = useState("");
+  const [chatId, setChatId] = useState("");
   const [text, setText] = useState("");
   const [sending, setSending] = useState(false);
   const [feedback, setFeedback] = useState<{ ok: boolean; msg: string } | null>(null);
@@ -42,11 +44,11 @@ export function WhatsappSendPanel() {
 
   // Pre-selecciona el primer grupo cuando cargan.
   useEffect(() => {
-    if (!groupName && groups.length > 0) setGroupName(groups[0].name);
-  }, [groups, groupName]);
+    if (!chatId && groups.length > 0) setChatId(groups[0].chatId);
+  }, [groups, chatId]);
 
   async function send() {
-    if (!groupName) {
+    if (!chatId) {
       setFeedback({ ok: false, msg: "Selecciona un grupo" });
       return;
     }
@@ -60,14 +62,15 @@ export function WhatsappSendPanel() {
       const res = await fetch("/api/whatsapp/send", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ groupName, text }),
+        body: JSON.stringify({ chatId, text }),
       });
       const body = await res.json().catch(() => ({}));
       if (!res.ok) {
         setFeedback({ ok: false, msg: body.error ?? "No se pudo enviar" });
         return;
       }
-      setFeedback({ ok: true, msg: `Enviado a ${groupName}` });
+      const name = groups.find((g) => g.chatId === chatId)?.name ?? "el grupo";
+      setFeedback({ ok: true, msg: `Enviado a ${name}` });
       setText("");
     } catch {
       setFeedback({ ok: false, msg: "Error de conexión" });
@@ -89,18 +92,19 @@ export function WhatsappSendPanel() {
             <p className="text-sm text-text-muted">Cargando grupos…</p>
           ) : groups.length === 0 ? (
             <p className="rounded-md border border-warning/40 bg-warning-dim px-3 py-2 text-xs text-warning">
-              No hay grupos configurados.
-              {isAdmin ? " Usa “Administrar grupos” para agregar el primero." : " Pide a un supervisor que agregue uno."}
+              Aún no se detecta ningún grupo. Los grupos aparecen solos cuando llega
+              un mensaje a ellos por el WhatsApp de la empresa. Manda algo a un grupo
+              y recarga en unos segundos.
             </p>
           ) : (
             <select
-              value={groupName}
-              onChange={(e) => setGroupName(e.target.value)}
+              value={chatId}
+              onChange={(e) => setChatId(e.target.value)}
               className={inputCls}
             >
               {groups.map((g) => (
-                <option key={g.id} value={g.name}>
-                  {g.name}
+                <option key={g.chatId} value={g.chatId}>
+                  {g.name || g.chatId}
                 </option>
               ))}
             </select>
@@ -171,8 +175,9 @@ export function WhatsappSendPanel() {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Administración de la whitelist de grupos (solo SUPERVISOR/ADMIN). Lista TODOS
-// los grupos (?all=1), permite agregar por nombre exacto y quitar.
+// Administración de grupos (solo SUPERVISOR/ADMIN). Los grupos se AUTO-DESCUBREN;
+// aquí solo se habilitan/deshabilitan (para el selector) o se quitan. Lista TODOS
+// los grupos (?all=1).
 // ─────────────────────────────────────────────────────────────────────────────
 function GroupsAdmin({ onClose, onChanged }: { onClose: () => void; onChanged: () => void }) {
   const qc = useQueryClient();
@@ -181,39 +186,22 @@ function GroupsAdmin({ onClose, onChanged }: { onClose: () => void; onChanged: (
     queryFn: () => fetchGroups(true),
   });
   const groups = data?.groups ?? [];
-
-  const [name, setName] = useState("");
-  const [note, setNote] = useState("");
   const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
 
   function refresh() {
     qc.invalidateQueries({ queryKey: ["whatsapp-groups"] });
     onChanged();
   }
 
-  async function add() {
-    if (!name.trim()) {
-      setError("El nombre del grupo es requerido");
-      return;
-    }
+  async function toggle(g: Group) {
     setBusy(true);
-    setError(null);
     try {
-      const res = await fetch("/api/whatsapp/groups", {
-        method: "POST",
+      await fetch("/api/whatsapp/groups", {
+        method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name: name.trim(), note: note.trim() }),
+        body: JSON.stringify({ id: g.id, enabled: !g.enabled }),
       });
-      if (!res.ok) {
-        setError((await res.json()).error ?? "Error al agregar");
-        return;
-      }
-      setName("");
-      setNote("");
       refresh();
-    } catch {
-      setError("Error de conexión");
     } finally {
       setBusy(false);
     }
@@ -229,63 +217,47 @@ function GroupsAdmin({ onClose, onChanged }: { onClose: () => void; onChanged: (
     }
   }
 
-  const inputCls =
-    "w-full rounded-md border border-border bg-surface px-3 py-2 text-sm text-text-primary placeholder:text-text-muted/60 focus:border-accent focus:outline-none";
-
   return (
     <div className="space-y-3 rounded-xl border border-border bg-surface p-5">
       <div className="flex items-center justify-between">
-        <h2 className="text-base font-semibold text-text-primary">Grupos permitidos</h2>
+        <h2 className="text-base font-semibold text-text-primary">Grupos detectados</h2>
         <button onClick={onClose} className="text-text-muted hover:text-text-primary">
           <X className="h-4 w-4" />
         </button>
       </div>
       <p className="text-xs text-text-muted">
-        El nombre debe coincidir EXACTO con el del grupo en WhatsApp (acentos y mayúsculas).
+        Los grupos aparecen solos cuando llega un mensaje a ellos. Deshabilita los
+        que no quieras ver en el selector de envío.
       </p>
 
-      {/* Alta */}
-      <div className="flex flex-col gap-2 sm:flex-row">
-        <input
-          value={name}
-          onChange={(e) => setName(e.target.value)}
-          placeholder="Nombre exacto del grupo"
-          className={inputCls}
-        />
-        <input
-          value={note}
-          onChange={(e) => setNote(e.target.value)}
-          placeholder="Nota (opcional)"
-          className={inputCls}
-        />
-        <Button onClick={add} disabled={busy} className="shrink-0 gap-1.5 bg-accent text-white hover:bg-accent/90">
-          <Plus className="h-4 w-4" /> Agregar
-        </Button>
-      </div>
-      {error && <p className="text-xs text-critical">{error}</p>}
-
-      {/* Lista */}
       {isLoading ? (
         <p className="text-sm text-text-muted">Cargando…</p>
       ) : groups.length === 0 ? (
-        <p className="text-sm text-text-muted">Sin grupos aún.</p>
+        <p className="text-sm text-text-muted">Aún no se detecta ningún grupo.</p>
       ) : (
         <ul className="divide-y divide-border/60">
           {groups.map((g) => (
-            <li key={g.id} className="flex items-center justify-between py-2">
+            <li key={g.id} className="flex items-center justify-between gap-3 py-2">
               <div className="min-w-0">
-                <p className="truncate text-sm text-text-primary">{g.name}</p>
-                {g.note && <p className="truncate text-xs text-text-muted">{g.note}</p>}
+                <p className="truncate text-sm text-text-primary">{g.name || g.chatId}</p>
+                <p className="truncate font-mono text-[10px] text-text-muted">{g.chatId}</p>
               </div>
-              <div className="flex items-center gap-2">
-                {!g.enabled && (
-                  <span className="rounded border border-border px-1.5 py-0.5 text-[10px] text-text-muted">
-                    deshabilitado
-                  </span>
-                )}
+              <div className="flex shrink-0 items-center gap-2">
+                <button
+                  disabled={busy}
+                  onClick={() => toggle(g)}
+                  className={`rounded border px-2 py-0.5 text-[10px] ${
+                    g.enabled
+                      ? "border-success/40 bg-success-dim text-success"
+                      : "border-border text-text-muted"
+                  }`}
+                >
+                  {g.enabled ? "habilitado" : "deshabilitado"}
+                </button>
                 <button
                   disabled={busy}
                   onClick={() => remove(g.id)}
+                  title="Quitar"
                   className="rounded p-1 text-text-muted hover:bg-critical-dim hover:text-critical"
                 >
                   <Trash2 className="h-3.5 w-3.5" />
