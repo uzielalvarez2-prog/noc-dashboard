@@ -15,6 +15,31 @@ import { startSendServer } from "./server.js";
 
 const { Client, LocalAuth } = pkg;
 
+// Extrae un mensaje legible de cualquier throw. whatsapp-web.js/Puppeteer a veces
+// rechazan con objetos raros o strings de 1 carácter; esto garantiza un texto útil
+// (evita el "r" truncado que dejaba la bitácora sin información).
+function errMsg(e: unknown): string {
+  if (e instanceof Error && e.message) return e.message;
+  if (typeof e === "string" && e.trim()) return e;
+  try {
+    const s = JSON.stringify(e);
+    if (s && s !== "{}") return s;
+  } catch {
+    /* no serializable */
+  }
+  return "error desconocido";
+}
+
+// Blindaje del proceso: un rechazo/excepción no capturado dentro del envío (o de
+// cualquier callback de Puppeteer) NO debe tumbar el contenedor. Se loguea y se
+// sigue; el cliente de WhatsApp tiene sus propios reintentos y 'disconnected'.
+process.on("unhandledRejection", (reason) => {
+  logger.error("unhandledRejection (ignorado, no se crashea)", { reason: errMsg(reason) });
+});
+process.on("uncaughtException", (err) => {
+  logger.error("uncaughtException (ignorado, no se crashea)", { error: err.stack ?? err.message });
+});
+
 // IM + 2+ letras + dígitos (ej. IMPNOE000070). Misma regex que el API.
 // Flag `g` para capturar TODOS los IM de un mensaje con matchAll.
 const IM_RE_GLOBAL = /IM[A-Z]{2,}\d+/g;
@@ -185,12 +210,34 @@ async function resolveGroupByName(name: string) {
  * Envía un texto a un grupo por su nombre exacto. Usado por el servidor HTTP
  * (server.ts) cuando el dashboard pide mandar un mensaje. Reusa el MISMO client
  * ya autenticado — no se abre una segunda sesión de WhatsApp.
- * Lanza si el grupo no existe o si el cliente aún no está listo.
+ *
+ * Todo va envuelto en try/catch que RE-LANZA con un mensaje explícito: así un
+ * fallo de Puppeteer (getChats/sendMessage) nunca se propaga como una excepción
+ * truncada ni tumba el proceso, y el server puede responder un 502 con detalle.
+ * El error original se loguea completo (con stack) para diagnóstico.
  */
 export async function sendToGroup(groupName: string, text: string): Promise<void> {
-  const chat = await resolveGroupByName(groupName);
+  let chat;
+  try {
+    chat = await resolveGroupByName(groupName);
+  } catch (e) {
+    logger.error("getChats falló al resolver grupo", {
+      group: groupName,
+      error: e instanceof Error ? e.stack ?? e.message : String(e),
+    });
+    throw new Error(`No se pudo consultar los chats de WhatsApp: ${errMsg(e)}`);
+  }
   if (!chat) throw new Error(`Grupo no encontrado: ${groupName}`);
-  await client.sendMessage(chat.id._serialized, text);
+
+  try {
+    await client.sendMessage(chat.id._serialized, text);
+  } catch (e) {
+    logger.error("sendMessage falló", {
+      group: groupName,
+      error: e instanceof Error ? e.stack ?? e.message : String(e),
+    });
+    throw new Error(`No se pudo enviar el mensaje: ${errMsg(e)}`);
+  }
   logger.info("Mensaje enviado a grupo", { group: groupName, chars: text.length });
 }
 
