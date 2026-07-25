@@ -18,28 +18,45 @@ export async function GET(req: NextRequest) {
 
     const open = await db.openIncident.findMany({
       where: { incidentId: { in: tickets.map((t) => t.incidentId) } },
-      select: { incidentId: true, status: true, assignee: true, group: true },
+      select: {
+        incidentId: true,
+        status: true,
+        assignee: true,
+        group: true,
+        openTime: true,
+        company: true,
+      },
     });
 
     // Varias filas de OpenIncident pueden compartir incidentId (falla masiva
-    // multi-sitio); nos quedamos con la primera para status/asignado/grupo.
-    const openById = new Map<string, { status: string; assignee: string | null; group: string }>();
+    // multi-sitio); nos quedamos con la primera para status/asignado/apertura.
+    type OpenInfo = {
+      status: string;
+      assignee: string | null;
+      group: string;
+      openTime: Date;
+      company: string;
+    };
+    const openById = new Map<string, OpenInfo>();
     for (const o of open) {
       if (!openById.has(o.incidentId)) openById.set(o.incidentId, o);
     }
 
+    // La "Empresa" (Cliente en el formato EDC) se toma de Abiertos/PEXA cruzando
+    // por IM, no del ticket SISA. El vendor/CASE y el folio SISA sí vienen del ticket.
     const items = tickets
       .filter((t) => openById.has(t.incidentId))
       .map((t) => {
         const o = openById.get(t.incidentId)!;
         return {
           incidentId: t.incidentId,
-          company: t.company,
+          company: o.company,
           vendor: t.vendor,
           vendorTicket: t.vendorTicket,
           status: o.status,
           assignee: o.assignee,
           group: o.group,
+          openTime: o.openTime,
         };
       });
 
