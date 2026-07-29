@@ -2,6 +2,9 @@ FROM node:20-alpine
 
 WORKDIR /app
 
+# ping (ICMP) para el monitoreo de IP — no viene preinstalado en node:20-alpine
+RUN apk add --no-cache iputils
+
 # Install pnpm
 RUN corepack enable && corepack prepare pnpm@10 --activate
 

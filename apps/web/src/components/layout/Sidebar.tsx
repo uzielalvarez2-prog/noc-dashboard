@@ -4,7 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
 import { cn } from "@/lib/utils";
-import { canAccessSettings } from "@/lib/permissions";
+import { canAccessSettings, canAccessMonitoring } from "@/lib/permissions";
 import {
   LayoutDashboard,
   AlertTriangle,
@@ -19,6 +19,7 @@ import {
   Star,
   BookOpen,
   MessageCircle,
+  Radar,
 } from "lucide-react";
 import { useTheme } from "@/components/layout/ThemeProvider";
 
@@ -31,6 +32,7 @@ const NAV_ITEMS = [
   { href: "/base-conocimiento", label: "Base de Conocimiento", icon: BookOpen },
   { href: "/whatsapp", label: "Enviar WhatsApp", icon: MessageCircle },
   { href: "/import", label: "Importar CSV", icon: Upload },
+  { href: "/monitoreo-ip", label: "Monitoreo IP", icon: Radar, monitoringOnly: true },
   { href: "/settings", label: "Configuración", icon: Settings, settingsOnly: true },
 ];
 
@@ -52,7 +54,9 @@ export function Sidebar({ collapsed, onToggle }: SidebarProps) {
   }, []);
 
   const items = NAV_ITEMS.filter(
-    (item) => !item.settingsOnly || canAccessSettings(role)
+    (item) =>
+      (!item.settingsOnly || canAccessSettings(role)) &&
+      (!("monitoringOnly" in item) || !item.monitoringOnly || canAccessMonitoring(role))
   );
 
   return (

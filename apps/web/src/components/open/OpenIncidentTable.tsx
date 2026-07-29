@@ -8,6 +8,24 @@ import { fetchEscalated, type EscalatedResponse } from "@/components/dashboard/E
 import { cn, formatDate, formatHpsm } from "@/lib/utils";
 import { HpsmIncidentId } from "@/components/shared/HpsmIncidentId";
 import { exportOpenIncidents, type SortDir } from "@/lib/exportOpenIncidents";
+import { canAccessMonitoring } from "@/lib/permissions";
+import { IpMonitorCell, type MonitoredIpMatch, type ActiveIpMonitor } from "./IpMonitorCell";
+
+async function fetchMonitoredIpMatches(companies: string[]): Promise<Record<string, MonitoredIpMatch[]>> {
+  if (companies.length === 0) return {};
+  const res = await fetch(`/api/monitored-ips/lookup?companies=${encodeURIComponent(companies.join(","))}`);
+  if (!res.ok) return {};
+  const data = await res.json();
+  return data.matches ?? {};
+}
+
+async function fetchActiveMonitors(incidentIds: string[]): Promise<ActiveIpMonitor[]> {
+  if (incidentIds.length === 0) return [];
+  const res = await fetch(`/api/monitored-ips/monitors?incidentIds=${encodeURIComponent(incidentIds.join(","))}`);
+  if (!res.ok) return [];
+  const data = await res.json();
+  return data.monitors ?? [];
+}
 
 const COLUMNS = [
   { key: "incidentId", label: "Incident ID" },
@@ -67,6 +85,15 @@ export function OpenIncidentTable({
   const [exporting, setExporting] = useState(false);
   const limit = 50;
   const qc = useQueryClient();
+
+  const [role, setRole] = useState<string | undefined>();
+  useEffect(() => {
+    fetch("/api/auth/me")
+      .then((r) => r.json())
+      .then((d) => setRole(d.role))
+      .catch(() => {});
+  }, []);
+  const showMonitoring = canAccessMonitoring(role);
 
   // Marcas de atención especial (escalados) — compartidas con el panel del Overview
   const { data: escalated } = useQuery<EscalatedResponse>({
@@ -139,6 +166,25 @@ export function OpenIncidentTable({
   const totalPages = Math.max(1, Math.ceil(total / limit));
   const lastSync = data?.meta.lastSync;
 
+  // IP conocida por empresa + monitoreo activo por incidente — solo ADMIN.
+  const companies = [...new Set(rows.map((r) => r.company))];
+  const incidentIds = rows.map((r) => r.incidentId);
+
+  const { data: ipMatches } = useQuery({
+    queryKey: ["monitored-ips-lookup", companies],
+    queryFn: () => fetchMonitoredIpMatches(companies),
+    enabled: showMonitoring && companies.length > 0,
+  });
+
+  const { data: activeMonitors } = useQuery({
+    queryKey: ["ip-monitors", incidentIds],
+    queryFn: () => fetchActiveMonitors(incidentIds),
+    enabled: showMonitoring && incidentIds.length > 0,
+    refetchInterval: 20_000,
+  });
+  const monitorByIncident = new Map((activeMonitors ?? []).map((m) => [m.incidentId, m]));
+  const colCount = COLUMNS.length + 1 + (showMonitoring ? 1 : 0);
+
   return (
     <div className="overflow-hidden rounded-xl border border-border/60 bg-surface/40 backdrop-blur-md">
       <div className="max-h-[70vh] overflow-auto">
@@ -148,7 +194,7 @@ export function OpenIncidentTable({
           <thead className="sticky top-0 z-20">
             <tr>
               <th
-                colSpan={COLUMNS.length + 1}
+                colSpan={colCount}
                 className="border-b border-border/60 bg-surface/80 p-2 backdrop-blur-md"
               >
                 <div className="flex items-center gap-3">
@@ -200,18 +246,23 @@ export function OpenIncidentTable({
                   {c.label}
                 </th>
               ))}
+              {showMonitoring && (
+                <th className="border-b border-border/60 px-3 py-2 text-left text-xs font-medium uppercase tracking-wider text-text-muted">
+                  IP / Monitoreo
+                </th>
+              )}
             </tr>
           </thead>
           <tbody>
             {isLoading ? (
               <tr>
-                <td colSpan={COLUMNS.length + 1} className="py-12 text-center text-sm text-text-muted">
+                <td colSpan={colCount} className="py-12 text-center text-sm text-text-muted">
                   Cargando…
                 </td>
               </tr>
             ) : rows.length === 0 ? (
               <tr>
-                <td colSpan={COLUMNS.length + 1} className="py-12 text-center text-sm text-text-muted">
+                <td colSpan={colCount} className="py-12 text-center text-sm text-text-muted">
                   {q ? "Sin resultados para tu búsqueda" : "Sube un CSV de abiertos para empezar"}
                 </td>
               </tr>
@@ -266,6 +317,17 @@ export function OpenIncidentTable({
                   <td className="px-3 py-2">
                     <GroupBadge group={r.group} />
                   </td>
+                  {showMonitoring && (
+                    <td className="px-3 py-2">
+                      <IpMonitorCell
+                        incidentId={r.incidentId}
+                        company={r.company}
+                        serviceId={r.serviceId}
+                        match={ipMatches?.[r.company.trim().toLowerCase()]?.[0]}
+                        monitor={monitorByIncident.get(r.incidentId)}
+                      />
+                    </td>
+                  )}
                 </tr>
               ))
             )}

@@ -24,6 +24,11 @@ export function canImportCsv(role: string | undefined): boolean {
   return role === "ADMIN" || role === "SUPERVISOR" || role === "IDS";
 }
 
+/** Monitoreo de IP — ADMIN estricto (no Supervisor). El usuario decide si abre a otros roles más adelante. */
+export function canAccessMonitoring(role: string | undefined): boolean {
+  return role === "ADMIN";
+}
+
 export function isValidRole(role: string): role is Role {
   return (ROLES as string[]).includes(role);
 }

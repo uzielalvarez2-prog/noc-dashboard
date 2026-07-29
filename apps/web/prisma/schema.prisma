@@ -319,6 +319,69 @@ model WhatsappSentMessage {
   @@index([sentBy])
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// MONITOREO DE IP — BASE: IPs capturadas a mano por el ADMIN, asociadas a una
+// empresa/servicio. Persiste independientemente de los incidentes (no se borra
+// al cerrarse un IM). Se va construyendo con el tiempo: se captura una vez y el
+// sistema la reutiliza en cualquier incidente futuro de la misma empresa.
+// notifyEnabled + notifyChatIds controlan si y a dónde se manda la alerta de
+// servicio activo — configurado por el ADMIN al capturar/editar la IP.
+// ─────────────────────────────────────────────────────────────────────────────
+model MonitoredIp {
+  id            String   @id @default(cuid())
+  ip            String
+  company       String
+  serviceRef    String   @default("")
+  siglasIm      String   @default("")
+  label         String   @default("") // nombre libre, ej. "Enlace principal MTY"
+  note          String?
+  notifyEnabled Boolean  @default(false)
+  notifyChatIds String[] @default([]) // WhatsappGroup.chatId destino(s)
+  createdBy     String   @default("")
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  monitors      IpMonitor[]
+
+  @@unique([ip, company])
+  @@index([company])
+  @@index([serviceRef])
+  @@index([siglasIm])
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// MONITOREO DE IP — ACTIVO: instancia de monitoreo ligada a un incidente abierto
+// específico. Se crea al dar click en "Monitorear". `upSince` marca desde cuándo
+// el ping responde sin interrupción; cuando lleva >= 1 minuto y aún no se avisó,
+// se dispara la alerta UP (una sola vez por activación: `alertedAt`). Al cerrarse
+// el incidente en OpenIncident, `active` pasa a false (el ping se detiene) pero
+// el registro NO se borra — queda como historial.
+// ─────────────────────────────────────────────────────────────────────────────
+model IpMonitor {
+  id                String      @id @default(cuid())
+  monitoredIpId     String
+  monitoredIp       MonitoredIp @relation(fields: [monitoredIpId], references: [id])
+  incidentId        String
+  company           String      @default("") // snapshot para mostrar aunque el incidente ya cierre
+
+  active            Boolean     @default(true)
+  lastCheckedAt     DateTime?
+  lastUp            Boolean     @default(false)
+  upSince           DateTime?   // desde cuándo responde sin cortes; null si el último ping falló
+  lastLatencyMs     Int?
+  lastMethod        String?     // "icmp" | "tcp"
+  alertedAt         DateTime?   // se llenó = ya se mandó el WhatsApp de esta activación
+
+  activatedBy       String      @default("")
+  activatedAt       DateTime    @default(now())
+  deactivatedAt     DateTime?
+  deactivatedReason String?     // "incident_closed" | "manual"
+
+  @@index([active])
+  @@index([incidentId])
+  @@index([monitoredIpId])
+}
+
 enum Severity {
   CRITICAL
   HIGH

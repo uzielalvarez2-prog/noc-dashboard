@@ -4,6 +4,7 @@ import { logger } from "./logger.js";
 import { syncIncidents, db } from "./sync/incidents.js";
 import { HpsmClient } from "./hpsm/client.js";
 import { isPaused } from "./schedule.js";
+import { runIpMonitoringCycle } from "./monitoring/cycle.js";
 
 const hpsm = new HpsmClient();
 
@@ -49,6 +50,16 @@ async function main(): Promise<void> {
     }
   }, config.poll.intervalMs);
 
+  // Ciclo de monitoreo de IP — independiente del sync HPSM y de isPaused(),
+  // debe seguir funcionando de noche (ver apps/worker/src/monitoring/cycle.ts).
+  const monitorInterval = setInterval(async () => {
+    try {
+      await runIpMonitoringCycle();
+    } catch (err) {
+      logger.error("Error en ciclo de monitoreo de IP", { err });
+    }
+  }, config.monitoring.intervalMs);
+
   // Heartbeat cada 60s (Railway monitoring)
   setInterval(() => logger.debug("[heartbeat] worker activo"), 60_000);
 
@@ -56,6 +67,7 @@ async function main(): Promise<void> {
   const shutdown = async (signal: string) => {
     logger.info(`${signal} recibido — cerrando...`);
     clearInterval(interval);
+    clearInterval(monitorInterval);
     await db.$disconnect();
     process.exit(0);
   };

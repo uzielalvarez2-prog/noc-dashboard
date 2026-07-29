@@ -29,4 +29,16 @@ export const config = {
     pauseStart: process.env.WORKER_PAUSE_START ?? "23:30",
     pauseEnd: process.env.WORKER_PAUSE_END ?? "05:55",
   },
+  whatsapp: {
+    listenerUrl: process.env.WA_LISTENER_URL ?? "",
+    internalApiKey: process.env.INTERNAL_API_KEY ?? "",
+  },
+  monitoring: {
+    // Ciclo de monitoreo de IP: independiente de isPaused(), corre también de noche.
+    intervalMs: Number(process.env.IP_MONITOR_INTERVAL_MS ?? "30000"),
+    pingTimeoutMs: Number(process.env.IP_MONITOR_PING_TIMEOUT_MS ?? "2000"),
+    tcpFallbackPort: Number(process.env.IP_MONITOR_TCP_PORT ?? "443"),
+    // Ventana de "arriba sostenido" antes de alertar UP (ver IpMonitor.upSince).
+    sustainedUpMs: Number(process.env.IP_MONITOR_SUSTAINED_UP_MS ?? "60000"),
+  },
 };
