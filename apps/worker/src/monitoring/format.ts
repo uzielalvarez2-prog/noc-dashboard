@@ -14,7 +14,8 @@ export function buildAlertMessage(data: AlertData): string {
     header,
     `REF: ${data.serviceRef}`,
     `Company: ${data.company}`,
-    "ACTIVO",
+    // Los asteriscos son el marcado de negrita de WhatsApp, no decoración.
+    "✅ *ACTIVO*",
     `Latencia: ${latencia}`,
   ].join("\n");
 }
