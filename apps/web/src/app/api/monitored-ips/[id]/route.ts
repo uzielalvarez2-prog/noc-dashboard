@@ -78,7 +78,14 @@ export async function DELETE(req: NextRequest, ctx: { params: Promise<{ id: stri
       );
     }
 
-    await db.monitoredIp.delete({ where: { id } }).catch(() => {});
+    // Los IpMonitor ya desactivados siguen apuntando a esta IP por FK: sin borrarlos
+    // primero, el delete revienta con P2003. Van juntos en una transacción para no
+    // dejar el historial huérfano si el segundo paso falla.
+    await db.$transaction([
+      db.ipMonitor.deleteMany({ where: { monitoredIpId: id } }),
+      db.monitoredIp.delete({ where: { id } }),
+    ]);
+
     await db.auditLog
       .create({ data: { userId: session.id, action: "DELETE_MONITORED_IP", targetId: id } })
       .catch(() => {});

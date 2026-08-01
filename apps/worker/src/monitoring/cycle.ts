@@ -61,6 +61,10 @@ export async function runIpMonitoringCycle(): Promise<void> {
         continue;
       }
 
+      // OJO: `alertedAt` NO se marca aquí. Es la condición que apaga shouldAlert,
+      // así que marcarlo antes de enviar hace que un envío fallido (listener caído,
+      // reiniciando, o mal configurado) se trague la alerta para siempre. Se marca
+      // abajo, solo cuando ya no queda nada por entregar.
       await db.ipMonitor.update({
         where: { id: monitor.id },
         data: {
@@ -69,7 +73,6 @@ export async function runIpMonitoringCycle(): Promise<void> {
           upSince,
           lastLatencyMs: result.latencyMs,
           lastMethod: result.method,
-          ...(shouldAlert ? { alertedAt: now } : {}),
         },
       });
 
@@ -81,8 +84,6 @@ export async function runIpMonitoringCycle(): Promise<void> {
       });
 
       const { monitoredIp } = monitor;
-      if (!monitoredIp.notifyEnabled || monitoredIp.notifyChatIds.length === 0) continue;
-
       const text = buildAlertMessage({
         siglasIm: monitoredIp.siglasIm,
         incidentId: monitor.incidentId,
@@ -91,11 +92,24 @@ export async function runIpMonitoringCycle(): Promise<void> {
         latencyMs: result.latencyMs,
       });
 
+      // Sin destinos configurados no hay nada que entregar: se da por atendida
+      // para no repetir el intento cada ciclo.
+      let delivered = !monitoredIp.notifyEnabled || monitoredIp.notifyChatIds.length === 0;
+
       for (const chatId of monitoredIp.notifyChatIds) {
+        if (!monitoredIp.notifyEnabled) break;
         const sent = await sendWhatsappViaListener(chatId, text);
-        if (!sent.ok) {
+        if (sent.ok) {
+          delivered = true;
+        } else {
           logger.error("[ip-monitor] Falló envío de alerta WhatsApp", { chatId, error: sent.error });
         }
+      }
+
+      // Si ningún envío salió, se deja `alertedAt` en null a propósito: el
+      // siguiente ciclo (30s) reintenta en vez de perder la alerta.
+      if (delivered) {
+        await db.ipMonitor.update({ where: { id: monitor.id }, data: { alertedAt: now } });
       }
     } catch (err) {
       logger.error("[ip-monitor] Error chequeando IP", { ip: monitor.monitoredIp.ip, err });
