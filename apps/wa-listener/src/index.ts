@@ -211,7 +211,49 @@ client.on("message_edit", (msg, newBody) => {
  * sirve actualmente ("r" de Puppeteer). sendMessage(chatId, text) no depende de
  * eso — por eso el envío funciona aunque getChats no.
  */
+type EstadoChat =
+  | { estado: "existe" }
+  | { estado: "no_existe" }
+  | { estado: "no_validable"; error: string };
+
+/**
+ * Comprueba que el chatId corresponde a un chat REAL antes de mandarle nada.
+ *
+ * Hace falta porque `sendMessage` NO valida el destino: con un chatId inventado
+ * resuelve sin lanzar y devuelve 200, así que el emisor cree que entregó y el
+ * mensaje no llega a ningún lado. Ese silencio es peligroso para las alertas de
+ * monitoreo: si un grupo migra de chatId o el número sale del grupo, el worker
+ * marca la alerta como enviada y nadie se entera.
+ *
+ * `getChatById` puede fallar por dos motivos MUY distintos: que el chat no exista,
+ * o que la API de Store esté rota con la versión de WhatsApp Web que se sirve (el
+ * mismo fallo que tumba `getChats`). No se distinguen con fiabilidad por el mensaje
+ * de error, así que ese caso se degrada a "no validable" y el envío CONTINÚA:
+ * bloquear alertas por un fallo de la librería sería peor que mandar de más.
+ */
+async function resolveChat(chatId: string): Promise<EstadoChat> {
+  try {
+    const chat = await client.getChatById(chatId);
+    return chat ? { estado: "existe" } : { estado: "no_existe" };
+  } catch (e) {
+    return { estado: "no_validable", error: errMsg(e) };
+  }
+}
+
 export async function sendToGroup(chatId: string, text: string): Promise<void> {
+  const destino = await resolveChat(chatId);
+
+  if (destino.estado === "no_existe") {
+    logger.error("Envío rechazado: el chat no existe", { chatId });
+    throw new Error(`El chat ${chatId} no existe o el número ya no es miembro del grupo`);
+  }
+  if (destino.estado === "no_validable") {
+    logger.warn("No se pudo validar el destino; se envía de todas formas", {
+      chatId,
+      error: destino.error,
+    });
+  }
+
   try {
     await client.sendMessage(chatId, text);
   } catch (e) {
@@ -221,7 +263,13 @@ export async function sendToGroup(chatId: string, text: string): Promise<void> {
     });
     throw new Error(`No se pudo enviar el mensaje: ${errMsg(e)}`);
   }
-  logger.info("Mensaje enviado a grupo", { chatId, chars: text.length });
+  // `validado` distingue "el destino se comprobó" de "se envió a ciegas": sin esto
+  // la bitácora no permite saber si un "enviado" es de fiar.
+  logger.info("Mensaje enviado a grupo", {
+    chatId,
+    chars: text.length,
+    validado: destino.estado === "existe",
+  });
 }
 
 export function isClientReady(): boolean {
@@ -265,6 +313,10 @@ const seenGroups = new Map<string, string>(); // chatId -> último nombre regist
 
 async function recordGroupSeen(chatId: string, name: string): Promise<void> {
   if (!chatId.endsWith("@g.us")) return; // solo grupos
+  // Un grupo sin nombre es basura para el catálogo: nadie puede elegirlo en la UI.
+  // Además es la firma de un chatId que no existe — al enviarle algo, el propio
+  // mensaje dispara message_create y el grupo fantasma acababa dado de alta.
+  if (!name.trim()) return;
   if (seenGroups.get(chatId) === name) return; // ya registrado con este nombre
   try {
     await postDiscoveredGroup(chatId, name);
