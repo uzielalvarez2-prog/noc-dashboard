@@ -12,6 +12,14 @@ allowBuilds:
 patchedDependencies:
   whatsapp-web.js@1.34.7: patches/whatsapp-web.js@1.34.7.patch
 
+# Los Dockerfiles de hpsm-scraper y worker instalan un workspace PARCIAL: copian
+# solo el package.json de su app, así que whatsapp-web.js no es dependencia de
+# nadie en esa imagen. pnpm 10 aborta con ERR_PNPM_UNUSED_PATCH cuando un patch
+# declarado no aplica a nada, y eso tumbó el build de ambos servicios. Con esto
+# se omite en silencio donde no corresponde; donde SÍ se usa (wa-listener) se
+# sigue aplicando igual — si no se aplicara, el build de ese servicio fallaría.
+allowUnusedPatches: true
+
 settings:
   onlyBuiltDependencies:
     - sharp
