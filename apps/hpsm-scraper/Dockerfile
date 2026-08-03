@@ -19,6 +19,10 @@ RUN corepack enable && corepack prepare pnpm@10 --activate
 # solo ve los directorios que existen en la imagen (mismo patrón que el worker).
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 COPY apps/hpsm-scraper/package.json apps/hpsm-scraper/
+# patches/ es OBLIGATORIO aunque el scraper no use whatsapp-web.js: el
+# pnpm-workspace.yaml que se copia arriba declara el patch, y `pnpm install`
+# aborta si el .patch no está en el contexto de build.
+COPY patches patches/
 
 RUN pnpm install --no-frozen-lockfile
 

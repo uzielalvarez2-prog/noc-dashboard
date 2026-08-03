@@ -4,6 +4,11 @@ settings:
   autoInstallPeers: true
   excludeLinksFromLockfile: false
 
+patchedDependencies:
+  whatsapp-web.js@1.34.7:
+    hash: c7662a2b6058a01f6944f77dfb252e9ee0619abb3dea72d255671400217b395e
+    path: patches/whatsapp-web.js@1.34.7.patch
+
 importers:
 
   .:
@@ -56,7 +61,7 @@ importers:
         version: 0.12.0
       whatsapp-web.js:
         specifier: ^1.26.0
-        version: 1.34.7(typescript@5.9.3)
+        version: 1.34.7(patch_hash=c7662a2b6058a01f6944f77dfb252e9ee0619abb3dea72d255671400217b395e)(typescript@5.9.3)
       winston:
         specifier: ^3.19.0
         version: 3.19.0
@@ -7544,7 +7549,7 @@ snapshots:
 
   webidl-conversions@3.0.1: {}
 
-  whatsapp-web.js@1.34.7(typescript@5.9.3):
+  whatsapp-web.js@1.34.7(patch_hash=c7662a2b6058a01f6944f77dfb252e9ee0619abb3dea72d255671400217b395e)(typescript@5.9.3):
     dependencies:
       fluent-ffmpeg: 2.1.3
       mime: 3.0.0

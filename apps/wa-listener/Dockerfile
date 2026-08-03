@@ -29,6 +29,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # solo ve los directorios que existen en la imagen (mismo patrón que el scraper).
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 COPY apps/wa-listener/package.json apps/wa-listener/
+# patches/ es OBLIGATORIO: pnpm-workspace.yaml declara un patchedDependencies
+# sobre whatsapp-web.js y `pnpm install` aborta si el .patch no está presente.
+COPY patches patches/
 
 # PUPPETEER_SKIP_DOWNLOAD: no descargar el Chromium de puppeteer, usamos el del SO.
 ENV PUPPETEER_SKIP_DOWNLOAD=true

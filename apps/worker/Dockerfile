@@ -13,6 +13,10 @@ COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 COPY apps/worker/package.json apps/worker/
 COPY apps/web/package.json apps/web/
 COPY apps/web/prisma apps/web/prisma/
+# patches/ es OBLIGATORIO aunque el worker no use whatsapp-web.js: el
+# pnpm-workspace.yaml que se copia arriba declara el patch, y `pnpm install`
+# aborta si el .patch no está en el contexto de build.
+COPY patches patches/
 
 # Install all workspace dependencies
 RUN pnpm install --no-frozen-lockfile

@@ -1,19 +1,22 @@
 packages:
-  - "apps/*"
-  - "packages/*"
+  - apps/*
+  - packages/*
+
+allowBuilds:
+  '@prisma/engines': true
+  esbuild: true
+  msw: true
+  prisma: true
+  sharp: true
+
+patchedDependencies:
+  whatsapp-web.js@1.34.7: patches/whatsapp-web.js@1.34.7.patch
 
 settings:
   onlyBuiltDependencies:
     - sharp
-    - "@prisma/client"
-    - "@prisma/engines"
+    - '@prisma/client'
+    - '@prisma/engines'
     - prisma
     - esbuild
     - msw
-
-allowBuilds:
-  sharp: true
-  msw: true
-  "@prisma/engines": true
-  prisma: true
-  esbuild: true

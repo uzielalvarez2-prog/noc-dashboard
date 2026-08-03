@@ -1,0 +1,31 @@
+diff --git a/src/util/Injected/Utils.js b/src/util/Injected/Utils.js
+index 540078a9d07b3df07ccd51b030556a72af4cf650..cbc09a4fb0180d1b234a513a4fdea9bbdc3ccd64 100644
+--- a/src/util/Injected/Utils.js
++++ b/src/util/Injected/Utils.js
+@@ -981,16 +981,21 @@ exports.LoadUtils = () => {
+ 
+         model.lastMessage = null;
+         if (model.msgs && model.msgs.length) {
+-            const lastMessage = chat.lastReceivedKey
++            // `lastReceivedKey` puede venir presente con su `_serialized` en
++            // undefined. Al comprobar el OBJETO en vez del id, ese undefined
++            // llegaba a `getMessagesById([undefined])` e IndexedDB lanzaba
++            // `DataError: No key or key range specified`. Como el throw ocurre
++            // DENTRO de la página, quien llama solo ve el minificado "r" — por
++            // eso el fallo era ilegible. Se comprueba el id, no la llave.
++            const lastReceivedKeyId = chat.lastReceivedKey?._serialized;
++            const lastMessage = lastReceivedKeyId
+                 ? window
+                       .require('WAWebCollections')
+-                      .Msg.get(chat.lastReceivedKey._serialized) ||
++                      .Msg.get(lastReceivedKeyId) ||
+                   (
+                       await window
+                           .require('WAWebCollections')
+-                          .Msg.getMessagesById([
+-                              chat.lastReceivedKey._serialized,
+-                          ])
++                          .Msg.getMessagesById([lastReceivedKeyId])
+                   )?.messages?.[0]
+                 : null;
+             lastMessage &&
