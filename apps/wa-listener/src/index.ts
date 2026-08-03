@@ -46,6 +46,20 @@ function warnThrottled(key: string, msg: string, meta: Record<string, unknown>):
   lastLogAt.set(key, { at: ahora, omitidas: 0 });
 }
 
+/**
+ * chatId al que pertenece un mensaje, SIN pasar por Store.
+ *
+ * `msg.from` NO sirve por sí solo: la propia librería lo documenta como "el chat
+ * al que se envió el mensaje, EXCEPTO si lo mandó el usuario actual". El equipo
+ * reporta desde este mismo teléfono, así que esos mensajes son `fromMe` y ahí
+ * `from` es el remitente, no el grupo — filtrar por `from` perdería justo los
+ * reportes propios. `id.remote` es el chat en ambos sentidos; `to`/`from` quedan
+ * de respaldo por si la forma del id cambiara.
+ */
+function chatIdDe(msg: Message): string {
+  return msg.id?.remote ?? (msg.fromMe ? msg.to : msg.from);
+}
+
 // Blindaje del proceso: un rechazo/excepción no capturado dentro del envío (o de
 // cualquier callback de Puppeteer) NO debe tumbar el contenedor. Se loguea y se
 // sigue; el cliente de WhatsApp tiene sus propios reintentos y 'disconnected'.
@@ -209,7 +223,7 @@ client.on("message_create", (msg) => {
   // mensaje), para que el dato sea válido aunque Store esté roto.
   if (config.debugRecv) {
     logger.info("[debug-recv] message_create", {
-      from: msg.from,
+      chatId: chatIdDe(msg),
       tipo: msg.type,
       fromMe: msg.fromMe,
       chars: (msg.body ?? "").length,
@@ -365,7 +379,7 @@ async function discoverGroupFrom(msg: Message): Promise<void> {
     // getChat está roto NINGÚN mensaje lo registra y el catálogo se congela sin
     // que nada lo diga: así pasaron 8 días sin un solo grupo nuevo.
     warnThrottled("getchat-discover", "getChat falló en auto-descubrimiento (grupo no registrado)", {
-      from: msg.from,
+      chatId: chatIdDe(msg),
       error: errMsg(e),
     });
   }
@@ -387,22 +401,32 @@ async function handleMessage(msg: Message, body: string, isEdit = false) {
   if (incidentIds.length === 0) return;
 
   // Confirmar que el mensaje pertenece al grupo objetivo (no a otro chat).
-  let chatName = "";
-  try {
-    const chat = await msg.getChat();
-    chatName = chat.name ?? "";
-  } catch (e) {
-    // Este `return` mudo es el que ocultó el corte de recepción: un mensaje CON
-    // incidente se descartaba sin dejar rastro. Se loguea con los IM que se
-    // perdieron, para poder recuperarlos a mano si hiciera falta.
-    warnThrottled("getchat-handle", "getChat falló al procesar un reporte — REPORTE DESCARTADO", {
-      from: msg.from,
-      incidentes: incidentIds,
-      error: errMsg(e),
-    });
-    return;
+  //
+  // Por chatId cuando se conoce: es un dato que viaja EN el mensaje y no depende
+  // de Store. La ruta por nombre necesita msg.getChat(), de la familia Store.Chat,
+  // que se rompe cuando WhatsApp Web se adelanta al pin de webVersionCache; eso
+  // tiró la recepción del 01 al 03-ago sin dejar una sola línea en el log. Se
+  // conserva como respaldo para desarrollo local, donde el chatId no se sabe.
+  if (config.groupChatId) {
+    if (chatIdDe(msg) !== config.groupChatId) return;
+  } else {
+    let chatName = "";
+    try {
+      const chat = await msg.getChat();
+      chatName = chat.name ?? "";
+    } catch (e) {
+      // Este `return` era mudo: un mensaje CON incidente se descartaba sin dejar
+      // rastro. Se loguean los IM perdidos para poder recuperarlos a mano.
+      warnThrottled("getchat-handle", "getChat falló al procesar un reporte — REPORTE DESCARTADO", {
+        chatId: chatIdDe(msg),
+        incidentes: incidentIds,
+        error: errMsg(e),
+        pista: "definir WA_GROUP_CHAT_ID evita depender de getChat",
+      });
+      return;
+    }
+    if (chatName !== config.groupName) return;
   }
-  if (chatName !== config.groupName) return;
 
   const sentAt = (isEdit ? new Date() : new Date(msg.timestamp * 1000)).toISOString();
 
