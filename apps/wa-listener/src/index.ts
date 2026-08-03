@@ -30,6 +30,22 @@ function errMsg(e: unknown): string {
   return "error desconocido";
 }
 
+// Logueo con antirrebote por clave: un fallo que se repite en CADA mensaje (p.ej.
+// una API de Store rota) inundaría el log y lo volvería inservible. Se emite la
+// primera vez y luego como mucho una vez cada VENTANA, contando las omitidas.
+const THROTTLE_MS = 5 * 60_000;
+const lastLogAt = new Map<string, { at: number; omitidas: number }>();
+function warnThrottled(key: string, msg: string, meta: Record<string, unknown>): void {
+  const ahora = Date.now();
+  const prev = lastLogAt.get(key);
+  if (prev && ahora - prev.at < THROTTLE_MS) {
+    prev.omitidas += 1;
+    return;
+  }
+  logger.warn(msg, { ...meta, ...(prev?.omitidas ? { omitidasDesdeElAnterior: prev.omitidas } : {}) });
+  lastLogAt.set(key, { at: ahora, omitidas: 0 });
+}
+
 // Blindaje del proceso: un rechazo/excepción no capturado dentro del envío (o de
 // cualquier callback de Puppeteer) NO debe tumbar el contenedor. Se loguea y se
 // sigue; el cliente de WhatsApp tiene sus propios reintentos y 'disconnected'.
@@ -188,6 +204,17 @@ client.on("ready", async () => {
 // suele reportar desde este mismo teléfono); 'message' solo dispararía con
 // mensajes de terceros y perdería los propios.
 client.on("message_create", (msg) => {
+  // Primera frontera del sistema: "¿el evento llega siquiera?". Se loguea ANTES
+  // de tocar nada de Store (msg.from y msg.type son propiedades planas del
+  // mensaje), para que el dato sea válido aunque Store esté roto.
+  if (config.debugRecv) {
+    logger.info("[debug-recv] message_create", {
+      from: msg.from,
+      tipo: msg.type,
+      fromMe: msg.fromMe,
+      chars: (msg.body ?? "").length,
+    });
+  }
   void discoverGroupFrom(msg);
   void handleMessage(msg, msg.body ?? "");
 });
@@ -333,8 +360,14 @@ async function discoverGroupFrom(msg: Message): Promise<void> {
   try {
     const chat = await msg.getChat();
     if (chat.isGroup) await recordGroupSeen(chat.id._serialized, chat.name ?? "");
-  } catch {
-    /* si getChat falla para este mensaje, se ignora; otro mensaje lo registrará */
+  } catch (e) {
+    // Antes era un catch mudo con el argumento "otro mensaje lo registrará". Si
+    // getChat está roto NINGÚN mensaje lo registra y el catálogo se congela sin
+    // que nada lo diga: así pasaron 8 días sin un solo grupo nuevo.
+    warnThrottled("getchat-discover", "getChat falló en auto-descubrimiento (grupo no registrado)", {
+      from: msg.from,
+      error: errMsg(e),
+    });
   }
 }
 
@@ -358,7 +391,15 @@ async function handleMessage(msg: Message, body: string, isEdit = false) {
   try {
     const chat = await msg.getChat();
     chatName = chat.name ?? "";
-  } catch {
+  } catch (e) {
+    // Este `return` mudo es el que ocultó el corte de recepción: un mensaje CON
+    // incidente se descartaba sin dejar rastro. Se loguea con los IM que se
+    // perdieron, para poder recuperarlos a mano si hiciera falta.
+    warnThrottled("getchat-handle", "getChat falló al procesar un reporte — REPORTE DESCARTADO", {
+      from: msg.from,
+      incidentes: incidentIds,
+      error: errMsg(e),
+    });
     return;
   }
   if (chatName !== config.groupName) return;
