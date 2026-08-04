@@ -61,10 +61,6 @@ export async function runIpMonitoringCycle(): Promise<void> {
         continue;
       }
 
-      // OJO: `alertedAt` NO se marca aquí. Es la condición que apaga shouldAlert,
-      // así que marcarlo antes de enviar hace que un envío fallido (listener caído,
-      // reiniciando, o mal configurado) se trague la alerta para siempre. Se marca
-      // abajo, solo cuando ya no queda nada por entregar.
       await db.ipMonitor.update({
         where: { id: monitor.id },
         data: {
@@ -77,6 +73,18 @@ export async function runIpMonitoringCycle(): Promise<void> {
       });
 
       if (!shouldAlert) continue;
+
+      // Reclamo ATÓMICO de la alerta antes de enviar nada. Entregar a los chatIds
+      // puede tardar más que el intervalo del ciclo (cada POST al listener espera
+      // hasta 20s), así que el siguiente ciclo entraba mientras este seguía
+      // enviando, releía alertedAt=null y mandaba el mismo mensaje otra vez: el
+      // 2026-08-04 salieron 4 copias por incidente. El `where alertedAt: null`
+      // hace que solo un ciclo se lleve la fila; los demás ven count=0 y siguen.
+      const claimed = await db.ipMonitor.updateMany({
+        where: { id: monitor.id, alertedAt: null },
+        data: { alertedAt: now },
+      });
+      if (claimed.count === 0) continue; // otro ciclo ya está entregando esta alerta
 
       logger.info(`[ip-monitor] Racha sostenida de ${sustainedMs}ms — alertando`, {
         ip: monitor.monitoredIp.ip,
@@ -106,10 +114,15 @@ export async function runIpMonitoringCycle(): Promise<void> {
         }
       }
 
-      // Si ningún envío salió, se deja `alertedAt` en null a propósito: el
-      // siguiente ciclo (30s) reintenta en vez de perder la alerta.
-      if (delivered) {
-        await db.ipMonitor.update({ where: { id: monitor.id }, data: { alertedAt: now } });
+      // Si NINGÚN envío salió se libera el reclamo, para que el siguiente ciclo
+      // reintente en vez de perder la alerta (listener caído o reiniciando). Con
+      // al menos una entrega buena se conserva marcada: repetir a los demás
+      // grupos molestaría más de lo que ayuda.
+      if (!delivered) {
+        await db.ipMonitor.update({ where: { id: monitor.id }, data: { alertedAt: null } });
+        logger.warn("[ip-monitor] Alerta no entregada; se reintentará en el próximo ciclo", {
+          ip: monitoredIp.ip,
+        });
       }
     } catch (err) {
       logger.error("[ip-monitor] Error chequeando IP", { ip: monitor.monitoredIp.ip, err });
