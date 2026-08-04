@@ -1,9 +1,10 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useMemo, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Radar, Plus, Pencil, Trash2, Check, X, Search, Bell, BellOff } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { GroupPicker, type WhatsappGroup } from "./GroupPicker";
 
 interface MonitoredIp {
   id: string;
@@ -16,12 +17,6 @@ interface MonitoredIp {
   notifyEnabled: boolean;
   notifyChatIds: string[];
   createdAt: string;
-}
-
-interface WhatsappGroup {
-  id: string;
-  chatId: string;
-  name: string;
 }
 
 async function fetchMonitoredIps(): Promise<{ items: MonitoredIp[] }> {
@@ -154,11 +149,20 @@ export function MonitoredIpsPanel() {
     });
   }
 
-  function toggleChatId(list: string[], chatId: string): string[] {
-    return list.includes(chatId) ? list.filter((c) => c !== chatId) : [...list, chatId];
-  }
-
   const all = data?.items ?? [];
+
+  // Grupos ordenados por cuántas IPs ya notifican a cada uno: son ~90 y unos pocos
+  // concentran casi todas las altas, así que el caso normal se resuelve sin escribir.
+  const frequentChatIds = useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const item of all) {
+      for (const chatId of item.notifyChatIds) {
+        counts.set(chatId, (counts.get(chatId) ?? 0) + 1);
+      }
+    }
+    return [...counts.entries()].sort((a, b) => b[1] - a[1]).map(([chatId]) => chatId);
+  }, [all]);
+
   const q = filter.trim().toLowerCase();
   const items = q
     ? all.filter(
@@ -172,31 +176,6 @@ export function MonitoredIpsPanel() {
 
   const inputCls =
     "w-full rounded-md border border-border bg-surface px-2.5 py-1.5 text-sm text-text-primary placeholder:text-text-muted/60 focus:border-accent focus:outline-none";
-
-  function GroupPicker({ value, onChange }: { value: string[]; onChange: (v: string[]) => void }) {
-    if (groups.length === 0) {
-      return <span className="text-xs text-text-muted">Sin grupos detectados</span>;
-    }
-    return (
-      <div className="flex flex-wrap gap-1">
-        {groups.map((g) => {
-          const active = value.includes(g.chatId);
-          return (
-            <button
-              key={g.chatId}
-              type="button"
-              onClick={() => onChange(toggleChatId(value, g.chatId))}
-              className={`rounded border px-1.5 py-0.5 text-[10px] ${
-                active ? "border-accent/40 bg-accent/10 text-accent" : "border-border text-text-muted"
-              }`}
-            >
-              {g.name || g.chatId}
-            </button>
-          );
-        })}
-      </div>
-    );
-  }
 
   return (
     <div className="space-y-4">
@@ -259,7 +238,12 @@ export function MonitoredIpsPanel() {
             <label htmlFor="notify-new" className="text-xs text-text-muted">Notificar por WhatsApp al recuperarse</label>
           </div>
           {form.notifyEnabled && (
-            <GroupPicker value={form.notifyChatIds} onChange={(v) => setForm({ ...form, notifyChatIds: v })} />
+            <GroupPicker
+              value={form.notifyChatIds}
+              onChange={(v) => setForm({ ...form, notifyChatIds: v })}
+              groups={groups}
+              frequent={frequentChatIds}
+            />
           )}
           <div className="flex justify-end gap-2">
             <Button size="sm" variant="ghost" onClick={() => { setAdding(false); setForm(EMPTY_FORM); }}
@@ -321,6 +305,8 @@ export function MonitoredIpsPanel() {
                         <GroupPicker
                           value={editForm.notifyChatIds}
                           onChange={(v) => setEditForm({ ...editForm, notifyChatIds: v })}
+                          groups={groups}
+                          frequent={frequentChatIds}
                         />
                       )}
                       <div className="flex justify-end gap-1">
