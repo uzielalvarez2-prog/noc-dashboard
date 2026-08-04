@@ -9,13 +9,11 @@ export interface AlertData {
 /** Arma el texto exacto del template de "servicio activo" para WhatsApp. */
 export function buildAlertMessage(data: AlertData): string {
   const header = data.siglasIm || data.incidentId;
-  const latencia = data.latencyMs != null ? `${data.latencyMs} ms` : "N/D";
+  // Los asteriscos son el marcado de negrita de WhatsApp, no decoración.
   return [
+    "✅ *ACTIVO* ✅",
     header,
     `REF: ${data.serviceRef}`,
     `Company: ${data.company}`,
-    // Los asteriscos son el marcado de negrita de WhatsApp, no decoración.
-    "✅ *ACTIVO*",
-    `Latencia: ${latencia}`,
   ].join("\n");
 }
