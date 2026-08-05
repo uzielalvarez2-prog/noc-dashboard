@@ -31,13 +31,16 @@ interface Props {
   monitor: ActiveIpMonitor | undefined;
 }
 
-async function saveIp(body: {
-  ip: string;
-  company: string;
-  serviceRef?: string;
-}): Promise<MonitoredIpMatch> {
-  const res = await fetch("/api/monitored-ips", {
-    method: "POST",
+async function saveIp(
+  existingId: string | undefined,
+  body: {
+    ip: string;
+    company: string;
+    serviceRef?: string;
+  },
+): Promise<MonitoredIpMatch> {
+  const res = await fetch(existingId ? `/api/monitored-ips/${existingId}` : "/api/monitored-ips", {
+    method: existingId ? "PATCH" : "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body),
   });
@@ -91,7 +94,7 @@ export function IpMonitorCell({ incidentId, company, serviceId, match, monitor }
     setBusy(true);
     setError(null);
     try {
-      await saveIp({ ip, company, serviceRef: serviceId });
+      await saveIp(match?.id, { ip, company, serviceRef: serviceId });
       invalidate();
       setEditing(false);
     } catch (e) {

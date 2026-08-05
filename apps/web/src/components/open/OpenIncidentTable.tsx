@@ -27,6 +27,19 @@ async function fetchActiveMonitors(incidentIds: string[]): Promise<ActiveIpMonit
   return data.monitors ?? [];
 }
 
+// Una empresa puede tener varias IPs registradas (una por servicio, ej. INGENICO
+// con C50-2510-0073 y C50-2510-0149). Preferir la fila cuyo serviceRef coincide
+// exactamente con el servicio del incidente; si ninguna coincide (IP capturada
+// sin serviceRef, o solo hay una), caer a la primera para no romper ese caso.
+function pickIpMatch(
+  matches: MonitoredIpMatch[] | undefined,
+  serviceId: string,
+): MonitoredIpMatch | undefined {
+  if (!matches || matches.length === 0) return undefined;
+  const svc = serviceId.trim().toLowerCase();
+  return matches.find((m) => m.serviceRef.trim().toLowerCase() === svc) ?? matches[0];
+}
+
 const COLUMNS = [
   { key: "incidentId", label: "Incident ID" },
   { key: "openTime", label: "Apertura" },
@@ -323,7 +336,7 @@ export function OpenIncidentTable({
                         incidentId={r.incidentId}
                         company={r.company}
                         serviceId={r.serviceId}
-                        match={ipMatches?.[r.company.trim().toLowerCase()]?.[0]}
+                        match={pickIpMatch(ipMatches?.[r.company.trim().toLowerCase()], r.serviceId)}
                         monitor={monitorByIncident.get(r.incidentId)}
                       />
                     </td>
