@@ -334,6 +334,10 @@ model MonitoredIp {
   serviceRef    String   @default("")
   siglasIm      String   @default("")
   label         String   @default("") // nombre libre, ej. "Enlace principal MTY"
+  // "PING" = alcanzable desde internet, se monitorea con ping. "VPN" = no responde
+  // desde internet, así que no se pinguea: la alerta UP se dispara cuando el
+  // incidente pasa a RESOLV en HPSM.
+  kind          String   @default("PING")
   note          String?
   notifyEnabled Boolean  @default(false)
   notifyChatIds String[] @default([]) // WhatsappGroup.chatId destino(s)

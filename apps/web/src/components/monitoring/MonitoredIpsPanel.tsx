@@ -2,9 +2,11 @@
 
 import { useMemo, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Radar, Plus, Pencil, Trash2, Check, X, Search, Bell, BellOff } from "lucide-react";
+import { Radar, Plus, Pencil, Trash2, Check, X, Search, Bell, BellOff, Lock } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { GroupPicker, type WhatsappGroup } from "./GroupPicker";
+
+type IpKind = "PING" | "VPN";
 
 interface MonitoredIp {
   id: string;
@@ -13,6 +15,7 @@ interface MonitoredIp {
   serviceRef: string;
   siglasIm: string;
   label: string;
+  kind: IpKind;
   note: string | null;
   notifyEnabled: boolean;
   notifyChatIds: string[];
@@ -37,6 +40,7 @@ interface FormState {
   serviceRef: string;
   siglasIm: string;
   label: string;
+  kind: IpKind;
   notifyEnabled: boolean;
   notifyChatIds: string[];
 }
@@ -47,6 +51,7 @@ const EMPTY_FORM: FormState = {
   serviceRef: "",
   siglasIm: "",
   label: "",
+  kind: "PING",
   notifyEnabled: false,
   notifyChatIds: [],
 };
@@ -144,6 +149,7 @@ export function MonitoredIpsPanel() {
       serviceRef: item.serviceRef,
       siglasIm: item.siglasIm,
       label: item.label,
+      kind: item.kind === "VPN" ? "VPN" : "PING",
       notifyEnabled: item.notifyEnabled,
       notifyChatIds: item.notifyChatIds,
     });
@@ -176,6 +182,38 @@ export function MonitoredIpsPanel() {
 
   const inputCls =
     "w-full rounded-md border border-border bg-surface px-2.5 py-1.5 text-sm text-text-primary placeholder:text-text-muted/60 focus:border-accent focus:outline-none";
+
+  function KindPicker({ value, onChange }: { value: IpKind; onChange: (v: IpKind) => void }) {
+    const opts: { kind: IpKind; label: string; hint: string }[] = [
+      { kind: "PING", label: "IP Monitor", hint: "Se pinguea la IP; avisa cuando responde" },
+      { kind: "VPN", label: "VPN", hint: "No se pinguea; avisa cuando el IM pasa a RESOLV" },
+    ];
+    return (
+      <div className="space-y-1">
+        <span className="text-xs text-text-muted">Tipo de chequeo</span>
+        <div className="flex gap-1.5">
+          {opts.map((o) => (
+            <button
+              key={o.kind}
+              type="button"
+              title={o.hint}
+              onClick={() => onChange(o.kind)}
+              className={`rounded-md border px-2.5 py-1 text-xs transition-colors ${
+                value === o.kind
+                  ? "border-accent/40 bg-accent/10 text-accent"
+                  : "border-border text-text-muted hover:text-text-primary"
+              }`}
+            >
+              {o.label}
+            </button>
+          ))}
+        </div>
+        <p className="text-[10px] text-text-muted/70">
+          {opts.find((o) => o.kind === value)?.hint}
+        </p>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-4">
@@ -227,6 +265,7 @@ export function MonitoredIpsPanel() {
           </div>
           <input placeholder="Etiqueta (ej. Enlace principal MTY)" value={form.label}
             onChange={(e) => setForm({ ...form, label: e.target.value })} className={inputCls} />
+          <KindPicker value={form.kind} onChange={(v) => setForm({ ...form, kind: v })} />
           <div className="flex items-center gap-2">
             <input
               type="checkbox"
@@ -263,6 +302,7 @@ export function MonitoredIpsPanel() {
               <th className="px-4 py-2.5 text-left text-xs font-medium text-text-muted">IP</th>
               <th className="px-4 py-2.5 text-left text-xs font-medium text-text-muted">Empresa</th>
               <th className="px-4 py-2.5 text-left text-xs font-medium text-text-muted">Etiqueta</th>
+              <th className="px-4 py-2.5 text-left text-xs font-medium text-text-muted">Tipo</th>
               <th className="px-4 py-2.5 text-left text-xs font-medium text-text-muted">Notificación</th>
               <th className="px-4 py-2.5 text-right text-xs font-medium text-text-muted">Acciones</th>
             </tr>
@@ -270,12 +310,12 @@ export function MonitoredIpsPanel() {
           <tbody>
             {isLoading && (
               <tr>
-                <td colSpan={5} className="px-4 py-8 text-center text-sm text-text-muted">Cargando…</td>
+                <td colSpan={6} className="px-4 py-8 text-center text-sm text-text-muted">Cargando…</td>
               </tr>
             )}
             {!isLoading && items.length === 0 && (
               <tr>
-                <td colSpan={5} className="px-4 py-8 text-center text-sm text-text-muted">
+                <td colSpan={6} className="px-4 py-8 text-center text-sm text-text-muted">
                   {q ? "Sin coincidencias" : "No hay IPs capturadas todavía"}
                 </td>
               </tr>
@@ -283,7 +323,7 @@ export function MonitoredIpsPanel() {
             {items.map((item) =>
               editingId === item.id ? (
                 <tr key={item.id} className="border-b border-border bg-accent/5 last:border-0">
-                  <td className="px-4 py-2" colSpan={5}>
+                  <td className="px-4 py-2" colSpan={6}>
                     <div className="space-y-2">
                       <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
                         <input value={editForm.ip} onChange={(e) => setEditForm({ ...editForm, ip: e.target.value })} className={inputCls} placeholder="IP" />
@@ -292,6 +332,7 @@ export function MonitoredIpsPanel() {
                         <input value={editForm.siglasIm} onChange={(e) => setEditForm({ ...editForm, siglasIm: e.target.value })} className={inputCls} placeholder="Siglas IM" />
                       </div>
                       <input value={editForm.label} onChange={(e) => setEditForm({ ...editForm, label: e.target.value })} className={inputCls} placeholder="Etiqueta" />
+                      <KindPicker value={editForm.kind} onChange={(v) => setEditForm({ ...editForm, kind: v })} />
                       <div className="flex items-center gap-2">
                         <input
                           type="checkbox"
@@ -327,6 +368,20 @@ export function MonitoredIpsPanel() {
                   <td className="px-4 py-3 font-mono text-xs font-semibold text-accent">{item.ip}</td>
                   <td className="px-4 py-3 font-medium text-text-primary">{item.company}</td>
                   <td className="px-4 py-3 text-xs text-text-muted">{item.label || "—"}</td>
+                  <td className="px-4 py-3 text-xs">
+                    {item.kind === "VPN" ? (
+                      <span
+                        title="No se pinguea: avisa cuando el IM pasa a RESOLV"
+                        className="flex items-center gap-1 text-violet-400"
+                      >
+                        <Lock className="h-3.5 w-3.5" /> VPN
+                      </span>
+                    ) : (
+                      <span className="flex items-center gap-1 text-text-muted">
+                        <Radar className="h-3.5 w-3.5" /> IP Monitor
+                      </span>
+                    )}
+                  </td>
                   <td className="px-4 py-3 text-xs">
                     {item.notifyEnabled ? (
                       <span className="flex items-center gap-1 text-success"><Bell className="h-3.5 w-3.5" /> {item.notifyChatIds.length} grupo(s)</span>

@@ -20,6 +20,7 @@ export async function PATCH(req: NextRequest, ctx: { params: Promise<{ id: strin
       serviceRef?: string;
       siglasIm?: string;
       label?: string;
+      kind?: string;
       note?: string;
       notifyEnabled?: boolean;
       notifyChatIds?: string[];
@@ -31,6 +32,7 @@ export async function PATCH(req: NextRequest, ctx: { params: Promise<{ id: strin
     if (typeof body.serviceRef === "string") data.serviceRef = body.serviceRef.trim();
     if (typeof body.siglasIm === "string") data.siglasIm = body.siglasIm.trim();
     if (typeof body.label === "string") data.label = body.label.trim();
+    if (body.kind === "VPN" || body.kind === "PING") data.kind = body.kind;
     if (typeof body.note === "string") data.note = body.note.trim() || null;
     if (typeof body.notifyEnabled === "boolean") data.notifyEnabled = body.notifyEnabled;
     if (Array.isArray(body.notifyChatIds)) {

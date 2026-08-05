@@ -39,6 +39,7 @@ export async function POST(req: NextRequest) {
       serviceRef?: string;
       siglasIm?: string;
       label?: string;
+      kind?: string;
       note?: string;
       notifyEnabled?: boolean;
       notifyChatIds?: string[];
@@ -56,6 +57,7 @@ export async function POST(req: NextRequest) {
       serviceRef: (body.serviceRef ?? "").trim(),
       siglasIm: (body.siglasIm ?? "").trim(),
       label: (body.label ?? "").trim(),
+      kind: body.kind === "VPN" ? "VPN" : "PING",
       note: (body.note ?? "").trim() || null,
       notifyEnabled: Boolean(body.notifyEnabled),
       notifyChatIds: Array.isArray(body.notifyChatIds)

@@ -3,7 +3,6 @@ export interface AlertData {
   incidentId: string;
   serviceRef: string;
   company: string;
-  latencyMs: number | null;
 }
 
 /** Arma el texto exacto del template de "servicio activo" para WhatsApp. */
