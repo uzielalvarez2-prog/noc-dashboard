@@ -10,7 +10,7 @@ export function buildAlertMessage(data: AlertData): string {
   const header = data.siglasIm || data.incidentId;
   // Los asteriscos son el marcado de negrita de WhatsApp, no decoración.
   return [
-    "✅ *ACTIVO* ✅",
+    "✅ *ACTIVO*",
     header,
     `REF: ${data.serviceRef}`,
     `Company: ${data.company}`,
