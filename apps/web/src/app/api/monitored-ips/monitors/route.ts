@@ -67,16 +67,21 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    const serviceRef = (body.serviceRef ?? "").trim();
+
+    // Se busca por (empresa, servicio) porque esa es la identidad del enlace; la IP
+    // es el valor que se actualiza. Buscar por IP haría que un servicio reusara la
+    // fila de otro servicio de la misma empresa (ver comentario en schema.prisma).
     const monitoredIp = await db.monitoredIp.upsert({
-      where: { ip_company: { ip, company } },
+      where: { company_serviceRef: { company, serviceRef } },
       create: {
         ip,
         company,
-        serviceRef: (body.serviceRef ?? "").trim(),
+        serviceRef,
         siglasIm: (body.siglasIm ?? "").trim(),
         createdBy: session.id,
       },
-      update: {},
+      update: { ip },
     });
 
     const monitor = await db.ipMonitor.create({

@@ -347,7 +347,12 @@ model MonitoredIp {
 
   monitors      IpMonitor[]
 
-  @@unique([ip, company])
+  // La identidad de un enlace es (empresa, servicio), NO (empresa, ip): una misma
+  // empresa puede tener varios servicios, cada uno con su IP, y la IP es justo el
+  // dato que cambia al corregirla. Con la clave vieja @@unique([ip, company]) el
+  // upsert de activación encontraba la fila del OTRO servicio y la reusaba, así que
+  // el segundo incidente terminaba monitoreando la IP del primero.
+  @@unique([company, serviceRef])
   @@index([company])
   @@index([serviceRef])
   @@index([siglasIm])

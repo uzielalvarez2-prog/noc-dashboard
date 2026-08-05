@@ -65,8 +65,10 @@ export async function POST(req: NextRequest) {
         : [],
     };
 
+    // Clave por (empresa, servicio): al corregir la IP de un servicio se actualiza
+    // esa fila en vez de crear una nueva (ver comentario en schema.prisma).
     const monitoredIp = await db.monitoredIp.upsert({
-      where: { ip_company: { ip, company } },
+      where: { company_serviceRef: { company, serviceRef: data.serviceRef } },
       create: { ...data, createdBy: session.id },
       update: data,
     });
