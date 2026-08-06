@@ -3,7 +3,7 @@
 import { useMemo, useState, useEffect } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { StatusCardsTable, type StatusCardItem } from "@/components/shared/StatusCardsTable";
-import { canAccessMonitoring } from "@/lib/permissions";
+import { canCaptureMonitoredIp } from "@/lib/permissions";
 import { IpMonitorCell } from "./IpMonitorCell";
 import {
   fetchMonitoredIpMatches,
@@ -64,7 +64,9 @@ export function EdcStatusView() {
     [data]
   );
 
-  // Columna "IP / Monitoreo" — misma que Incidentes Abiertos, ADMIN-only.
+  // Columna "IP / Monitoreo" — aquí la ven TODOS los roles, para que quien esté de
+  // turno pueda cargar la IP de un enlace caído y ponerlo a monitorear sin esperar
+  // al ADMIN. En Incidentes Abiertos sigue siendo ADMIN-only.
   const [role, setRole] = useState<string | undefined>();
   useEffect(() => {
     fetch("/api/auth/me")
@@ -74,7 +76,7 @@ export function EdcStatusView() {
       // "no eres ADMIN": si el fetch falla hay que poder verlo en la consola.
       .catch((e) => console.error("[EdcStatusView] no se pudo leer el rol", e));
   }, []);
-  const showMonitoring = canAccessMonitoring(role);
+  const showMonitoring = canCaptureMonitoredIp(role);
 
   const companies = useMemo(() => [...new Set(items.map((i) => i.company))], [items]);
   const incidentIds = useMemo(() => items.map((i) => i.incidentId), [items]);

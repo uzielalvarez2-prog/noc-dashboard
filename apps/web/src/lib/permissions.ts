@@ -24,9 +24,24 @@ export function canImportCsv(role: string | undefined): boolean {
   return role === "ADMIN" || role === "SUPERVISOR" || role === "IDS";
 }
 
-/** Monitoreo de IP — ADMIN estricto (no Supervisor). El usuario decide si abre a otros roles más adelante. */
+/**
+ * Administración del monitoreo de IP — ADMIN estricto (no Supervisor).
+ * Cubre la página /monitoreo-ip (catálogo completo), su enlace en el menú y el
+ * BORRADO de IPs. Ver canCaptureMonitoredIp para el permiso más acotado.
+ */
 export function canAccessMonitoring(role: string | undefined): boolean {
   return role === "ADMIN";
+}
+
+/**
+ * Capturar/corregir la IP de un incidente y activar o desactivar su monitoreo,
+ * desde la columna "IP / Monitoreo" de EDC → Total EDC. Abierto a todos los roles
+ * autenticados: cuando un enlace se cae, quien esté de turno debe poder cargar la
+ * IP y ponerla a monitorear sin esperar al ADMIN. NO incluye borrar IPs ni ver el
+ * catálogo — eso sigue en canAccessMonitoring.
+ */
+export function canCaptureMonitoredIp(role: string | undefined): boolean {
+  return role === "ADMIN" || role === "SUPERVISOR" || role === "IDS";
 }
 
 export function isValidRole(role: string): role is Role {

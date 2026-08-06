@@ -1,14 +1,17 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSessionFromRequest } from "@/lib/auth-session";
-import { canAccessMonitoring } from "@/lib/permissions";
+import { canAccessMonitoring, canCaptureMonitoredIp } from "@/lib/permissions";
 import { db } from "@/lib/db";
 
 export const dynamic = "force-dynamic";
 
+// Corregir una IP ya registrada — abierto a todos los roles (columna IP/Monitoreo
+// de Total EDC). El DELETE de abajo sigue siendo ADMIN: borrar arrastra el
+// historial de monitoreos y no debe estar al alcance de cualquiera.
 export async function PATCH(req: NextRequest, ctx: { params: Promise<{ id: string }> }) {
   const session = getSessionFromRequest(req);
   if (!session) return NextResponse.json({ error: "No autorizado" }, { status: 401 });
-  if (!canAccessMonitoring(session.role)) {
+  if (!canCaptureMonitoredIp(session.role)) {
     return NextResponse.json({ error: "Sin permiso" }, { status: 403 });
   }
 

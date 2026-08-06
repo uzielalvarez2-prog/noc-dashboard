@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSessionFromRequest } from "@/lib/auth-session";
-import { canAccessMonitoring } from "@/lib/permissions";
+import { canAccessMonitoring, canCaptureMonitoredIp } from "@/lib/permissions";
 import { db } from "@/lib/db";
 import { getMonitoredIps } from "@/lib/queries/monitoredIps";
 
@@ -25,10 +25,13 @@ export async function GET(req: NextRequest) {
   }
 }
 
+// Alta/corrección de la IP de un servicio. Abierto a todos los roles: se llama
+// desde la columna IP/Monitoreo de Total EDC. El GET de arriba (catálogo completo)
+// y el DELETE siguen siendo ADMIN.
 export async function POST(req: NextRequest) {
   const session = getSessionFromRequest(req);
   if (!session) return NextResponse.json({ error: "No autorizado" }, { status: 401 });
-  if (!canAccessMonitoring(session.role)) {
+  if (!canCaptureMonitoredIp(session.role)) {
     return NextResponse.json({ error: "Sin permiso" }, { status: 403 });
   }
 

@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSessionFromRequest } from "@/lib/auth-session";
-import { canAccessMonitoring } from "@/lib/permissions";
+import { canCaptureMonitoredIp } from "@/lib/permissions";
 import { getMonitoredIpMatches } from "@/lib/queries/monitoredIps";
 
 export const dynamic = "force-dynamic";
@@ -10,7 +10,7 @@ export const dynamic = "force-dynamic";
 export async function GET(req: NextRequest) {
   const session = getSessionFromRequest(req);
   if (!session) return NextResponse.json({ error: "No autorizado" }, { status: 401 });
-  if (!canAccessMonitoring(session.role)) {
+  if (!canCaptureMonitoredIp(session.role)) {
     return NextResponse.json({ error: "Sin permiso" }, { status: 403 });
   }
 
