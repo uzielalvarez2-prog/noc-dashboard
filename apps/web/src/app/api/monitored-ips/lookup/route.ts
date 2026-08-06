@@ -14,8 +14,11 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: "Sin permiso" }, { status: 403 });
   }
 
-  const companies = (req.nextUrl.searchParams.get("companies") ?? "")
-    .split(",")
+  // Un parámetro repetido por empresa: hay nombres con coma ("BASHAM, RINGE Y
+  // CORREA") y unirlos en un solo valor separado por comas los partía en dos
+  // empresas inexistentes, así que su IP nunca se encontraba.
+  const companies = req.nextUrl.searchParams
+    .getAll("company")
     .map((c) => c.trim())
     .filter(Boolean);
 

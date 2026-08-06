@@ -39,7 +39,14 @@ export async function PATCH(req: NextRequest, ctx: { params: Promise<{ id: strin
       data.notifyChatIds = body.notifyChatIds.filter((c) => typeof c === "string" && c.trim());
     }
 
-    const monitoredIp = await db.monitoredIp.update({ where: { id }, data }).catch(() => null);
+    // Solo el "no existe" es 404. Tragarse cualquier otro error (ej. P2002 por
+    // chocar con la clave (company, serviceRef)) lo disfrazaba de "No encontrada"
+    // y ocultaba la causa real en la UI.
+    const monitoredIp = await db.monitoredIp.update({ where: { id }, data }).catch((e: unknown) => {
+      const code = (e as { code?: string }).code;
+      if (code === "P2025") return null;
+      throw e;
+    });
     if (!monitoredIp) return NextResponse.json({ error: "No encontrada" }, { status: 404 });
 
     await db.auditLog
@@ -56,6 +63,12 @@ export async function PATCH(req: NextRequest, ctx: { params: Promise<{ id: strin
     return NextResponse.json({ monitoredIp });
   } catch (err) {
     console.error("[PATCH /api/monitored-ips/:id]", err);
+    if ((err as { code?: string }).code === "P2002") {
+      return NextResponse.json(
+        { error: "Ya existe una IP registrada para ese servicio de la empresa" },
+        { status: 409 },
+      );
+    }
     return NextResponse.json({ error: "Error al actualizar la IP" }, { status: 500 });
   }
 }

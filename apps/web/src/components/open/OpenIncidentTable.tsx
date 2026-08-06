@@ -13,7 +13,9 @@ import { IpMonitorCell, type MonitoredIpMatch, type ActiveIpMonitor } from "./Ip
 
 async function fetchMonitoredIpMatches(companies: string[]): Promise<Record<string, MonitoredIpMatch[]>> {
   if (companies.length === 0) return {};
-  const res = await fetch(`/api/monitored-ips/lookup?companies=${encodeURIComponent(companies.join(","))}`);
+  const qs = new URLSearchParams();
+  for (const c of companies) qs.append("company", c);
+  const res = await fetch(`/api/monitored-ips/lookup?${qs}`);
   if (!res.ok) return {};
   const data = await res.json();
   return data.matches ?? {};
