@@ -9,38 +9,8 @@ import { cn, formatDate, formatHpsm } from "@/lib/utils";
 import { HpsmIncidentId } from "@/components/shared/HpsmIncidentId";
 import { exportOpenIncidents, type SortDir } from "@/lib/exportOpenIncidents";
 import { canAccessMonitoring } from "@/lib/permissions";
-import { IpMonitorCell, type MonitoredIpMatch, type ActiveIpMonitor } from "./IpMonitorCell";
-
-async function fetchMonitoredIpMatches(companies: string[]): Promise<Record<string, MonitoredIpMatch[]>> {
-  if (companies.length === 0) return {};
-  const qs = new URLSearchParams();
-  for (const c of companies) qs.append("company", c);
-  const res = await fetch(`/api/monitored-ips/lookup?${qs}`);
-  if (!res.ok) return {};
-  const data = await res.json();
-  return data.matches ?? {};
-}
-
-async function fetchActiveMonitors(incidentIds: string[]): Promise<ActiveIpMonitor[]> {
-  if (incidentIds.length === 0) return [];
-  const res = await fetch(`/api/monitored-ips/monitors?incidentIds=${encodeURIComponent(incidentIds.join(","))}`);
-  if (!res.ok) return [];
-  const data = await res.json();
-  return data.monitors ?? [];
-}
-
-// Una empresa puede tener varias IPs registradas (una por servicio, ej. INGENICO
-// con C50-2510-0073 y C50-2510-0149). Preferir la fila cuyo serviceRef coincide
-// exactamente con el servicio del incidente; si ninguna coincide (IP capturada
-// sin serviceRef, o solo hay una), caer a la primera para no romper ese caso.
-function pickIpMatch(
-  matches: MonitoredIpMatch[] | undefined,
-  serviceId: string,
-): MonitoredIpMatch | undefined {
-  if (!matches || matches.length === 0) return undefined;
-  const svc = serviceId.trim().toLowerCase();
-  return matches.find((m) => m.serviceRef.trim().toLowerCase() === svc) ?? matches[0];
-}
+import { IpMonitorCell } from "./IpMonitorCell";
+import { fetchMonitoredIpMatches, fetchActiveMonitors, pickIpMatch } from "@/lib/ipMonitoring";
 
 const COLUMNS = [
   { key: "incidentId", label: "Incident ID" },

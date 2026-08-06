@@ -1,8 +1,16 @@
 "use client";
 
-import { useMemo } from "react";
+import { useMemo, useState, useEffect } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { StatusCardsTable, type StatusCardItem } from "@/components/shared/StatusCardsTable";
+import { canAccessMonitoring } from "@/lib/permissions";
+import { IpMonitorCell } from "./IpMonitorCell";
+import {
+  fetchMonitoredIpMatches,
+  fetchActiveMonitors,
+  pickIpMatch,
+  indexMonitorsByIncident,
+} from "@/lib/ipMonitoring";
 
 // Item que devuelve /api/edc-reports/escalados (lista = incidentes de WhatsApp,
 // datos vivos de abiertos; nota/bandera desde EscalatedIncident).
@@ -56,6 +64,33 @@ export function EdcStatusView() {
     [data]
   );
 
+  // Columna "IP / Monitoreo" — misma que Incidentes Abiertos, ADMIN-only.
+  const [role, setRole] = useState<string | undefined>();
+  useEffect(() => {
+    fetch("/api/me")
+      .then((r) => r.json())
+      .then((d) => setRole(d.role))
+      .catch(() => {});
+  }, []);
+  const showMonitoring = canAccessMonitoring(role);
+
+  const companies = useMemo(() => [...new Set(items.map((i) => i.company))], [items]);
+  const incidentIds = useMemo(() => items.map((i) => i.incidentId), [items]);
+
+  const { data: ipMatches } = useQuery({
+    queryKey: ["monitored-ips-lookup", companies],
+    queryFn: () => fetchMonitoredIpMatches(companies),
+    enabled: showMonitoring && companies.length > 0,
+  });
+
+  const { data: activeMonitors } = useQuery({
+    queryKey: ["ip-monitors", incidentIds],
+    queryFn: () => fetchActiveMonitors(incidentIds),
+    enabled: showMonitoring && incidentIds.length > 0,
+    refetchInterval: 20_000,
+  });
+  const monitorByIncident = indexMonitorsByIncident(activeMonitors);
+
   async function patch(
     it: StatusCardItem,
     body: Partial<{ flagged: boolean; note: string; dismissed: boolean }>
@@ -106,6 +141,21 @@ export function EdcStatusView() {
       fileBase="escalados-edc"
       alwaysShowTable
       neonStatus
+      showNote={false}
+      showFlag={false}
+      renderIpCell={
+        showMonitoring
+          ? (it) => (
+              <IpMonitorCell
+                incidentId={it.incidentId}
+                company={it.company}
+                serviceId={it.serviceId}
+                match={pickIpMatch(ipMatches?.[it.company.trim().toLowerCase()], it.serviceId)}
+                monitor={monitorByIncident.get(it.incidentId)}
+              />
+            )
+          : undefined
+      }
     />
   );
 }

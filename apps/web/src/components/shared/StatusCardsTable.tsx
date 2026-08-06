@@ -109,6 +109,9 @@ export function StatusCardsTable({
   fileBase,
   alwaysShowTable = false,
   neonStatus = false,
+  showNote = true,
+  showFlag = true,
+  renderIpCell,
 }: {
   items: StatusCardItem[];
   isLoading: boolean;
@@ -121,8 +124,23 @@ export function StatusCardsTable({
   // Si true, el número de cada tarjeta de estatus usa el esquema NEÓN
   // (Vendor rojo / Resolved verde / Progress ámbar / resto azul).
   neonStatus?: boolean;
+  // Nota y bandera se ocultan en EDC → Total EDC. Los datos NO se borran: siguen
+  // guardados en EscalatedIncident y visibles donde sí se muestran las columnas.
+  showNote?: boolean;
+  showFlag?: boolean;
+  // Si viene, agrega la columna "IP / Monitoreo" al final de cada fila. Se pasa
+  // como render-prop para que este componente compartido no dependa del
+  // monitoreo (lo usan también las vistas de War Room).
+  renderIpCell?: (it: StatusCardItem) => React.ReactNode;
 }) {
   const statusColor = neonStatus ? statusNeon : statusAccent;
+  const headers = [
+    ...(showNote ? ["Nota"] : []),
+    "Quitar",
+    ...(showFlag ? ["🚩"] : []),
+    "Incidente", "Apertura", "Estatus", "Empresa", "Servicio", "Estado", "Asignado", "Distrito",
+    ...(renderIpCell ? ["IP / Monitoreo"] : []),
+  ];
   const [selectedStatus, setSelectedStatus] = useState<string | null>(null);
   const [q, setQ] = useState("");
   const [exporting, setExporting] = useState(false);
@@ -142,10 +160,15 @@ export function StatusCardsTable({
     const needle = q.trim().toLowerCase();
     if (!needle) return base;
     return base.filter((it) =>
-      [it.incidentId, it.status, it.company, it.serviceId, it.state, it.district, it.assignee ?? "", it.note]
-        .join(" ").toLowerCase().includes(needle)
+      [
+        it.incidentId, it.status, it.company, it.serviceId,
+        it.state, it.district, it.assignee ?? "",
+        // La nota solo cuenta si su columna está visible: buscar por un texto que
+        // no se ve en pantalla haría desaparecer filas sin explicación.
+        ...(showNote ? [it.note] : []),
+      ].join(" ").toLowerCase().includes(needle)
     );
-  }, [items, selectedStatus, q]);
+  }, [items, selectedStatus, q, showNote]);
 
   async function handleExport() {
     setExporting(true);
@@ -281,7 +304,7 @@ export function StatusCardsTable({
             <table className="w-full text-sm">
               <thead>
                 <tr>
-                  {["Nota", "Quitar", "🚩", "Incidente", "Apertura", "Estatus", "Empresa", "Servicio", "Estado", "Asignado", "Distrito"].map((h) => (
+                  {headers.map((h) => (
                     <th key={h} className="sticky top-0 z-10 border-b border-border bg-surface-elevated px-3 py-2.5 text-left text-xs font-medium text-text-muted">
                       {h}
                     </th>
@@ -290,28 +313,32 @@ export function StatusCardsTable({
               </thead>
               <tbody>
                 {isLoading && (
-                  <tr><td colSpan={11} className="px-4 py-8 text-center text-sm text-text-muted">Cargando...</td></tr>
+                  <tr><td colSpan={headers.length} className="px-4 py-8 text-center text-sm text-text-muted">Cargando...</td></tr>
                 )}
                 {!isLoading && filtered.length === 0 && (
-                  <tr><td colSpan={11} className="px-4 py-8 text-center text-sm text-text-muted">Sin coincidencias</td></tr>
+                  <tr><td colSpan={headers.length} className="px-4 py-8 text-center text-sm text-text-muted">Sin coincidencias</td></tr>
                 )}
                 {filtered.map((it) => {
                   const rowText = it.flagged ? "text-critical" : "text-text-primary";
                   return (
                     <tr key={it.incidentId} className="border-b border-border transition-colors last:border-0 hover:bg-surface-elevated/40">
-                      <td className="px-3 py-2.5">
-                        <NoteCell value={it.note} onSave={(note) => onPatch(it, { note })} />
-                      </td>
+                      {showNote && (
+                        <td className="px-3 py-2.5">
+                          <NoteCell value={it.note} onSave={(note) => onPatch(it, { note })} />
+                        </td>
+                      )}
                       <td className="px-3 py-2.5 text-center">
                         <button onClick={() => onPatch(it, { dismissed: true })} title="Quitar" className="text-text-muted/50 transition-colors hover:text-critical">
                           <X className="h-4 w-4" />
                         </button>
                       </td>
-                      <td className="px-3 py-2.5 text-center">
-                        <button onClick={() => onPatch(it, { flagged: !it.flagged })} title={it.flagged ? "Quitar bandera" : "Marcar"} className={it.flagged ? "text-critical" : "text-text-muted/50 hover:text-text-muted"}>
-                          <Flag className={cn("h-4 w-4", it.flagged && "fill-critical")} />
-                        </button>
-                      </td>
+                      {showFlag && (
+                        <td className="px-3 py-2.5 text-center">
+                          <button onClick={() => onPatch(it, { flagged: !it.flagged })} title={it.flagged ? "Quitar bandera" : "Marcar"} className={it.flagged ? "text-critical" : "text-text-muted/50 hover:text-text-muted"}>
+                            <Flag className={cn("h-4 w-4", it.flagged && "fill-critical")} />
+                          </button>
+                        </td>
+                      )}
                       <td className={cn("px-3 py-2.5 font-mono text-xs font-semibold", rowText)}>
                         <HpsmIncidentId incidentId={it.incidentId} />
                         {!!it.recurrence && it.recurrence > 1 && (
@@ -339,6 +366,7 @@ export function StatusCardsTable({
                       <td className={cn("px-3 py-2.5 text-xs", rowText)}>{it.state || "—"}</td>
                       <td className={cn("px-3 py-2.5 text-xs", rowText)}>{it.assignee || "—"}</td>
                       <td className={cn("px-3 py-2.5 text-xs", rowText)}>{it.district || "—"}</td>
+                      {renderIpCell && <td className="px-3 py-2.5">{renderIpCell(it)}</td>}
                     </tr>
                   );
                 })}
