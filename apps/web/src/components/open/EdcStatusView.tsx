@@ -67,10 +67,12 @@ export function EdcStatusView() {
   // Columna "IP / Monitoreo" — misma que Incidentes Abiertos, ADMIN-only.
   const [role, setRole] = useState<string | undefined>();
   useEffect(() => {
-    fetch("/api/me")
+    fetch("/api/auth/me")
       .then((r) => r.json())
       .then((d) => setRole(d.role))
-      .catch(() => {});
+      // Sin rol la columna simplemente no se pinta, que es indistinguible de
+      // "no eres ADMIN": si el fetch falla hay que poder verlo en la consola.
+      .catch((e) => console.error("[EdcStatusView] no se pudo leer el rol", e));
   }, []);
   const showMonitoring = canAccessMonitoring(role);
 
