@@ -2,7 +2,7 @@ import { db } from "../sync/incidents.js";
 import { logger } from "../logger.js";
 import { config } from "../config.js";
 import { checkIp } from "./ping.js";
-import { buildAlertMessage } from "./format.js";
+import { buildAlertMessage, phoneToJid } from "./format.js";
 import { sendWhatsappViaListener } from "./whatsapp.js";
 
 type ActiveMonitor = Awaited<ReturnType<typeof loadActiveMonitors>>[number];
@@ -32,15 +32,49 @@ async function claimAlert(monitorId: string, now: Date): Promise<boolean> {
   return claimed.count > 0;
 }
 
+/**
+ * Teléfono del asignado del incidente, vía OpenIncident.assignee → AgentContact.
+ * Devuelve "" si no hay asignado, si nadie lo tiene mapeado o si el contacto está
+ * deshabilitado: la alerta debe salir igual, sólo que sin mención.
+ */
+async function resolveAssigneePhone(incidentId: string): Promise<string> {
+  const row = await db.openIncident.findFirst({
+    where: { incidentId, assignee: { not: null } },
+    select: { assignee: true },
+  });
+
+  const assignee = (row?.assignee ?? "").trim().toLowerCase();
+  if (!assignee) return "";
+
+  const contact = await db.agentContact.findUnique({ where: { hpsmName: assignee } });
+  if (!contact || !contact.enabled) {
+    logger.info("[ip-monitor] Asignado sin contacto de WhatsApp; se alerta sin mención", {
+      incidentId,
+      assignee,
+    });
+    return "";
+  }
+  return contact.phone;
+}
+
 /** Entrega la alerta ya reclamada; libera el reclamo si no salió ningún envío. */
 async function sendAlert(monitor: ActiveMonitor): Promise<void> {
   const { monitoredIp } = monitor;
+
+  // Una falla resolviendo la mención no debe tumbar la alerta.
+  const assigneePhone = await resolveAssigneePhone(monitor.incidentId).catch((err) => {
+    logger.error("[ip-monitor] Error resolviendo el asignado", { err });
+    return "";
+  });
+
   const text = buildAlertMessage({
     siglasIm: monitoredIp.siglasIm,
     incidentId: monitor.incidentId,
     serviceRef: monitoredIp.serviceRef,
     company: monitor.company || monitoredIp.company,
+    assigneePhone,
   });
+  const mentions = assigneePhone ? [phoneToJid(assigneePhone)] : [];
 
   // Sin destinos configurados no hay nada que entregar: se da por atendida
   // para no repetir el intento cada ciclo.
@@ -48,7 +82,7 @@ async function sendAlert(monitor: ActiveMonitor): Promise<void> {
 
   for (const chatId of monitoredIp.notifyChatIds) {
     if (!monitoredIp.notifyEnabled) break;
-    const sent = await sendWhatsappViaListener(chatId, text);
+    const sent = await sendWhatsappViaListener(chatId, text, mentions);
     if (sent.ok) {
       delivered = true;
     } else {

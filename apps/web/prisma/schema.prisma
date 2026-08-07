@@ -301,6 +301,25 @@ model WhatsappGroup {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// WHATSAPP — CONTACTOS DE AGENTES: traduce el nombre libre que HPSM pone en
+// OpenIncident.assignee (ej. "gpaniagu") al número de WhatsApp, para @mencionar
+// al asignado en la alerta de servicio activo. hpsmName se guarda y compara en
+// minúsculas: HPSM no garantiza mayúsculas estables entre exports.
+// ─────────────────────────────────────────────────────────────────────────────
+model AgentContact {
+  id          String   @id @default(cuid())
+  hpsmName    String   @unique // login de HPSM en minúsculas, ej. "gpaniagu"
+  displayName String   @default("") // informativo para el ADMIN, ej. "Gustavo Paniagua"
+  phone       String // sólo dígitos con país, ej. "5215512345678" (sin + ni @c.us)
+  enabled     Boolean  @default(true)
+  createdBy   String   @default("")
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([enabled])
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // WHATSAPP — MENSAJES ENVIADOS: bitácora de lo que se manda desde el dashboard
 // (quién, a qué grupo, qué texto, si salió bien). Bajo volumen. Complementa el
 // AuditLog: aquí queda el texto completo para trazabilidad operativa.

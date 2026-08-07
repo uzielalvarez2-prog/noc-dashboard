@@ -281,7 +281,16 @@ async function resolveChat(chatId: string): Promise<EstadoChat> {
   }
 }
 
-export async function sendToGroup(chatId: string, text: string): Promise<void> {
+/**
+ * `mentions` son JIDs completos ("5215512345678@c.us"). WhatsApp sólo pinta la
+ * mención si además el texto contiene "@<número>" con esos mismos dígitos; el
+ * texto lo arma quien llama (ver buildAlertMessage en el worker).
+ */
+export async function sendToGroup(
+  chatId: string,
+  text: string,
+  mentions: string[] = [],
+): Promise<void> {
   const destino = await resolveChat(chatId);
 
   if (destino.estado === "no_existe") {
@@ -296,7 +305,7 @@ export async function sendToGroup(chatId: string, text: string): Promise<void> {
   }
 
   try {
-    await client.sendMessage(chatId, text);
+    await client.sendMessage(chatId, text, mentions.length > 0 ? { mentions } : undefined);
   } catch (e) {
     logger.error("sendMessage falló", {
       chatId,
@@ -309,6 +318,7 @@ export async function sendToGroup(chatId: string, text: string): Promise<void> {
   logger.info("Mensaje enviado a grupo", {
     chatId,
     chars: text.length,
+    menciones: mentions.length,
     validado: destino.estado === "existe",
   });
 }

@@ -11,7 +11,7 @@ import { logger } from "./logger.js";
 // delegamos. `isReady` evita intentar mandar antes de que el client esté listo.
 
 interface SendDeps {
-  sendToGroup: (chatId: string, text: string) => Promise<void>;
+  sendToGroup: (chatId: string, text: string, mentions?: string[]) => Promise<void>;
   isReady: () => boolean;
 }
 
@@ -75,9 +75,14 @@ export function startSendServer({ sendToGroup, isReady }: SendDeps): void {
         return;
       }
 
-      const b = (body ?? {}) as { chatId?: unknown; text?: unknown };
+      const b = (body ?? {}) as { chatId?: unknown; text?: unknown; mentions?: unknown };
       const chatId = typeof b.chatId === "string" ? b.chatId.trim() : "";
       const text = typeof b.text === "string" ? b.text : "";
+      // Se descarta cualquier JID mal formado en vez de rechazar el envío: la
+      // alerta importa más que la mención.
+      const mentions = Array.isArray(b.mentions)
+        ? b.mentions.filter((m): m is string => typeof m === "string" && /^\d+@c\.us$/.test(m))
+        : [];
       if (!chatId) return json(400, { error: "chatId requerido" });
       if (!text.trim()) return json(400, { error: "text vacío" });
 
@@ -86,7 +91,7 @@ export function startSendServer({ sendToGroup, isReady }: SendDeps): void {
       }
 
       try {
-        await sendToGroup(chatId, text);
+        await sendToGroup(chatId, text, mentions);
         json(200, { ok: true });
       } catch (e) {
         const msg = (e as Error).message;

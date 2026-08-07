@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import { getServerSession } from "@/lib/auth-session";
 import { canAccessMonitoring } from "@/lib/permissions";
 import { MonitoredIpsPanel } from "@/components/monitoring/MonitoredIpsPanel";
+import { AgentContactsPanel } from "@/components/monitoring/AgentContactsPanel";
 
 export const dynamic = "force-dynamic";
 
@@ -22,6 +23,10 @@ export default async function MonitoreoIpPage() {
       </div>
 
       <MonitoredIpsPanel />
+
+      <div className="border-t border-border pt-8">
+        <AgentContactsPanel />
+      </div>
     </div>
   );
 }

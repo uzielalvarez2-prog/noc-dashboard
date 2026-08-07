@@ -44,6 +44,15 @@ export function canCaptureMonitoredIp(role: string | undefined): boolean {
   return role === "ADMIN" || role === "SUPERVISOR" || role === "IDS";
 }
 
+/**
+ * Catálogo de contactos de agentes (nombre HPSM → número de WhatsApp), usado para
+ * @mencionar al asignado en la alerta de servicio activo. ADMIN estricto: son
+ * números personales del equipo.
+ */
+export function canManageAgentContacts(role: string | undefined): boolean {
+  return role === "ADMIN";
+}
+
 export function isValidRole(role: string): role is Role {
   return (ROLES as string[]).includes(role);
 }
