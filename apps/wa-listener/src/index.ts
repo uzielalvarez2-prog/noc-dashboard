@@ -253,7 +253,9 @@ client.on("message_edit", (msg, newBody) => {
  * eso — por eso el envío funciona aunque getChats no.
  */
 type EstadoChat =
-  | { estado: "existe" }
+  // `miembros` = JIDs de los participantes cuando el chat es un grupo y se
+  // pudieron leer; null si no es grupo o si la librería no los expuso.
+  | { estado: "existe"; miembros: Set<string> | null }
   | { estado: "no_existe" }
   | { estado: "no_validable"; error: string };
 
@@ -275,10 +277,39 @@ type EstadoChat =
 async function resolveChat(chatId: string): Promise<EstadoChat> {
   try {
     const chat = await client.getChatById(chatId);
-    return chat ? { estado: "existe" } : { estado: "no_existe" };
+    if (!chat) return { estado: "no_existe" };
+    return { estado: "existe", miembros: extractParticipants(chat) };
   } catch (e) {
     return { estado: "no_validable", error: errMsg(e) };
   }
+}
+
+/**
+ * JIDs de los participantes de un grupo. Devuelve null cuando no se pudieron leer
+ * (chat individual, o la versión de WhatsApp Web no pobló `participants`), que es
+ * distinto de "el grupo no tiene miembros": ver la decisión en sendToGroup.
+ */
+function extractParticipants(chat: unknown): Set<string> | null {
+  const participantes = (chat as { participants?: unknown }).participants;
+  if (!Array.isArray(participantes) || participantes.length === 0) return null;
+
+  const jids = new Set<string>();
+  for (const p of participantes) {
+    // `id` es un objeto serializado {_serialized: "5215512345678@c.us", ...}.
+    const serializado = (p as { id?: { _serialized?: unknown } }).id?._serialized;
+    if (typeof serializado === "string") jids.add(serializado);
+  }
+  return jids.size > 0 ? jids : null;
+}
+
+/**
+ * Quita del texto la línea "@<dígitos>" de una mención que no se va a aplicar.
+ * Sin esto el destinatario vería el número crudo, que es peor que no mencionar.
+ * Se limpia también la línea en blanco que la precede (ver buildAlertMessage).
+ */
+function stripMentionLine(text: string, jid: string): string {
+  const numero = jid.split("@")[0];
+  return text.replace(new RegExp(`\\n*^@${numero}$`, "m"), "");
 }
 
 /**
@@ -304,8 +335,34 @@ export async function sendToGroup(
     });
   }
 
+  // Sólo se menciona a quien SÍ está en este grupo: WhatsApp no resuelve la
+  // mención de un ajeno, así que en ese grupo se vería "@5215512345678" en crudo.
+  // La alerta se manda igual, sin la mención (y sin su línea en el texto).
+  //
+  // Si los miembros no se pudieron leer (`null`) se mencionan todos igual: la
+  // lista falta por un fallo de la librería, no porque la persona esté fuera, y
+  // perder la mención en todos los grupos sería peor que arriesgar un número
+  // crudo ocasional.
+  const miembros = destino.estado === "existe" ? destino.miembros : null;
+  let finalText = text;
+  let finalMentions = mentions;
+
+  if (miembros !== null) {
+    finalMentions = mentions.filter((jid) => miembros.has(jid));
+    for (const jid of mentions) {
+      if (!miembros.has(jid)) {
+        finalText = stripMentionLine(finalText, jid);
+        logger.info("Mención omitida: el contacto no pertenece al grupo", { chatId, jid });
+      }
+    }
+  }
+
   try {
-    await client.sendMessage(chatId, text, mentions.length > 0 ? { mentions } : undefined);
+    await client.sendMessage(
+      chatId,
+      finalText,
+      finalMentions.length > 0 ? { mentions: finalMentions } : undefined,
+    );
   } catch (e) {
     logger.error("sendMessage falló", {
       chatId,
@@ -317,8 +374,9 @@ export async function sendToGroup(
   // la bitácora no permite saber si un "enviado" es de fiar.
   logger.info("Mensaje enviado a grupo", {
     chatId,
-    chars: text.length,
-    menciones: mentions.length,
+    chars: finalText.length,
+    menciones: finalMentions.length,
+    mencionesOmitidas: mentions.length - finalMentions.length,
     validado: destino.estado === "existe",
   });
 }
