@@ -10,7 +10,7 @@ import { HpsmIncidentId } from "@/components/shared/HpsmIncidentId";
 import { exportOpenIncidents, type SortDir } from "@/lib/exportOpenIncidents";
 import { canAccessMonitoring } from "@/lib/permissions";
 import { IpMonitorCell } from "./IpMonitorCell";
-import { fetchMonitoredIpMatches, fetchActiveMonitors, pickIpMatch } from "@/lib/ipMonitoring";
+import { fetchMonitoredIpMatches, fetchActiveMonitors, pickIpMatchForRow } from "@/lib/ipMonitoring";
 
 const COLUMNS = [
   { key: "incidentId", label: "Incident ID" },
@@ -151,14 +151,15 @@ export function OpenIncidentTable({
   const totalPages = Math.max(1, Math.ceil(total / limit));
   const lastSync = data?.meta.lastSync;
 
-  // IP conocida por empresa + monitoreo activo por incidente — solo ADMIN.
+  // IP conocida por empresa o servicio + monitoreo activo por incidente — solo ADMIN.
   const companies = [...new Set(rows.map((r) => r.company))];
+  const services = [...new Set(rows.map((r) => r.serviceId))];
   const incidentIds = rows.map((r) => r.incidentId);
 
   const { data: ipMatches } = useQuery({
-    queryKey: ["monitored-ips-lookup", companies],
-    queryFn: () => fetchMonitoredIpMatches(companies),
-    enabled: showMonitoring && companies.length > 0,
+    queryKey: ["monitored-ips-lookup", companies, services],
+    queryFn: () => fetchMonitoredIpMatches(companies, services),
+    enabled: showMonitoring && (companies.length > 0 || services.length > 0),
   });
 
   const { data: activeMonitors } = useQuery({
@@ -308,7 +309,7 @@ export function OpenIncidentTable({
                         incidentId={r.incidentId}
                         company={r.company}
                         serviceId={r.serviceId}
-                        match={pickIpMatch(ipMatches?.[r.company.trim().toLowerCase()], r.serviceId)}
+                        match={pickIpMatchForRow(ipMatches, r.company, r.serviceId)}
                         monitor={monitorByIncident.get(r.incidentId)}
                       />
                     </td>

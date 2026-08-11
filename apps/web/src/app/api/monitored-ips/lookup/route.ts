@@ -5,8 +5,9 @@ import { getMonitoredIpMatches } from "@/lib/queries/monitoredIps";
 
 export const dynamic = "force-dynamic";
 
-// Batch match de empresas contra la base de MonitoredIp — usado por la tabla de
-// Incidentes Abiertos para prellenar la columna IP sin que el ADMIN la busque.
+// Batch match de empresas Y servicios contra la base de MonitoredIp — usado por
+// la tabla de Incidentes Abiertos para prellenar la columna IP sin que el ADMIN
+// la busque. La IP se prellena si coincide Empresa O Servicio.
 export async function GET(req: NextRequest) {
   const session = getSessionFromRequest(req);
   if (!session) return NextResponse.json({ error: "No autorizado" }, { status: 401 });
@@ -16,14 +17,19 @@ export async function GET(req: NextRequest) {
 
   // Un parámetro repetido por empresa: hay nombres con coma ("BASHAM, RINGE Y
   // CORREA") y unirlos en un solo valor separado por comas los partía en dos
-  // empresas inexistentes, así que su IP nunca se encontraba.
+  // empresas inexistentes, así que su IP nunca se encontraba. Mismo patrón para
+  // servicio.
   const companies = req.nextUrl.searchParams
     .getAll("company")
     .map((c) => c.trim())
     .filter(Boolean);
+  const services = req.nextUrl.searchParams
+    .getAll("service")
+    .map((s) => s.trim())
+    .filter(Boolean);
 
   try {
-    const matches = await getMonitoredIpMatches(companies);
+    const matches = await getMonitoredIpMatches(companies, services);
     return NextResponse.json({ matches: Object.fromEntries(matches) });
   } catch (err) {
     console.error("[GET /api/monitored-ips/lookup]", err);

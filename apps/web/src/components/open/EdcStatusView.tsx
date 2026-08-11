@@ -8,7 +8,7 @@ import { IpMonitorCell } from "./IpMonitorCell";
 import {
   fetchMonitoredIpMatches,
   fetchActiveMonitors,
-  pickIpMatch,
+  pickIpMatchForRow,
   indexMonitorsByIncident,
 } from "@/lib/ipMonitoring";
 
@@ -79,12 +79,13 @@ export function EdcStatusView() {
   const showMonitoring = canCaptureMonitoredIp(role);
 
   const companies = useMemo(() => [...new Set(items.map((i) => i.company))], [items]);
+  const services = useMemo(() => [...new Set(items.map((i) => i.serviceId))], [items]);
   const incidentIds = useMemo(() => items.map((i) => i.incidentId), [items]);
 
   const { data: ipMatches } = useQuery({
-    queryKey: ["monitored-ips-lookup", companies],
-    queryFn: () => fetchMonitoredIpMatches(companies),
-    enabled: showMonitoring && companies.length > 0,
+    queryKey: ["monitored-ips-lookup", companies, services],
+    queryFn: () => fetchMonitoredIpMatches(companies, services),
+    enabled: showMonitoring && (companies.length > 0 || services.length > 0),
   });
 
   const { data: activeMonitors } = useQuery({
@@ -154,7 +155,7 @@ export function EdcStatusView() {
                 incidentId={it.incidentId}
                 company={it.company}
                 serviceId={it.serviceId}
-                match={pickIpMatch(ipMatches?.[it.company.trim().toLowerCase()], it.serviceId)}
+                match={pickIpMatchForRow(ipMatches, it.company, it.serviceId)}
                 monitor={monitorByIncident.get(it.incidentId)}
               />
             )

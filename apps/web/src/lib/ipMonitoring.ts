@@ -3,14 +3,22 @@ import type { MonitoredIpMatch, ActiveIpMonitor } from "@/components/open/IpMoni
 // Fetchers + selección de match de la columna "IP / Monitoreo", compartidos por
 // las tablas que la muestran (Incidentes Abiertos y EDC → Total EDC).
 
+// Debe reflejar serviceMatchKey() en lib/queries/monitoredIps.ts.
+function serviceMatchKey(serviceId: string): string {
+  return `svc:${serviceId.trim().toLowerCase()}`;
+}
+
 export async function fetchMonitoredIpMatches(
   companies: string[],
+  services: string[] = [],
 ): Promise<Record<string, MonitoredIpMatch[]>> {
-  if (companies.length === 0) return {};
+  if (companies.length === 0 && services.length === 0) return {};
   // Un parámetro por empresa: hay nombres con coma ("BASHAM, RINGE Y CORREA")
-  // y unirlos en un solo valor los partía en dos empresas inexistentes.
+  // y unirlos en un solo valor los partía en dos empresas inexistentes. Mismo
+  // patrón para servicio, que ahora también dispara el match (además de empresa).
   const qs = new URLSearchParams();
   for (const c of companies) qs.append("company", c);
+  for (const s of services) qs.append("service", s);
   const res = await fetch(`/api/monitored-ips/lookup?${qs}`);
   if (!res.ok) return {};
   const data = await res.json();
@@ -40,6 +48,24 @@ export function pickIpMatch(
   if (!matches || matches.length === 0) return undefined;
   const svc = serviceId.trim().toLowerCase();
   return matches.find((m) => m.serviceRef.trim().toLowerCase() === svc) ?? matches[0];
+}
+
+/**
+ * Servicio primero: es la referencia que NO se repite entre sitios de una misma
+ * empresa (varias sucursales comparten razón social pero cada una tiene su propio
+ * número de servicio). Si el servicio no matchea nada (IP capturada sin
+ * serviceRef, o dato no cargado aún), cae a Empresa para no perder el caso de
+ * clientes con un solo sitio.
+ */
+export function pickIpMatchForRow(
+  matchesByKey: Record<string, MonitoredIpMatch[]> | undefined,
+  company: string,
+  serviceId: string,
+): MonitoredIpMatch | undefined {
+  if (!matchesByKey) return undefined;
+  const byService = matchesByKey[serviceMatchKey(serviceId)];
+  if (byService && byService.length > 0) return byService[0];
+  return pickIpMatch(matchesByKey[company.trim().toLowerCase()], serviceId);
 }
 
 /** Índice incidentId → monitor activo, para pintar el badge de estado por fila. */
