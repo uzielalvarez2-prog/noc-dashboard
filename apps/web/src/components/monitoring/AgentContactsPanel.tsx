@@ -135,21 +135,23 @@ export function AgentContactsPanel() {
         </p>
       )}
 
-      <div className="overflow-hidden rounded-lg border border-border">
+      {/* Scroll interno con encabezado sticky, igual que la Base de IPs: el
+          buscador y el botón Agregar quedan siempre a la vista. */}
+      <div className="max-h-[60vh] overflow-y-auto rounded-lg border border-border">
         <table className="w-full text-sm">
-          <thead>
+          <thead className="sticky top-0 z-10">
             <tr className="border-b border-border bg-surface-elevated">
-              <th className="px-4 py-2.5 text-left text-xs font-medium text-text-muted">
+              <th className="bg-surface-elevated px-4 py-2.5 text-left text-xs font-medium text-text-muted">
                 Nombre HPSM
               </th>
-              <th className="px-4 py-2.5 text-left text-xs font-medium text-text-muted">
+              <th className="bg-surface-elevated px-4 py-2.5 text-left text-xs font-medium text-text-muted">
                 Nombre visible
               </th>
-              <th className="px-4 py-2.5 text-left text-xs font-medium text-text-muted">
+              <th className="bg-surface-elevated px-4 py-2.5 text-left text-xs font-medium text-text-muted">
                 WhatsApp
               </th>
-              <th className="px-4 py-2.5 text-left text-xs font-medium text-text-muted">Estado</th>
-              <th className="px-4 py-2.5 text-right text-xs font-medium text-text-muted">
+              <th className="bg-surface-elevated px-4 py-2.5 text-left text-xs font-medium text-text-muted">Estado</th>
+              <th className="bg-surface-elevated px-4 py-2.5 text-right text-xs font-medium text-text-muted">
                 Acciones
               </th>
             </tr>
