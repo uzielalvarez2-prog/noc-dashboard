@@ -295,16 +295,18 @@ export function MonitoredIpsPanel() {
         </div>
       )}
 
-      <div className="overflow-hidden rounded-lg border border-border">
+      {/* Scroll interno: la base ya pasa de 100 filas y sin esto hay que bajar
+          toda la página (perdiendo de vista el buscador) para llegar al final. */}
+      <div className="max-h-[60vh] overflow-y-auto rounded-lg border border-border">
         <table className="w-full text-sm">
-          <thead>
+          <thead className="sticky top-0 z-10">
             <tr className="border-b border-border bg-surface-elevated">
-              <th className="px-4 py-2.5 text-left text-xs font-medium text-text-muted">IP</th>
-              <th className="px-4 py-2.5 text-left text-xs font-medium text-text-muted">Empresa</th>
-              <th className="px-4 py-2.5 text-left text-xs font-medium text-text-muted">Etiqueta</th>
-              <th className="px-4 py-2.5 text-left text-xs font-medium text-text-muted">Tipo</th>
-              <th className="px-4 py-2.5 text-left text-xs font-medium text-text-muted">Notificación</th>
-              <th className="px-4 py-2.5 text-right text-xs font-medium text-text-muted">Acciones</th>
+              <th className="bg-surface-elevated px-4 py-2.5 text-left text-xs font-medium text-text-muted">IP</th>
+              <th className="bg-surface-elevated px-4 py-2.5 text-left text-xs font-medium text-text-muted">Empresa</th>
+              <th className="bg-surface-elevated px-4 py-2.5 text-left text-xs font-medium text-text-muted">Etiqueta</th>
+              <th className="bg-surface-elevated px-4 py-2.5 text-left text-xs font-medium text-text-muted">Tipo</th>
+              <th className="bg-surface-elevated px-4 py-2.5 text-left text-xs font-medium text-text-muted">Notificación</th>
+              <th className="bg-surface-elevated px-4 py-2.5 text-right text-xs font-medium text-text-muted">Acciones</th>
             </tr>
           </thead>
           <tbody>
