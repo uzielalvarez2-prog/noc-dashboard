@@ -37,9 +37,12 @@ export async function fetchActiveMonitors(incidentIds: string[]): Promise<Active
 
 /**
  * Una empresa puede tener varias IPs registradas (una por servicio, ej. INGENICO
- * con C50-2510-0073 y C50-2510-0149). Preferir la fila cuyo serviceRef coincide
- * exactamente con el servicio del incidente; si ninguna coincide (IP capturada
- * sin serviceRef, o solo hay una), caer a la primera para no romper ese caso.
+ * con C50-2510-0073 y C50-2510-0149, o SMART FIT con un sitio por servicio).
+ * Preferir la fila cuyo serviceRef coincide exactamente con el servicio del
+ * incidente. Si ninguna coincide, caer a la primera SOLO cuando ninguna fila de
+ * la empresa tiene serviceRef capturado (IP vieja, capturada sin distinguir
+ * sitios) — si ya hay filas con serviceRef propio, la empresa se captura por
+ * sitio y no hay que prestarle a esta fila la IP de otro sitio distinto.
  */
 export function pickIpMatch(
   matches: MonitoredIpMatch[] | undefined,
@@ -47,7 +50,10 @@ export function pickIpMatch(
 ): MonitoredIpMatch | undefined {
   if (!matches || matches.length === 0) return undefined;
   const svc = serviceId.trim().toLowerCase();
-  return matches.find((m) => m.serviceRef.trim().toLowerCase() === svc) ?? matches[0];
+  const exact = matches.find((m) => m.serviceRef.trim().toLowerCase() === svc);
+  if (exact) return exact;
+  const anyHasServiceRef = matches.some((m) => m.serviceRef.trim() !== "");
+  return anyHasServiceRef ? undefined : matches[0];
 }
 
 /**
