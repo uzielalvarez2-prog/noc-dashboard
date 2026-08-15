@@ -33,16 +33,21 @@ function buildPivot(ops: OperatorStats[]): { headers: string[]; rows: (string | 
   return { headers, rows };
 }
 
+const GROUP_STYLES: Record<string, { dot: string; text: string }> = {
+  PEXA: { dot: "bg-accent", text: "text-accent" },
+  CECOR: { dot: "bg-warning", text: "text-warning" },
+  Bot: { dot: "bg-fuchsia-400", text: "text-fuchsia-300" },
+};
+
 function OperatorGroupSection({
   group,
   operators,
 }: {
-  group: "PEXA" | "CECOR";
+  group: "PEXA" | "CECOR" | "Bot";
   operators: OperatorStats[];
 }) {
   if (operators.length === 0) return null;
-  const dotClass = group === "PEXA" ? "bg-accent" : "bg-warning";
-  const textClass = group === "PEXA" ? "text-accent" : "text-warning";
+  const { dot: dotClass, text: textClass } = GROUP_STYLES[group];
 
   return (
     <div className="space-y-3">
@@ -79,6 +84,7 @@ export function OperatorsLive({ initial }: { initial: OperatorStats[] }) {
 
   const pexaOps = data.filter((op) => op.groups.includes("PEXA"));
   const cecorOps = data.filter((op) => op.groups.includes("CECOR"));
+  const botOps = data.filter((op) => op.groups.includes("Bot"));
 
   return (
     <div className="space-y-6">
@@ -99,6 +105,7 @@ export function OperatorsLive({ initial }: { initial: OperatorStats[] }) {
           </div>
           <OperatorGroupSection group="PEXA" operators={pexaOps} />
           <OperatorGroupSection group="CECOR" operators={cecorOps} />
+          <OperatorGroupSection group="Bot" operators={botOps} />
         </>
       ) : (
         <div className="rounded-lg border border-dashed border-border py-16 text-center">

@@ -16,6 +16,12 @@ const KEYWORD_STYLES: { kw: string; bg: string; text: string; dot: string }[] = 
   { kw: "WORK", bg: "bg-orange-500/15", text: "text-orange-300", dot: "bg-orange-400" },
 ];
 
+const GROUP_BADGE: Record<string, string> = {
+  PEXA: "bg-accent/15 text-accent",
+  CECOR: "bg-warning/15 text-warning",
+  Bot: "bg-fuchsia-500/15 text-fuchsia-300",
+};
+
 const FALLBACK = [
   { bg: "bg-fuchsia-500/15", text: "text-fuchsia-300", dot: "bg-fuchsia-400" },
   { bg: "bg-lime-500/15", text: "text-lime-300", dot: "bg-lime-400" },
@@ -53,7 +59,7 @@ export function OperatorCard({ op }: { op: OperatorStats }) {
               key={g}
               className={cn(
                 "rounded px-1.5 py-0.5 text-[10px] font-semibold",
-                g === "PEXA" ? "bg-accent/15 text-accent" : "bg-warning/15 text-warning"
+                GROUP_BADGE[g] ?? "bg-warning/15 text-warning"
               )}
             >
               {g}
