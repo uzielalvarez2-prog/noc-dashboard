@@ -1,6 +1,10 @@
+"use client";
+
+import { useRef, useState } from "react";
 import { cn } from "@/lib/utils";
-import { User } from "lucide-react";
+import { User, Copy, Check } from "lucide-react";
 import type { OperatorStats } from "@/lib/queries/operators";
+import { copyElementAsImage } from "@/lib/copyImage";
 
 // Paleta vibrante por estatus. Primero por palabra clave (semántica), luego un
 // hash estable para que cualquier estatus nuevo tenga siempre el mismo color.
@@ -37,11 +41,56 @@ function statusStyle(status: string) {
   return FALLBACK[hash % FALLBACK.length];
 }
 
-export function OperatorCard({ op }: { op: OperatorStats }) {
+// Estatus por el que se está filtrando la vista (si hay uno activo), para
+// resaltarlo dentro de la tarjeta y mostrar su total de forma destacada.
+export function OperatorCard({
+  op,
+  activeStatus,
+}: {
+  op: OperatorStats;
+  activeStatus?: string | null;
+}) {
+  const cardRef = useRef<HTMLDivElement>(null);
+  const [copyState, setCopyState] = useState<"idle" | "copying" | "done">("idle");
+
+  async function handleCopy() {
+    if (!cardRef.current || copyState === "copying") return;
+    setCopyState("copying");
+    try {
+      await copyElementAsImage(cardRef.current, `operador-${op.login}.png`);
+      setCopyState("done");
+      setTimeout(() => setCopyState("idle"), 1500);
+    } catch {
+      setCopyState("idle");
+    }
+  }
+
+  const activeCount = activeStatus
+    ? op.statuses.find((s) => s.status === activeStatus)?.count ?? 0
+    : null;
+  const activeStyle = activeStatus ? statusStyle(activeStatus) : null;
+
   return (
-    <div className="rounded-lg border border-border bg-surface p-5 transition-colors hover:bg-surface-elevated">
+    <div
+      ref={cardRef}
+      className="relative rounded-lg border border-border bg-surface p-5 transition-colors hover:bg-surface-elevated"
+    >
+      <button
+        type="button"
+        onClick={handleCopy}
+        data-copy-ignore
+        title="Copiar tarjeta como imagen"
+        className="absolute right-3 top-3 rounded-md border border-border bg-surface p-1.5 text-text-muted transition-colors hover:border-accent hover:text-accent"
+      >
+        {copyState === "done" ? (
+          <Check className="h-3.5 w-3.5 text-success" />
+        ) : (
+          <Copy className="h-3.5 w-3.5" />
+        )}
+      </button>
+
       {/* Header: login + en línea + grupos + carga */}
-      <div className="flex items-start justify-between gap-2">
+      <div className="flex items-start justify-between gap-2 pr-8">
         <div className="flex items-center gap-3">
           <div className="relative flex h-9 w-9 items-center justify-center rounded-full bg-surface-elevated">
             <User className="h-4 w-4 text-text-muted" />
@@ -66,38 +115,57 @@ export function OperatorCard({ op }: { op: OperatorStats }) {
             </span>
           ))}
           <span
+            title={activeStatus ? `Total en ${activeStatus}` : "Total de incidentes abiertos"}
             className={cn(
               "rounded-full px-2 py-0.5 font-mono text-sm font-bold",
-              op.openCount > 5 ? "bg-warning/15 text-warning" : "bg-surface-elevated text-text-primary"
+              activeStyle
+                ? cn(activeStyle.bg, activeStyle.text)
+                : op.openCount > 5
+                  ? "bg-warning/15 text-warning"
+                  : "bg-surface-elevated text-text-primary"
             )}
           >
-            {op.openCount}
+            {activeStatus ? activeCount : op.openCount}
           </span>
         </div>
       </div>
 
       <div className="my-3 h-px bg-border" />
 
-      {/* Estatus como chips de colores */}
-      <div className="flex flex-wrap gap-1.5">
-        {op.statuses.map((s) => {
-          const st = statusStyle(s.status);
-          return (
-            <span
-              key={s.status}
-              className={cn(
-                "flex items-center gap-1.5 rounded-full px-2 py-1 text-[11px] font-medium",
-                st.bg,
-                st.text
-              )}
-            >
-              <span className={cn("h-1.5 w-1.5 rounded-full", st.dot)} />
-              <span className="truncate max-w-[10rem]">{s.status}</span>
-              <span className="font-mono font-bold">{s.count}</span>
-            </span>
-          );
-        })}
-      </div>
+      {activeStatus && activeStyle ? (
+        <div
+          className={cn(
+            "flex items-center justify-between gap-2 rounded-md px-3 py-2",
+            activeStyle.bg
+          )}
+        >
+          <span className={cn("flex items-center gap-2 truncate text-xs font-semibold", activeStyle.text)}>
+            <span className={cn("h-2 w-2 rounded-full", activeStyle.dot)} />
+            {activeStatus}
+          </span>
+          <span className={cn("font-mono text-lg font-bold", activeStyle.text)}>{activeCount}</span>
+        </div>
+      ) : (
+        <div className="flex flex-wrap gap-1.5">
+          {op.statuses.map((s) => {
+            const st = statusStyle(s.status);
+            return (
+              <span
+                key={s.status}
+                className={cn(
+                  "flex items-center gap-1.5 rounded-full px-2 py-1 text-[11px] font-medium",
+                  st.bg,
+                  st.text
+                )}
+              >
+                <span className={cn("h-1.5 w-1.5 rounded-full", st.dot)} />
+                <span className="truncate max-w-[10rem]">{s.status}</span>
+                <span className="font-mono font-bold">{s.count}</span>
+              </span>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 }

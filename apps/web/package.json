@@ -24,6 +24,7 @@
     "date-fns": "^4.3.0",
     "dotenv": "^17.4.2",
     "exceljs": "^4.4.0",
+    "html-to-image": "^1.11.13",
     "lucide-react": "^1.17.0",
     "next": "16.2.6",
     "next-auth": "5.0.0-beta.31",
