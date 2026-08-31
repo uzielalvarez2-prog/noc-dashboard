@@ -13,6 +13,8 @@ function statusAccent(status: string): string {
   const s = status.toUpperCase();
   if (s.includes("RESOLV")) return "text-success";
   if (s.includes("PROGRESS")) return "text-warning";
+  if (s.includes("PENDING VENDOR")) return "text-critical";
+  if (s.includes("PENDING OTHER")) return "text-text-muted";
   if (s.includes("PENDING")) return "text-accent";
   return "text-text-primary";
 }
