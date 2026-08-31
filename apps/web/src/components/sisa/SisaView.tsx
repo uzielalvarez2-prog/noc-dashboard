@@ -2,11 +2,12 @@
 
 import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Search, Download, RefreshCw, Loader2, Copy, Check, X } from "lucide-react";
+import { Search, Download, RefreshCw, Loader2, Copy, Check, X, ArrowDownWideNarrow, ArrowUpNarrowWide } from "lucide-react";
 import { cn, formatHpsm } from "@/lib/utils";
 import { downloadXLSX } from "@/lib/excelExport";
 import { HpsmIncidentId } from "@/components/shared/HpsmIncidentId";
 import { buildEdcText } from "@/lib/sisa";
+import type { SortDir } from "@/lib/exportOpenIncidents";
 
 interface SisaItem {
   incidentId: string;
@@ -76,6 +77,7 @@ const COLUMNS = ["Incidente", "Apertura", "Empresa", "Servicio", "Distrito", "CA
 
 export function SisaView() {
   const [q, setQ] = useState("");
+  const [sortDir, setSortDir] = useState<SortDir>("desc");
   const [selectedStatus, setSelectedStatus] = useState<string | null>(null);
   const [selectedCase, setSelectedCase] = useState<string | null>(null);
   const [exporting, setExporting] = useState(false);
@@ -122,15 +124,38 @@ export function SisaView() {
 
   const filtered = useMemo(
     () =>
-      baseQ.filter((it) => {
-        if (selectedStatus && (it.status || "—") !== selectedStatus) return false;
-        if (selectedCase && (it.vendor || "—") !== selectedCase) return false;
-        return true;
-      }),
-    [baseQ, selectedStatus, selectedCase]
+      baseQ
+        .filter((it) => {
+          if (selectedStatus && (it.status || "—") !== selectedStatus) return false;
+          if (selectedCase && (it.vendor || "—") !== selectedCase) return false;
+          return true;
+        })
+        .sort((a, b) => {
+          const da = new Date(a.openTime).getTime();
+          const db = new Date(b.openTime).getTime();
+          return sortDir === "asc" ? da - db : db - da;
+        }),
+    [baseQ, selectedStatus, selectedCase, sortDir]
   );
 
   const hasFilter = selectedStatus !== null || selectedCase !== null;
+
+  const sortBtn = (dir: SortDir, label: string, Icon: typeof ArrowDownWideNarrow) => (
+    <button
+      type="button"
+      onClick={() => setSortDir(dir)}
+      title={`Ordenar tabla por apertura: ${label}`}
+      className={cn(
+        "flex items-center gap-1 rounded-md px-2 py-1 text-[11px] font-medium transition-colors",
+        sortDir === dir
+          ? "bg-accent text-white"
+          : "border border-border text-text-muted hover:text-text-primary"
+      )}
+    >
+      <Icon className="h-3 w-3" />
+      {label}
+    </button>
+  );
 
   async function handleCopyEdc(it: SisaItem) {
     const text = buildEdcText(it);
@@ -175,18 +200,25 @@ export function SisaView() {
       <div className="space-y-2">
         <div className="flex items-center justify-between gap-2">
           <h2 className="text-sm font-semibold text-text-primary">Por estatus</h2>
-          {hasFilter && (
-            <button
-              type="button"
-              onClick={() => {
-                setSelectedStatus(null);
-                setSelectedCase(null);
-              }}
-              className="flex items-center gap-1 rounded-md border border-border px-2 py-1 text-[11px] text-text-muted hover:text-text-primary"
-            >
-              <X className="h-3 w-3" /> Limpiar filtros
-            </button>
-          )}
+          <div className="flex items-center gap-2">
+            <div className="flex items-center gap-1">
+              <span className="mr-1 hidden text-[11px] text-text-muted sm:inline">Orden:</span>
+              {sortBtn("desc", "Reciente → antiguo", ArrowDownWideNarrow)}
+              {sortBtn("asc", "Antiguo → reciente", ArrowUpNarrowWide)}
+            </div>
+            {hasFilter && (
+              <button
+                type="button"
+                onClick={() => {
+                  setSelectedStatus(null);
+                  setSelectedCase(null);
+                }}
+                className="flex items-center gap-1 rounded-md border border-border px-2 py-1 text-[11px] text-text-muted hover:text-text-primary"
+              >
+                <X className="h-3 w-3" /> Limpiar filtros
+              </button>
+            )}
+          </div>
         </div>
         <div className="flex flex-wrap gap-2">
           {/* Total (limpia el filtro de estatus) */}
