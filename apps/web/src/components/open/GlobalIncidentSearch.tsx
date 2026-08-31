@@ -23,6 +23,8 @@ function statusColor(status: string): string {
   const s = status.toUpperCase();
   if (s.includes("RESOLVED") || s.includes("RESUELT")) return "border-success/40 bg-success-dim text-success";
   if (s.includes("PROGRESS")) return "border-warning/40 bg-warning-dim text-warning";
+  if (s.includes("PENDING VENDOR")) return "border-critical/40 bg-critical-dim text-critical";
+  if (s.includes("PENDING OTHER")) return "border-border bg-surface text-text-muted";
   if (s.includes("PENDING")) return "border-accent/40 bg-accent/10 text-accent";
   return "border-border bg-surface text-text-muted";
 }

@@ -36,6 +36,10 @@ function StatusBadge({ status }: { status: string }) {
     ? "text-success"
     : s.includes("PROGRESS")
     ? "text-warning"
+    : s.includes("PENDING VENDOR")
+    ? "text-critical"
+    : s.includes("PENDING OTHER")
+    ? "text-text-muted"
     : s.includes("PENDING")
     ? "text-accent"
     : "text-text-muted";
