@@ -11,6 +11,7 @@ export interface OpenIncidentRow {
   district: string;
   assignee: string | null;
   group: string;
+  summary: string | null;
   uploadedAt: string;
   /** Nº de sitios que abarca el incidente (1 si es de un solo sitio). */
   siteCount: number;

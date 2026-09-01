@@ -90,6 +90,7 @@ model OpenIncident {
   district   String
   assignee   String?
   group      String
+  summary    String?
   uploadedAt DateTime @default(now())
 
   @@unique([incidentId, state, district])

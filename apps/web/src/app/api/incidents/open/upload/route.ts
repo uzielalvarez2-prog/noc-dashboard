@@ -48,6 +48,7 @@ export async function POST(req: NextRequest) {
     const cAssignee = pickCol(headers, ["Assigned To", "Assignee", "Opened by"]);
     const cDistrict = pickCol(headers, ["Site Name District", "Site District", "Divisional"]);
     const cGroup = pickCol(headers, ["Assignment Group"]);
+    const cSummary = pickCol(headers, ["Summary"]);
 
     if (!cId) {
       return NextResponse.json(
@@ -73,6 +74,7 @@ export async function POST(req: NextRequest) {
       district: string;
       assignee: string | null;
       group: string;
+      summary: string | null;
     }[] = [];
     let activeRows = 0;
 
@@ -101,6 +103,7 @@ export async function POST(req: NextRequest) {
         district,
         assignee: (cAssignee && (row[cAssignee] ?? "").trim()) || null,
         group,
+        summary: (cSummary && (row[cSummary] ?? "").trim()) || null,
       });
     }
 

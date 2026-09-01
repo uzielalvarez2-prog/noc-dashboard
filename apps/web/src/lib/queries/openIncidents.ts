@@ -151,6 +151,7 @@ export async function getOpenIncidents(f: OpenFilters) {
     district: a._districts.size > 1 ? `Varios (${a._districts.size})` : a.district,
     assignee: a.assignee,
     group: a.group,
+    summary: a.summary,
     uploadedAt: a.uploadedAt,
     siteCount: a.siteCount,
   }));

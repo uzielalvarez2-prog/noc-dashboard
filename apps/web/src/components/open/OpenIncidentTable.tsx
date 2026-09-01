@@ -82,7 +82,10 @@ export function OpenIncidentTable({
       .then((d) => setRole(d.role))
       .catch(() => {});
   }, []);
-  const showMonitoring = canAccessMonitoring(role);
+  // CECOR alimenta la columna Summary desde su Excel; en su lugar reemplaza
+  // IP/Monitoreo (esa columna es específica de PEXA).
+  const showSummary = group === "CECOR";
+  const showMonitoring = !showSummary && canAccessMonitoring(role);
 
   // Marcas de atención especial (escalados) — compartidas con el panel del Overview
   const { data: escalated } = useQuery<EscalatedResponse>({
@@ -173,7 +176,7 @@ export function OpenIncidentTable({
     refetchInterval: 20_000,
   });
   const monitorByIncident = new Map((activeMonitors ?? []).map((m) => [m.incidentId, m]));
-  const colCount = COLUMNS.length + 1 + (showMonitoring ? 1 : 0);
+  const colCount = COLUMNS.length + 1 + (showMonitoring || showSummary ? 1 : 0);
 
   return (
     <div className="overflow-hidden rounded-xl border border-border/60 bg-surface/40 backdrop-blur-md">
@@ -236,6 +239,11 @@ export function OpenIncidentTable({
                   {c.label}
                 </th>
               ))}
+              {showSummary && (
+                <th className="border-b border-border/60 px-3 py-2 text-left text-xs font-medium uppercase tracking-wider text-text-muted">
+                  Summary
+                </th>
+              )}
               {showMonitoring && (
                 <th className="border-b border-border/60 px-3 py-2 text-left text-xs font-medium uppercase tracking-wider text-text-muted">
                   IP / Monitoreo
@@ -307,6 +315,16 @@ export function OpenIncidentTable({
                   <td className="px-3 py-2">
                     <GroupBadge group={r.group} />
                   </td>
+                  {showSummary && (
+                    <td className="px-3 py-2 text-xs text-text-primary">
+                      <span
+                        className="block max-w-[16rem] whitespace-pre-line"
+                        title={r.summary ?? undefined}
+                      >
+                        {r.summary || "—"}
+                      </span>
+                    </td>
+                  )}
                   {showMonitoring && (
                     <td className="px-3 py-2">
                       <IpMonitorCell
