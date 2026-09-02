@@ -9,6 +9,7 @@ import { TopByDimension } from "./TopByDimension";
 import { OpenIncidentTable } from "./OpenIncidentTable";
 import { EdcTabs } from "./EdcTabs";
 import { SisaView } from "@/components/sisa/SisaView";
+import { SisaCecorView } from "./SisaCecorView";
 import type { SortDir } from "@/lib/exportOpenIncidents";
 import { cn } from "@/lib/utils";
 import { RefreshCw } from "lucide-react";
@@ -38,6 +39,7 @@ function PexaCecorView({ group }: { group: "PEXA" | "CECOR" }) {
   const [sortDir, setSortDir] = useState<SortDir>("desc");
   const [recentOnly, setRecentOnly] = useState(true);
   const [selectedStatus, setSelectedStatus] = useState<string | null>(null);
+  const [subTab, setSubTab] = useState<"abiertos" | "sisa">("abiertos");
   const maxAgeHours = recentOnly ? 1 : undefined;
 
   const { data: stats, isFetching, refetch } = useQuery<OpenStats>({
@@ -58,8 +60,40 @@ function PexaCecorView({ group }: { group: "PEXA" | "CECOR" }) {
       active ? "bg-accent text-white" : "border border-border text-text-muted hover:text-text-primary"
     );
 
+  const subTabBtn = (active: boolean) =>
+    cn(
+      "rounded-md px-3 py-1.5 text-xs font-semibold transition-colors",
+      active ? "bg-violet-500/20 text-violet-200 ring-1 ring-violet-500" : "border border-border text-text-muted hover:text-text-primary"
+    );
+
+  if (group === "CECOR" && subTab === "sisa") {
+    return (
+      <div className="space-y-5">
+        <div className="flex items-center gap-2">
+          <button type="button" onClick={() => setSubTab("abiertos")} className={subTabBtn(false)}>
+            Abiertos
+          </button>
+          <button type="button" onClick={() => setSubTab("sisa")} className={subTabBtn(true)}>
+            SISA CECOR
+          </button>
+        </div>
+        <SisaCecorView />
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-5">
+      {group === "CECOR" && (
+        <div className="flex items-center gap-2">
+          <button type="button" onClick={() => setSubTab("abiertos")} className={subTabBtn(true)}>
+            Abiertos
+          </button>
+          <button type="button" onClick={() => setSubTab("sisa")} className={subTabBtn(false)}>
+            SISA CECOR
+          </button>
+        </div>
+      )}
       <div className="flex items-center justify-end gap-3">
         <button
           type="button"
