@@ -100,6 +100,8 @@ En Tailwind: `bg-background`, `bg-surface`, `text-text-primary`, `text-critical`
 | `HPSM_DATABASE` | Nombre de la DB en HPSM |
 | `REDIS_URL` | Upstash Redis URL |
 | `RESEND_API_KEY` | API key de Resend para emails |
+| `APERTURA_SERVICIOS` | Códigos de Servicio (prefijo antes del guion en serviceId) que disparan alerta de apertura por WhatsApp |
+| `APERTURA_CHAT_IDS` | chatId(s) de WhatsApp (`xxxx@g.us`) destino de la alerta de apertura, separados por coma |
 
 ## Reglas No Negociables
 

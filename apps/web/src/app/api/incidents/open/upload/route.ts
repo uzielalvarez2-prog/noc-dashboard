@@ -11,6 +11,7 @@ import {
 } from "@/lib/csv/hpsm";
 import { syncWarRoom } from "@/lib/war-room";
 import { syncContratoMarco } from "@/lib/contrato-marco";
+import { syncAperturaNotify } from "@/lib/apertura-incidente";
 
 // Carga del CSV de incidentes ABIERTOS.
 // El archivo trae todos los grupos; filtramos a PEXA/CECOR, quitamos duplicados
@@ -141,6 +142,13 @@ export async function POST(req: NextRequest) {
       await syncContratoMarco(records);
     } catch (e) {
       console.error("[open/upload] syncContratoMarco falló (no crítico):", e);
+    }
+
+    // Alerta de apertura: Servicio vigilado → WhatsApp a PEXA Matutino/Vespertino.
+    try {
+      await syncAperturaNotify(records);
+    } catch (e) {
+      console.error("[open/upload] syncAperturaNotify falló (no crítico):", e);
     }
 
     await db.auditLog

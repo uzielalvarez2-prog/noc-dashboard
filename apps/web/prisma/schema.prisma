@@ -321,6 +321,19 @@ model AgentContact {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// WHATSAPP — APERTURA DE INCIDENTE: control de "ya avisé este" para la alerta de
+// apertura (Servicio en {C00,C20,C25,C50,C1G,G2B,G4B} → PEXA Matutino/Vespertino
+// con @mención al asignado). OpenIncident es un snapshot que se recarga completo
+// cada ~5 min, así que "nuevo" = primera vez que el incidentId aparece aquí.
+// ─────────────────────────────────────────────────────────────────────────────
+model AperturaNotificada {
+  id         String   @id @default(cuid())
+  incidentId String   @unique
+  serviceId  String
+  notifiedAt DateTime @default(now())
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // WHATSAPP — MENSAJES ENVIADOS: bitácora de lo que se manda desde el dashboard
 // (quién, a qué grupo, qué texto, si salió bien). Bajo volumen. Complementa el
 // AuditLog: aquí queda el texto completo para trazabilidad operativa.

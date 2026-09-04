@@ -16,6 +16,7 @@ export interface SendResult {
 export async function sendWhatsappViaListener(
   chatId: string,
   text: string,
+  mentions: string[] = [],
 ): Promise<SendResult> {
   if (!WA_LISTENER_URL) {
     return { ok: false, status: 500, error: "WA_LISTENER_URL no configurada" };
@@ -33,7 +34,7 @@ export async function sendWhatsappViaListener(
         "Content-Type": "application/json",
         "x-internal-key": INTERNAL_API_KEY,
       },
-      body: JSON.stringify({ chatId, text }),
+      body: JSON.stringify({ chatId, text, mentions }),
       // El listener puede tardar en resolver chats; damos margen pero acotado.
       signal: AbortSignal.timeout(20_000),
     });
