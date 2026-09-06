@@ -1,14 +1,19 @@
 import { db } from "@/lib/db";
 import { sendWhatsappViaListener } from "@/lib/whatsapp";
-import type { OpenRecordLite } from "@/lib/war-room";
+import { isResolvedStatus, type OpenRecordLite } from "@/lib/war-room";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // ALERTA DE APERTURA: cuando un incidente nuevo entra con Servicio en la lista
 // vigilada (prefijo antes del primer guion de OpenIncident.serviceId, ej.
-// "C20-1808-0004" → "C20"), se avisa por WhatsApp a PEXA Matutino/Vespertino con
-// @mención al asignado. "Nuevo" = primera vez que el incidentId aparece en
-// AperturaNotificada (OpenIncident es un snapshot que se recarga completo cada
-// carga del scraper, no manda eventos de apertura).
+// "C20-1808-0004" → "C20"), se avisa por WhatsApp con @mención al asignado.
+// "Nuevo" = primera vez que el incidentId aparece en AperturaNotificada
+// (OpenIncident es un snapshot que se recarga completo cada carga del scraper,
+// no manda eventos de apertura). Un incidente ya RESOLVED no se notifica: no
+// tiene caso avisar la apertura de algo que ya se cerró.
+//
+// El chat destino depende de la hora (America/Mexico_City) al momento de la
+// carga: PEXA Matutino 06:00–15:00, PEXA Vespertino 15:00–23:15. Fuera de
+// ambas ventanas (madrugada) cae a Matutino por default.
 // ─────────────────────────────────────────────────────────────────────────────
 
 const WATCHED_SERVICES = new Set(
@@ -18,10 +23,33 @@ const WATCHED_SERVICES = new Set(
     .filter(Boolean)
 );
 
-const NOTIFY_CHAT_IDS = (process.env.APERTURA_CHAT_IDS ?? "")
-  .split(",")
-  .map((s) => s.trim())
-  .filter(Boolean);
+const CHAT_ID_MATUTINO = (process.env.APERTURA_CHAT_ID_MATUTINO ?? "").trim();
+const CHAT_ID_VESPERTINO = (process.env.APERTURA_CHAT_ID_VESPERTINO ?? "").trim();
+
+const TIMEZONE = "America/Mexico_City";
+
+/** Minutos desde medianoche, hora CDMX, para el instante dado. */
+function minutesOfDayInMexicoCity(date: Date): number {
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone: TIMEZONE,
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  }).formatToParts(date);
+  const hour = Number(parts.find((p) => p.type === "hour")?.value ?? "0");
+  const minute = Number(parts.find((p) => p.type === "minute")?.value ?? "0");
+  return hour * 60 + minute;
+}
+
+/**
+ * PEXA Matutino: 06:00–15:00. PEXA Vespertino: 15:00–23:15. Fuera de ambas
+ * ventanas (23:15–06:00) cae a Matutino por default.
+ */
+function resolveNotifyChatId(now: Date): string {
+  const minutes = minutesOfDayInMexicoCity(now);
+  const isVespertino = minutes >= 15 * 60 && minutes < 23 * 60 + 15;
+  return isVespertino ? CHAT_ID_VESPERTINO : CHAT_ID_MATUTINO;
+}
 
 function servicePrefix(serviceId: string): string {
   return (serviceId.split("-")[0] ?? "").trim().toUpperCase();
@@ -64,14 +92,14 @@ async function resolveAssigneePhone(assignee: string | null): Promise<string> {
  * CSV: cualquier error se atrapa y se loguea, nunca se relanza.
  */
 export async function syncAperturaNotify(records: OpenRecordLite[]): Promise<number> {
-  if (WATCHED_SERVICES.size === 0 || NOTIFY_CHAT_IDS.length === 0) return 0;
+  if (WATCHED_SERVICES.size === 0 || (!CHAT_ID_MATUTINO && !CHAT_ID_VESPERTINO)) return 0;
 
   // Una fila por incidente (puede abarcar varios sitios).
   const byId = new Map<string, OpenRecordLite>();
   for (const r of records) if (!byId.has(r.incidentId)) byId.set(r.incidentId, r);
 
-  const candidates = [...byId.values()].filter((inc) =>
-    WATCHED_SERVICES.has(servicePrefix(inc.serviceId))
+  const candidates = [...byId.values()].filter(
+    (inc) => WATCHED_SERVICES.has(servicePrefix(inc.serviceId)) && !isResolvedStatus(inc.status)
   );
   if (candidates.length === 0) return 0;
 
@@ -86,6 +114,12 @@ export async function syncAperturaNotify(records: OpenRecordLite[]): Promise<num
   let notified = 0;
   for (const inc of nuevos) {
     try {
+      const chatId = resolveNotifyChatId(new Date());
+      if (!chatId) {
+        console.error("[apertura] Sin chatId configurado para el turno actual", inc.incidentId);
+        continue;
+      }
+
       const assigneePhone = await resolveAssigneePhone(inc.assignee).catch((err) => {
         console.error("[apertura] Error resolviendo asignado", err);
         return "";
@@ -98,18 +132,18 @@ export async function syncAperturaNotify(records: OpenRecordLite[]): Promise<num
         company: inc.company,
         assigneePhone,
       });
+      // Si el asignado no está en el chat, wa-listener descarta la línea "@..."
+      // y manda el resto igual — la alerta nunca se pierde por la mención.
       const mentions = assigneePhone ? [phoneToJid(assigneePhone)] : [];
 
-      for (const chatId of NOTIFY_CHAT_IDS) {
-        const sent = await sendWhatsappViaListener(chatId, text, mentions);
-        if (!sent.ok) {
-          console.error("[apertura] Falló envío de alerta de apertura", chatId, sent.error);
-        }
+      const sent = await sendWhatsappViaListener(chatId, text, mentions);
+      if (!sent.ok) {
+        console.error("[apertura] Falló envío de alerta de apertura", chatId, sent.error);
       }
 
-      // Se marca notificado aunque algún envío haya fallado: evita reintentos
-      // infinitos por un grupo caído; el patrón de este flujo prioriza no
-      // repetir el aviso sobre garantizar entrega a todos los destinos.
+      // Se marca notificado aunque el envío haya fallado: evita reintentos
+      // infinitos por el chat caído; el patrón de este flujo prioriza no
+      // repetir el aviso sobre garantizar la entrega.
       await db.aperturaNotificada.create({
         data: { incidentId: inc.incidentId, serviceId: inc.serviceId },
       });

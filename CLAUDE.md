@@ -101,7 +101,8 @@ En Tailwind: `bg-background`, `bg-surface`, `text-text-primary`, `text-critical`
 | `REDIS_URL` | Upstash Redis URL |
 | `RESEND_API_KEY` | API key de Resend para emails |
 | `APERTURA_SERVICIOS` | Códigos de Servicio (prefijo antes del guion en serviceId) que disparan alerta de apertura por WhatsApp |
-| `APERTURA_CHAT_IDS` | chatId(s) de WhatsApp (`xxxx@g.us`) destino de la alerta de apertura, separados por coma |
+| `APERTURA_CHAT_ID_MATUTINO` | chatId (`xxxx@g.us`) de PEXA Matutino — alerta de apertura 06:00–15:00 CDMX |
+| `APERTURA_CHAT_ID_VESPERTINO` | chatId (`xxxx@g.us`) de PEXA Vespertino — alerta de apertura 15:00–23:15 CDMX (y fuera de ambas ventanas cae a Matutino) |
 
 ## Reglas No Negociables
 
