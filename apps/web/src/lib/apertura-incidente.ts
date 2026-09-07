@@ -143,11 +143,18 @@ export async function syncAperturaNotify(records: OpenRecordLite[]): Promise<num
 
       // Se marca notificado aunque el envío haya fallado: evita reintentos
       // infinitos por el chat caído; el patrón de este flujo prioriza no
-      // repetir el aviso sobre garantizar la entrega.
+      // repetir el aviso sobre garantizar la entrega. Por eso el resultado
+      // del envío se guarda aquí: es el único rastro de una entrega perdida.
       await db.aperturaNotificada.create({
-        data: { incidentId: inc.incidentId, serviceId: inc.serviceId },
+        data: {
+          incidentId: inc.incidentId,
+          serviceId: inc.serviceId,
+          chatId,
+          ok: sent.ok,
+          error: sent.ok ? null : (sent.error ?? `wa-listener respondió ${sent.status}`).slice(0, 500),
+        },
       });
-      notified++;
+      if (sent.ok) notified++;
     } catch (e) {
       console.error("[apertura] Error notificando apertura", inc.incidentId, e);
     }

@@ -331,6 +331,12 @@ model AperturaNotificada {
   incidentId String   @unique
   serviceId  String
   notifiedAt DateTime @default(now())
+  // Resultado del envío a wa-listener. La fila se crea aunque el envío falle
+  // (para no repetir el aviso), así que sin estos campos un fallo de entrega
+  // era invisible: quedaba solo en console.error.
+  chatId     String   @default("")
+  ok         Boolean  @default(false)
+  error      String?
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
