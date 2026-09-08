@@ -248,6 +248,12 @@ try {
   const totalMB = dirSize(sessionDir) / 1048576;
   logger.info("Tamaño del perfil tras purga", { path: sessionDir, mb: +totalMB.toFixed(1) });
   reportarOcupacion(sessionDir);
+  // El perfil medía 1.3 GB mientras Railway reportaba 3.9 GB: la diferencia no
+  // estaba en la sesión, así que se mide la RAÍZ del volumen — ahí aparecen los
+  // restos que dejaron deploys viejos (perfiles huérfanos, temporales).
+  const raiz = process.env.WA_SESSION_DIR ? "/data" : ".";
+  logger.info("Tamaño total del volumen", { path: raiz, mb: +(dirSize(raiz) / 1048576).toFixed(1) });
+  reportarOcupacion(raiz);
 } catch (e) {
   logger.warn("No se pudo medir la ocupación", { error: errMsg(e) });
 }
