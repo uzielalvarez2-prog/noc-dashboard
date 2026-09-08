@@ -218,6 +218,40 @@ if (purgado > 0) {
   logger.info("Purga de caché completada", { liberadoMB: +(purgado / 1048576).toFixed(1) });
 }
 
+// Tras purgar, reporta qué sigue ocupando el volumen. La métrica de Railway es un
+// promedio con retraso y no dice QUÉ pesa; sin esto, diagnosticar un volumen lleno
+// obliga a adivinar. Sólo se listan los directorios de primer y segundo nivel que
+// superen 50 MB, así que el log no crece.
+function reportarOcupacion(dir: string, nivel = 0): void {
+  if (nivel > 2 || !existsSync(dir)) return;
+  let entries: string[];
+  try {
+    entries = readdirSync(dir);
+  } catch {
+    return;
+  }
+  for (const entry of entries) {
+    const full = join(dir, entry);
+    try {
+      if (!statSync(full).isDirectory()) continue;
+    } catch {
+      continue;
+    }
+    const mb = dirSize(full) / 1048576;
+    if (mb >= 50) {
+      logger.info("Ocupación del volumen", { path: full, mb: +mb.toFixed(1) });
+      reportarOcupacion(full, nivel + 1);
+    }
+  }
+}
+try {
+  const totalMB = dirSize(sessionDir) / 1048576;
+  logger.info("Tamaño del perfil tras purga", { path: sessionDir, mb: +totalMB.toFixed(1) });
+  reportarOcupacion(sessionDir);
+} catch (e) {
+  logger.warn("No se pudo medir la ocupación", { error: errMsg(e) });
+}
+
 const client = new Client({
   authStrategy: new LocalAuth({ dataPath: sessionDir }),
   // Fija una versión estable de WhatsApp Web servida remotamente. Sin esto, la
