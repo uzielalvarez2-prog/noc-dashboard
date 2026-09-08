@@ -135,6 +135,89 @@ function clearChromiumLocks(dir: string): void {
 }
 clearChromiumLocks(sessionDir);
 
+// El perfil de Chromium crece sin techo dentro del VOLUMEN (llegó a 3.9 GB de 4.9
+// el 2026-09-08, 79%): el grueso es caché de red/GPU/compilación que Chromium
+// regenera solo. Si el volumen se llena, WhatsApp deja de funcionar; ampliarlo
+// obliga a saltar de plan ($20/mes) para guardar basura desechable. Se purga al
+// arrancar, que es el único momento seguro (Chromium aún no abrió el perfil).
+//
+// ⚠️ Sólo se borran directorios de CACHÉ por nombre EXACTO. La sesión de WhatsApp
+// vive en "IndexedDB", "Local Storage" y "session" — borrar cualquiera de esos
+// forzaría a re-escanear el QR, así que NUNCA deben entrar a esta lista.
+const CACHE_DIRS = new Set([
+  "Cache",
+  "Code Cache",
+  "GPUCache",
+  "DawnCache",
+  "DawnGraphiteCache",
+  "DawnWebGPUCache",
+  "ShaderCache",
+  "GrShaderCache",
+  "CacheStorage",
+  "Service Worker",
+]);
+function purgeChromiumCache(dir: string): number {
+  if (!existsSync(dir)) return 0;
+  let entries: string[];
+  try {
+    entries = readdirSync(dir);
+  } catch {
+    return 0;
+  }
+  let liberados = 0;
+  for (const entry of entries) {
+    const full = join(dir, entry);
+    let isDir = false;
+    try {
+      isDir = statSync(full).isDirectory();
+    } catch {
+      continue;
+    }
+    if (!isDir) continue;
+    if (CACHE_DIRS.has(entry)) {
+      // Se mide antes de borrar: sin esto no hay forma de saber si la purga sirvió
+      // (el tamaño del volumen sólo se ve en el panel de Railway).
+      const bytes = dirSize(full);
+      try {
+        rmSync(full, { force: true, recursive: true });
+        liberados += bytes;
+        logger.info("Caché de Chromium purgada", { path: full, mb: +(bytes / 1048576).toFixed(1) });
+      } catch (e) {
+        logger.warn("No se pudo purgar caché", { path: full, error: errMsg(e) });
+      }
+      continue;
+    }
+    liberados += purgeChromiumCache(full);
+  }
+  return liberados;
+}
+
+/** Tamaño recursivo de un directorio en bytes; 0 si no se puede leer. */
+function dirSize(dir: string): number {
+  let total = 0;
+  let entries: string[];
+  try {
+    entries = readdirSync(dir);
+  } catch {
+    return 0;
+  }
+  for (const entry of entries) {
+    const full = join(dir, entry);
+    try {
+      const st = statSync(full);
+      total += st.isDirectory() ? dirSize(full) : st.size;
+    } catch {
+      /* archivo que desapareció o sin permiso */
+    }
+  }
+  return total;
+}
+
+const purgado = purgeChromiumCache(sessionDir);
+if (purgado > 0) {
+  logger.info("Purga de caché completada", { liberadoMB: +(purgado / 1048576).toFixed(1) });
+}
+
 const client = new Client({
   authStrategy: new LocalAuth({ dataPath: sessionDir }),
   // Fija una versión estable de WhatsApp Web servida remotamente. Sin esto, la
