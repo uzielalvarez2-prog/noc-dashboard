@@ -1,6 +1,7 @@
 import { db } from "@/lib/db";
 import { sendWhatsappViaListener } from "@/lib/whatsapp";
 import { isResolvedStatus, type OpenRecordLite } from "@/lib/war-room";
+import { isChatSuspendido } from "@/lib/wa-suspendidos";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // ALERTA DE APERTURA: cuando un incidente nuevo entra con Servicio en la lista
@@ -136,8 +137,13 @@ export async function syncAperturaNotify(records: OpenRecordLite[]): Promise<num
       // y manda el resto igual — la alerta nunca se pierde por la mención.
       const mentions = assigneePhone ? [phoneToJid(assigneePhone)] : [];
 
-      const sent = await sendWhatsappViaListener(chatId, text, mentions);
-      if (!sent.ok) {
+      // Grupo suspendido: no se envía, pero SÍ se marca en AperturaNotificada
+      // (con ok=false y el motivo) para no re-avisar si se reactiva después.
+      const suspendido = isChatSuspendido(chatId);
+      const sent = suspendido
+        ? { ok: false as const, status: 0, error: "chat suspendido (WA_CHATS_SUSPENDIDOS)" }
+        : await sendWhatsappViaListener(chatId, text, mentions);
+      if (!sent.ok && !suspendido) {
         console.error("[apertura] Falló envío de alerta de apertura", chatId, sent.error);
       }
 

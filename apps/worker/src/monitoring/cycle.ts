@@ -4,6 +4,7 @@ import { config } from "../config.js";
 import { checkIp } from "./ping.js";
 import { buildAlertMessage, phoneToJid } from "./format.js";
 import { sendWhatsappViaListener } from "./whatsapp.js";
+import { isChatSuspendido } from "./suppressed.js";
 
 type ActiveMonitor = Awaited<ReturnType<typeof loadActiveMonitors>>[number];
 
@@ -82,6 +83,12 @@ async function sendAlert(monitor: ActiveMonitor): Promise<void> {
 
   for (const chatId of monitoredIp.notifyChatIds) {
     if (!monitoredIp.notifyEnabled) break;
+    // Grupo suspendido: se omite SIN marcar fallo. Cuenta como entregado para
+    // que la alerta no quede en reintento eterno cuando es el único destino.
+    if (isChatSuspendido(chatId)) {
+      delivered = true;
+      continue;
+    }
     const sent = await sendWhatsappViaListener(chatId, text, mentions);
     if (sent.ok) {
       delivered = true;
