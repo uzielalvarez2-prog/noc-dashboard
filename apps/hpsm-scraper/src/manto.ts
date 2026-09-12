@@ -251,6 +251,12 @@ const MARCA_OBSERVACIONES = "******** Observaciones del Contacto ********";
 const INICIO_BLOQUE_TECNICO =
   /^(RMA\s*:|DIAGNOSTICO\s*:|RESULTADOS DE LA PRUEBA|Re-Asignaci|CAS[A-Z]{2,4}\s*:|Informaci.n del Equipo|Consultar\b|Id Contrato\b)/i;
 
+// Líneas de las Observaciones que NO van al EDC porque ya están arriba en el
+// propio formato (Cliente, Incidente) o son del área que reporta, no del sitio:
+// el EDC ya trae "Cliente:" y "*Incidente crítico*:" en sus primeras líneas.
+const OBSERVACION_REDUNDANTE =
+  /^(CLIENTE\s*:|CASO(\s+UNINET)?\s*:|INCIDENTE\s*:|IDS\s+CARE\s*:|TELEFONO\s*:|REPORTA\s*:)/i;
+
 /** Entidades HTML + acentos rotos de iso-8859-1, y \r sueltos → saltos de línea. */
 function decodificarTextoManto(raw: string): string {
   return raw
@@ -283,7 +289,25 @@ export function extraerNotasEfa(htmlZoom: string): string | undefined {
   const observaciones: string[] = [];
   for (const l of desdeMarca.split(/[\r\n]+/).map((x) => x.trim()).filter(Boolean)) {
     if (INICIO_BLOQUE_TECNICO.test(l)) break;
+    if (OBSERVACION_REDUNDANTE.test(l)) continue; // ya va arriba en el EDC
     observaciones.push(l);
+  }
+
+  // El contacto de sitio se mueve al FINAL (después de RMA/DIAGNOSTICO/PISA):
+  // es dato de referencia, no el avance del folio. Arrastra solo las líneas que
+  // son parte del mismo dato (teléfono, horario, notas de acceso) — NO los
+  // avisos "## ... ###", que van con la descripción de la falla.
+  const contacto: string[] = [];
+  const idxContacto = observaciones.findIndex((l) => /^(CONTACTO|RESPONSABLE EN SITIO)\s*:/i.test(l));
+  if (idxContacto >= 0) {
+    let fin = idxContacto + 1;
+    while (
+      fin < observaciones.length &&
+      /^(tel\.?|tel[ée]fono|cel\.?|horario|acceso|acc\b|nota)\b/i.test(observaciones[fin])
+    ) {
+      fin++;
+    }
+    contacto.push(...observaciones.splice(idxContacto, fin - idxContacto));
   }
 
   const partes = [...observaciones];
@@ -304,6 +328,9 @@ export function extraerNotasEfa(htmlZoom: string): string | undefined {
   //    fecha) y "Reporte exitoso en PISA:" (etiqueta sin folio).
   const pisaMatch = [...texto.matchAll(/\bPISA\s*:\s*(\d{4,})\b/gi)].pop();
   if (pisaMatch) partes.push(`PISA: ${pisaMatch[1]}`);
+
+  // 5. Contacto de sitio, al final.
+  partes.push(...contacto);
 
   const out = partes.join("\n").trim();
   return out.length > 0 ? out : undefined;

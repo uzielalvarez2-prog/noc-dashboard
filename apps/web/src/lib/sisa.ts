@@ -44,6 +44,18 @@ export function abreviarCaseEdc(caseVal: string): string {
     .replace(/Monterrey/gi, "Mty");
 }
 
+// Vendors que NO son plazas sino siglas: se dejan tal cual al capitalizar.
+const SIGLAS_VENDOR = new Set(["GFC", "GNOC", "TELNOR"]);
+
+// HPSM entrega el CASE en mayúsculas ("CASE PUEBLA", "CASE SAN JUAN"); el EDC
+// lo lleva capitalizado ("Puebla", "San Juan"). Solo toca palabras que vienen
+// TODAS en mayúsculas, así respeta las abreviaturas ya formateadas (Gdl, Mty).
+export function capitalizarCaseEdc(texto: string): string {
+  return (texto ?? "").replace(/\b[A-ZÁÉÍÓÚÑ]{2,}\b/g, (palabra) =>
+    SIGLAS_VENDOR.has(palabra) ? palabra : palabra.charAt(0) + palabra.slice(1).toLowerCase(),
+  );
+}
+
 const MESES_EDC = ["Ene", "Feb", "Mar", "Abr", "May", "Jun", "Jul", "Ago", "Sep", "Oct", "Nov", "Dic"];
 
 // "24/Jul/2026, 14:00 horas". openTime es el reloj de pared de HPSM guardado
@@ -79,9 +91,12 @@ export function buildEdcText(it: SisaEdcInput): string {
   // Ticket: "{folio SISA} | CASE {CASE abreviado}-{Distrito}".
   // El campo vendor a veces ya trae el prefijo "CASE" — se quita para no duplicarlo.
   const rawCase = (it.vendor ?? "").trim().replace(/^CASE\s+/i, "");
-  const caseAbbr = abreviarCaseEdc(rawCase);
+  // Capitalizado ("Puebla"), a diferencia del distrito, que va en mayúsculas.
+  const caseAbbr = capitalizarCaseEdc(abreviarCaseEdc(rawCase));
   const district = (it.district ?? "").trim();
-  const caseLabel = [caseAbbr, district].filter(Boolean).join("-");
+  // Formato del CASE: "CASE Puebla - *VERACRUZ*" — el distrito va entre
+  // asteriscos (negrita en WhatsApp) y separado por " - ".
+  const caseLabel = district ? `${caseAbbr} - *${district}*` : caseAbbr;
   const ticketLine = caseLabel
     ? `Ticket: ${it.vendorTicket} | CASE ${caseLabel}`
     : `Ticket: ${it.vendorTicket}`;
@@ -102,7 +117,7 @@ export function buildEdcText(it: SisaEdcInput): string {
   // "Alto impacto" sigue trayendo su opción por defecto, que se depura a mano
   // antes de enviar al grupo.
   return [
-    `*Incidente crítico:* ${it.incidentId}`,
+    `*Incidente crítico*: ${it.incidentId}`,
     `Cliente: *${it.company || ""}*`,
     `Alto impacto: Sin respaldo`,
     servicioLine,
