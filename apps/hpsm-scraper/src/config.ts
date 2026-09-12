@@ -7,14 +7,29 @@ function requireEnv(name: string): string {
 }
 
 /**
- * Lee una variable quitando comillas envolventes si las trae. Railway descarta
- * el valor de una variable cuyo contenido tiene `#` (lo toma como comentario),
- * y el workaround es guardarla entrecomillada — según cómo se capture, el valor
- * puede llegar con las comillas incluidas. Esto acepta ambas formas.
+ * Lee una variable de entorno a prueba de los dos accidentes que ya nos
+ * costaron un deploy al configurar Manto en Railway:
+ *
+ *  1. El NOMBRE llega con espacios/tabs invisibles pegados (p. ej. se guardó
+ *     "MANTO_PASSWORD\t " al pegarlo en el panel): process.env.MANTO_PASSWORD
+ *     da undefined aunque el panel muestre la variable. Se busca también por
+ *     nombre normalizado.
+ *  2. El VALOR llega entrecomillado, porque entrecomillar es el workaround
+ *     habitual cuando un valor trae caracteres especiales.
  */
-function envSinComillas(name: string): string {
-  const raw = process.env[name] ?? "";
-  const t = raw.trim();
+function leerEnv(name: string): string {
+  let raw = process.env[name];
+  if (raw === undefined) {
+    // Búsqueda tolerante: ignora espacios/tabs alrededor del nombre.
+    const buscado = name.trim().toUpperCase();
+    for (const [k, v] of Object.entries(process.env)) {
+      if (k.trim().toUpperCase() === buscado) {
+        raw = v;
+        break;
+      }
+    }
+  }
+  const t = (raw ?? "").trim();
   if (t.length >= 2 && ((t.startsWith('"') && t.endsWith('"')) || (t.startsWith("'") && t.endsWith("'")))) {
     return t.slice(1, -1);
   }
@@ -32,8 +47,8 @@ export const config = {
   // no deben fallar si estas variables no están seteadas.
   manto: {
     url: process.env.MANTO_URL ?? "http://200.57.157.167/manto/jsp/AccesoSup.jsp?org=0",
-    user: envSinComillas("MANTO_USER"),
-    password: envSinComillas("MANTO_PASSWORD"),
+    user: leerEnv("MANTO_USER"),
+    password: leerEnv("MANTO_PASSWORD"),
   },
   downloadDir: process.env.DOWNLOAD_DIR ?? "C:\\Users\\Admin\\noc-csvs",
   closed: {
