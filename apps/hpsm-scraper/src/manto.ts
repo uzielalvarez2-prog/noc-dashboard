@@ -31,6 +31,9 @@ export interface MantoEstatusResult {
   estadoEms?: string;
   estadoEfa?: string;
   fechaEstadoEfa?: string; // tal cual la reporta Manto, ej. "11/09/2026 18:34:56"
+  fechaEstadoEms?: string; // "F/H Ini." del EMS — la que el formato EDC usa como "Inicio:"
+  /** Resumen depurado de las notas del EFA (ver extraerNotasEfa). */
+  notasEfa?: string;
   error?: string;
 }
 
@@ -203,7 +206,13 @@ async function consultarFolio(page: Page, folio: string): Promise<MantoEstatusRe
       // El iframe puede existir con la URL nueva pero aún sin el HTML de la
       // tabla; si no hay tabla todavía, se sigue esperando.
       if (/Total de Registros/i.test(html)) {
-        return parseResultFrame(folio, html);
+        const base = parseResultFrame(folio, html);
+        if (!base.found) return base;
+        // Notas del EFA: petición aparte reusando la sesión ya autenticada. Si
+        // falla, se devuelve el estatus igual — las notas son un extra para el
+        // formato EDC, no deben tumbar la consulta del folio.
+        const notasEfa = await descargarNotasEfa(page, folio);
+        return { ...base, notasEfa };
       }
     }
     await page.waitForTimeout(500);
@@ -215,6 +224,114 @@ async function consultarFolio(page: Page, folio: string): Promise<MantoEstatusRe
   if (huellaFinal) throw new PortalFueraDeGestionError(huellaFinal);
 
   return { folio, found: false, error: "Timeout esperando respuesta de Manto" };
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// NOTAS DEL EFA (VentanaZoom.jsp?tipo=EFA) — alimentan la línea "Estatus:" del
+// formato EDC.
+//
+// Manto guarda TODO el historial del folio en un solo <textarea> sin
+// estructura: observaciones del contacto, diagnósticos, reasignaciones de
+// técnico y volcados completos de pruebas GPON, concatenados y sin orden
+// cronológico fiable. Copiar el textarea entero no sirve: en folios reales son
+// 2000+ caracteres, la mayoría datos de equipo (potencias ópticas, VLANs,
+// tráfico por interfaz) que no aportan al aviso de WhatsApp.
+//
+// Se arma un resumen con lo que el equipo sí reporta, en este orden:
+//   1. Observaciones del Contacto (falla, cliente, caso, contacto, horarios)
+//   2. Última línea RMA:        — quién atiende / última reasignación
+//   3. DIAGNOSTICO:             — solo si trae valor en la misma línea
+//   4. PISA:<dígitos>           — solo folios PISA reales
+// ─────────────────────────────────────────────────────────────────────────────
+
+const MARCA_OBSERVACIONES = "******** Observaciones del Contacto ********";
+
+// Inicio del bloque técnico: corta las Observaciones. "CASxxx :" son las
+// entidades (CASPUE, CASGDL...) que preceden a una reasignación automática.
+const INICIO_BLOQUE_TECNICO =
+  /^(RMA\s*:|DIAGNOSTICO\s*:|RESULTADOS DE LA PRUEBA|Re-Asignaci|CAS[A-Z]{2,4}\s*:|Informaci.n del Equipo|Consultar\b|Id Contrato\b)/i;
+
+/** Entidades HTML + acentos rotos de iso-8859-1, y \r sueltos → saltos de línea. */
+function decodificarTextoManto(raw: string): string {
+  return raw
+    .replace(/&#13;/g, "\n")
+    .replace(/&#10;/g, "\n")
+    .replace(/&amp;/g, "&")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'")
+    .replace(/&nbsp;/g, " ");
+}
+
+/**
+ * Arma el resumen de notas a partir del HTML de VentanaZoom. Devuelve undefined
+ * si no hay nada aprovechable (el EDC entonces conserva su texto por defecto).
+ */
+export function extraerNotasEfa(htmlZoom: string): string | undefined {
+  const m = htmlZoom.match(/<textarea[^>]*>([\s\S]*?)<\/textarea>/i);
+  if (!m) return undefined;
+
+  const texto = decodificarTextoManto(m[1]);
+  const lineas = texto.split(/[\r\n]+/).map((l) => l.trim()).filter(Boolean);
+  if (lineas.length === 0) return undefined;
+
+  // 1. Observaciones: desde la ÚLTIMA marca (es la vigente cuando hay varias),
+  //    hasta que empieza el bloque técnico.
+  const idxMarca = texto.lastIndexOf(MARCA_OBSERVACIONES);
+  const desdeMarca = idxMarca >= 0 ? texto.slice(idxMarca + MARCA_OBSERVACIONES.length) : texto;
+  const observaciones: string[] = [];
+  for (const l of desdeMarca.split(/[\r\n]+/).map((x) => x.trim()).filter(Boolean)) {
+    if (INICIO_BLOQUE_TECNICO.test(l)) break;
+    observaciones.push(l);
+  }
+
+  const partes = [...observaciones];
+
+  // 2. Última RMA: la más reciente (reasignación o quién atiende; ambas traen fecha).
+  const rma = lineas.filter((l) => /^RMA\s*:/i.test(l)).pop();
+  if (rma) partes.push(rma);
+
+  // 3. DIAGNOSTICO: solo si trae valor pegado en la misma línea. Cuando Manto lo
+  //    deja vacío, el texto real queda en la línea siguiente mezclado con el
+  //    volcado técnico — se omite antes que arriesgar arrastrar ruido.
+  const diag = lineas
+    .filter((l) => /^DIAGNOSTICO\s*:/i.test(l) && l.replace(/^DIAGNOSTICO\s*:/i, "").trim().length > 0)
+    .pop();
+  if (diag) partes.push(diag);
+
+  // 4. PISA: exige dígitos — descarta cosas como "FinPISA:  9/05/2026" (una
+  //    fecha) y "Reporte exitoso en PISA:" (etiqueta sin folio).
+  const pisaMatch = [...texto.matchAll(/\bPISA\s*:\s*(\d{4,})\b/gi)].pop();
+  if (pisaMatch) partes.push(`PISA: ${pisaMatch[1]}`);
+
+  const out = partes.join("\n").trim();
+  return out.length > 0 ? out : undefined;
+}
+
+/**
+ * Descarga VentanaZoom.jsp del EFA (la ventana de notas) reusando las cookies
+ * de la sesión abierta, y devuelve el resumen. Nunca lanza: si el portal no
+ * responde o el HTML cambia, el folio conserva su estatus y se queda sin notas.
+ */
+async function descargarNotasEfa(page: Page, folio: string): Promise<string | undefined> {
+  try {
+    // Se deriva del host configurado (no fijo) para seguir a config.manto.url.
+    const origen = new URL(config.manto.url).origin;
+    const res = await page.context().request.get(
+      `${origen}/manto/jsp/VentanaZoom.jsp?tipo=EFA&folio=${folio}`,
+      { timeout: 20_000 },
+    );
+    if (!res.ok()) return undefined;
+    // Los acentos llegan como "?" ("S?BADO", "Asignaci?n"): NO es un problema
+    // de decodificación de aquí — Manto ya tiene el signo de interrogación
+    // guardado en sus datos (se comprobó leyendo el buffer como iso-8859-1,
+    // que devuelve lo mismo). La letra original no es recuperable.
+    return extraerNotasEfa(await res.text());
+  } catch (e) {
+    logger.warn("Manto: no se pudieron leer las notas del EFA", { folio, err: String(e) });
+    return undefined;
+  }
 }
 
 /** Parsea la tabla de ListaEmsEscalador.jsp (fila EMS/Edo./F-H Ini./.../EFA/Edo./F-H Ini.). */
@@ -238,6 +355,7 @@ function parseResultFrame(folio: string, html: string): MantoEstatusResult {
   // Índices 0-based: 0=No. 1=EMS 2=Edo(EMS) 3=F/H Ini(EMS) 4=Referencia 5=Empresa
   // 6=Punta A 7=Punta B 8=Efa 9=Edo(EFA) 10=F/H Ini(EFA) 11=OIN's 12=OGE's
   const estadoEms = cells[2] || undefined;
+  const fechaEstadoEms = cells[3] || undefined;
   const estadoEfa = cells[9] || undefined;
   const fechaEstadoEfa = cells[10] || undefined;
 
@@ -245,7 +363,7 @@ function parseResultFrame(folio: string, html: string): MantoEstatusResult {
     return { folio, found: false, error: "Fila de resultado sin columnas de estado reconocibles" };
   }
 
-  return { folio, found: true, estadoEms, estadoEfa, fechaEstadoEfa };
+  return { folio, found: true, estadoEms, estadoEfa, fechaEstadoEfa, fechaEstadoEms };
 }
 
 /**

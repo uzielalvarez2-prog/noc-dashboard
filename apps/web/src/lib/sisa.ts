@@ -27,6 +27,13 @@ export interface SisaEdcInput {
   district: string; // Distrito (viene de Abiertos) — se pega al CASE en el Ticket
   serviceId: string; // Servicio (viene de Abiertos) — referencia en "Servicio afectado"
   openTime: string | Date; // Apertura (viene de Abiertos)
+  // ── Datos del portal Manto (opcionales: solo si ya se consultó el folio) ───
+  // "Inicio:" usa la F/H Ini. del EMS cuando está disponible — es la fecha real
+  // del folio SISA, más confiable que la apertura del incidente en HPSM.
+  fechaEstadoEms?: string | Date | null;
+  // "Estatus:" usa las notas del EFA (última actualización del folio) en vez
+  // del texto de opciones por defecto.
+  notasEfa?: string | null;
 }
 
 // SOLO para el formato EDC: Monterrey → Mty, Guadalajara → Gdl.
@@ -85,15 +92,22 @@ export function buildEdcText(it: SisaEdcInput): string {
   const servicioLine = servicio
     ? `Servicio afectado: ${tipo ?? "IDN | VPN | IDE"} ${servicio}`
     : `Servicio afectado: IDN | VPN | IDE`;
-  // "Alto impacto" y "Estatus" traen opciones por defecto (separadas por " | ")
-  // que se depuran a mano antes de enviar al grupo.
+  // "Inicio": la F/H Ini. del EMS que reporta Manto es la fecha real del folio
+  // SISA; solo se cae a la apertura de HPSM si el folio aún no se ha consultado.
+  const inicio = formatInicioEdc(it.fechaEstadoEms ?? it.openTime);
+  // "Estatus": las notas del EFA traen la última actualización del folio
+  // (falla, contacto, técnico asignado, diagnóstico). Si no hay notas todavía,
+  // se deja el texto de opciones por defecto para depurar a mano.
+  const estatus = (it.notasEfa ?? "").trim() || "ONT fuera de gestión | Demarcador fuera de gestión";
+  // "Alto impacto" sigue trayendo su opción por defecto, que se depura a mano
+  // antes de enviar al grupo.
   return [
     `*Incidente crítico:* ${it.incidentId}`,
     `Cliente: *${it.company || ""}*`,
     `Alto impacto: Sin respaldo`,
     servicioLine,
     ticketLine,
-    `Inicio: ${formatInicioEdc(it.openTime)}`,
-    `Estatus: ONT fuera de gestión | Demarcador fuera de gestión`,
+    `Inicio: ${inicio}`,
+    `Estatus: ${estatus}`,
   ].join("\n");
 }

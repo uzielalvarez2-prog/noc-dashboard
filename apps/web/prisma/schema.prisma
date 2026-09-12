@@ -288,6 +288,12 @@ model SisaTicket {
   estadoEms       String? // "Edo." de la fila EMS en ListaEmsEscalador.jsp, ej. "EMA"
   estadoEfa       String? // "Edo." de la fila EFA en ListaEmsEscalador.jsp, ej. "LOC"
   fechaEstadoEfa  DateTime? // "F/H Ini." del EFA reportado por Manto
+  fechaEstadoEms  DateTime? // "F/H Ini." del EMS — es la que usa el formato EDC como "Inicio:"
+  // Resumen de las notas del EFA (VentanaZoom), ya depurado por el scraper:
+  // Observaciones del Contacto → última RMA → DIAGNOSTICO → PISA. Va tal cual
+  // en la línea "Estatus:" del formato EDC, para copiarlo con la última
+  // actualización del folio sin entrar a Manto.
+  notasEfa        String?
   estatusError    String? // ej. "No existe el EFA con el folio ..." — folio purgado/no encontrado
   estatusCheckedAt DateTime? // cuándo se hizo la última consulta a Manto (éxito o error)
 }

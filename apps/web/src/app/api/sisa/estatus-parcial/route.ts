@@ -34,6 +34,8 @@ export async function POST(req: NextRequest) {
           estadoEms: r.estadoEms ?? null,
           estadoEfa: r.estadoEfa ?? null,
           fechaEstadoEfa: parseFechaManto(r.fechaEstadoEfa),
+          fechaEstadoEms: parseFechaManto(r.fechaEstadoEms),
+          notasEfa: r.notasEfa ?? null,
           estatusError: null,
           estatusCheckedAt: checkedAt,
         }

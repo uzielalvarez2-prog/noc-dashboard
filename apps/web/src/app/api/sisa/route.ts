@@ -68,6 +68,8 @@ export async function GET(req: NextRequest) {
           estadoEms: t.estadoEms,
           estadoEfa: t.estadoEfa,
           fechaEstadoEfa: t.fechaEstadoEfa,
+          fechaEstadoEms: t.fechaEstadoEms,
+          notasEfa: t.notasEfa,
           estatusError: t.estatusError,
           estatusCheckedAt: t.estatusCheckedAt,
         };

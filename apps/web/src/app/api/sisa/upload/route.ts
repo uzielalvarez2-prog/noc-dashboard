@@ -70,6 +70,8 @@ export async function POST(req: NextRequest) {
         estadoEms: true,
         estadoEfa: true,
         fechaEstadoEfa: true,
+        fechaEstadoEms: true,
+        notasEfa: true,
         estatusError: true,
         estatusCheckedAt: true,
       },
@@ -84,6 +86,8 @@ export async function POST(req: NextRequest) {
         estadoEms: previo.estadoEms,
         estadoEfa: previo.estadoEfa,
         fechaEstadoEfa: previo.fechaEstadoEfa,
+        fechaEstadoEms: previo.fechaEstadoEms,
+        notasEfa: previo.notasEfa,
         estatusError: previo.estatusError,
         estatusCheckedAt: previo.estatusCheckedAt,
       };

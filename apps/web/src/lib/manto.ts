@@ -13,6 +13,8 @@ export interface MantoEstatusResult {
   estadoEms?: string;
   estadoEfa?: string;
   fechaEstadoEfa?: string; // "dd/mm/aaaa hh:mm:ss" tal cual lo reporta Manto
+  fechaEstadoEms?: string; // "F/H Ini." del EMS — la que el EDC usa como "Inicio:"
+  notasEfa?: string; // resumen de notas del EFA para la línea "Estatus:" del EDC
   error?: string;
 }
 

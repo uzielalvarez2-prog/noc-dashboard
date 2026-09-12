@@ -25,6 +25,8 @@ interface SisaItem {
   estadoEms: string | null;
   estadoEfa: string | null;
   fechaEstadoEfa: string | null;
+  fechaEstadoEms: string | null;
+  notasEfa: string | null;
   estatusError: string | null;
   estatusCheckedAt: string | null;
 }
@@ -136,12 +138,17 @@ function EstatusManto({ it }: { it: SisaItem }) {
     );
   }
   const consultado = formatHpsm(it.estatusCheckedAt);
-  const fecha = it.fechaEstadoEfa ? formatHpsm(it.fechaEstadoEfa) : null;
+  const fechaEfa = it.fechaEstadoEfa ? formatHpsm(it.fechaEstadoEfa) : null;
+  const fechaEms = it.fechaEstadoEms ? formatHpsm(it.fechaEstadoEms) : null;
   const tooltip = [
     it.estadoEms ? `Edo. EMS: ${it.estadoEms}` : null,
     it.estadoEfa ? `Edo. EFA: ${it.estadoEfa}` : null,
-    fecha ? `F/H Ini. EFA: ${fecha}` : null,
+    // La del EMS es la que el EDC usa como "Inicio:" — se marca para que se
+    // entienda de dónde sale la fecha al copiar.
+    fechaEms ? `F/H Ini. EMS: ${fechaEms}  (Inicio del EDC)` : null,
+    fechaEfa ? `F/H Ini. EFA: ${fechaEfa}` : null,
     `Consultado: ${consultado}`,
+    it.notasEfa ? "\nNotas del EFA (van en el EDC):\n" + it.notasEfa : null,
     // Un error con estado previo = el folio salió de Manto después de haberse
     // consultado con éxito; se conserva el último estado conocido.
     it.estatusError ? `Última consulta: ${it.estatusError}` : null,
