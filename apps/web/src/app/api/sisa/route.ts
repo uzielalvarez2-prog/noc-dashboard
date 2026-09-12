@@ -63,6 +63,13 @@ export async function GET(req: NextRequest) {
           openTime: o.openTime,
           district: o.district,
           serviceId: o.serviceId,
+          // Estatus traído del portal Manto (bajo demanda, puede venir vacío
+          // si nunca se ha consultado ese folio).
+          estadoEms: t.estadoEms,
+          estadoEfa: t.estadoEfa,
+          fechaEstadoEfa: t.fechaEstadoEfa,
+          estatusError: t.estatusError,
+          estatusCheckedAt: t.estatusCheckedAt,
         };
       });
 

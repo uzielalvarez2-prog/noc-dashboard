@@ -3,6 +3,7 @@ import { createRequire } from "node:module";
 import { spawn } from "node:child_process";
 import cron from "node-cron";
 import { logger } from "./logger.js";
+import { startScraperServer } from "./server.js";
 
 /**
  * Scheduler para correr el scraper en la nube (Railway) sin Task Scheduler.
@@ -156,6 +157,12 @@ cron.schedule(
     }),
   { timezone: TZ },
 );
+
+// Servidor HTTP para consultas bajo demanda del dashboard (estatus SISA en el
+// portal Manto). Vive en ESTE proceso, no como job hijo: Manto es un sistema
+// distinto de HPSM (sin riesgo de colisión de logins) y `server.ts` ya
+// serializa sus consultas con su propio lock. No hay cron para Manto.
+startScraperServer();
 
 logger.info(
   `scheduler: iniciado (TZ ${TZ}) — open+sisa */5 06:00-23:00, closed PEXA 14:02 y 22:12, closed CECOR 21:00${DRY ? " [DRY]" : ""}`,

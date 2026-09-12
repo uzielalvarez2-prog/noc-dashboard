@@ -279,6 +279,17 @@ model SisaTicket {
   vendor       String   @default("") // CASE
   vendorTicket String   @default("") // SISA
   uploadedAt   DateTime @default(now())
+
+  // ── Estatus consultado en vivo al portal Manto (SISA Mantenimiento) ────────
+  // Bajo demanda (botón "Actualizar estatus SISA" en el dashboard) — NO hay
+  // cron. `vendorTicket` es el folio que Manto conoce como EMS/EFA. Manto
+  // purga folios viejos/cerrados: si ya no existe, estatusError lo indica y
+  // los campos de estado quedan como estaban en la última consulta exitosa.
+  estadoEms       String? // "Edo." de la fila EMS en ListaEmsEscalador.jsp, ej. "EMA"
+  estadoEfa       String? // "Edo." de la fila EFA en ListaEmsEscalador.jsp, ej. "LOC"
+  fechaEstadoEfa  DateTime? // "F/H Ini." del EFA reportado por Manto
+  estatusError    String? // ej. "No existe el EFA con el folio ..." — folio purgado/no encontrado
+  estatusCheckedAt DateTime? // cuándo se hizo la última consulta a Manto (éxito o error)
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

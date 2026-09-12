@@ -12,6 +12,14 @@ export const config = {
     user: requireEnv("HPSM_USER"),
     password: requireEnv("HPSM_PASSWORD"),
   },
+  // Portal Manto (SISA Mantenimiento) — consulta de estatus bajo demanda, NO
+  // vía requireEnv: scripts que no tocan Manto (run-open, run-closed, etc.)
+  // no deben fallar si estas variables no están seteadas.
+  manto: {
+    url: process.env.MANTO_URL ?? "http://200.57.157.167/manto/jsp/AccesoSup.jsp?org=0",
+    user: process.env.MANTO_USER ?? "",
+    password: process.env.MANTO_PASSWORD ?? "",
+  },
   downloadDir: process.env.DOWNLOAD_DIR ?? "C:\\Users\\Admin\\noc-csvs",
   closed: {
     group: process.env.HPSM_CLOSED_GROUP ?? "PEXA",
@@ -21,4 +29,6 @@ export const config = {
   headed: process.env.HEADED === "true",
   dashboardUrl: process.env.DASHBOARD_URL ?? "http://localhost:3000",
   internalApiKey: requireEnv("INTERNAL_API_KEY"),
+  // Puerto HTTP que expone el scraper para refrescos bajo demanda (ej. estatus SISA).
+  port: Number(process.env.PORT ?? "8080"),
 };

@@ -58,11 +58,42 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "No se encontraron filas válidas en el CSV" }, { status: 400 });
     }
 
+    // El estatus consultado en Manto NO viene en el CSV y es caro de obtener
+    // (~18 s por folio, bajo demanda). Como este upload corre cada 5 min y
+    // reemplaza la tabla entera, hay que reinyectarlo o se perdería en el
+    // primer refresh. Se cruza por vendorTicket (el folio que Manto conoce),
+    // no por incidentId: el mismo folio puede reasignarse a otro IM.
+    const estatusPrevio = await db.sisaTicket.findMany({
+      where: { estatusCheckedAt: { not: null } },
+      select: {
+        vendorTicket: true,
+        estadoEms: true,
+        estadoEfa: true,
+        fechaEstadoEfa: true,
+        estatusError: true,
+        estatusCheckedAt: true,
+      },
+    });
+    const estatusPorFolio = new Map(estatusPrevio.map((e) => [e.vendorTicket, e]));
+
+    const recordsConEstatus = records.map((r) => {
+      const previo = estatusPorFolio.get(r.vendorTicket);
+      if (!previo) return r;
+      return {
+        ...r,
+        estadoEms: previo.estadoEms,
+        estadoEfa: previo.estadoEfa,
+        fechaEstadoEfa: previo.fechaEstadoEfa,
+        estatusError: previo.estatusError,
+        estatusCheckedAt: previo.estatusCheckedAt,
+      };
+    });
+
     // Reemplazo atómico del snapshot, igual criterio que OpenIncident.
     await db.$transaction(
       async (tx) => {
         await tx.sisaTicket.deleteMany({});
-        await tx.sisaTicket.createMany({ data: records, skipDuplicates: true });
+        await tx.sisaTicket.createMany({ data: recordsConEstatus, skipDuplicates: true });
       },
       { maxWait: 20_000, timeout: 90_000 }
     );

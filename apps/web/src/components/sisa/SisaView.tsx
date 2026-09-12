@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Search, Download, RefreshCw, Loader2, Copy, Check, X, ArrowDownWideNarrow, ArrowUpNarrowWide } from "lucide-react";
 import { cn, formatHpsm } from "@/lib/utils";
@@ -20,12 +20,60 @@ interface SisaItem {
   openTime: string;
   district: string;
   serviceId: string;
+  // Estatus del folio en el portal Manto (se llena bajo demanda con el botón
+  // "Estatus Manto"; null si nunca se ha consultado ese folio).
+  estadoEms: string | null;
+  estadoEfa: string | null;
+  fechaEstadoEfa: string | null;
+  estatusError: string | null;
+  estatusCheckedAt: string | null;
 }
 
 async function fetchSisa(): Promise<{ items: SisaItem[] }> {
   const res = await fetch("/api/sisa");
   if (!res.ok) throw new Error("Error al cargar SISA");
   return res.json();
+}
+
+interface RefreshEstatusResult {
+  iniciado: boolean;
+  total: number;
+  message?: string;
+}
+
+/** Progreso de la corrida en el scraper (corre en segundo plano). */
+interface ProgresoRefresh {
+  enCurso: boolean;
+  total: number;
+  consultados: number;
+  encontrados: number;
+  ultimoMensaje: string | null;
+  portalFueraDeGestion: boolean;
+}
+
+/** Error de portal caído: se muestra distinto a un fallo normal. */
+class PortalFueraDeGestion extends Error {}
+
+async function refreshEstatusManto(): Promise<RefreshEstatusResult> {
+  const res = await fetch("/api/sisa/refresh-estatus", { method: "POST" });
+  const body = (await res.json().catch(() => ({}))) as RefreshEstatusResult & {
+    error?: string;
+    portalFueraDeGestion?: boolean;
+  };
+  if (!res.ok) {
+    if (body.portalFueraDeGestion) {
+      throw new PortalFueraDeGestion(body.error ?? "Portal fuera de gestión");
+    }
+    throw new Error(body.error ?? "Error al consultar Manto");
+  }
+  return body;
+}
+
+async function fetchProgresoManto(): Promise<ProgresoRefresh | null> {
+  const res = await fetch("/api/sisa/refresh-estatus", { cache: "no-store" });
+  if (!res.ok) return null;
+  const body = (await res.json().catch(() => ({}))) as { progreso?: ProgresoRefresh };
+  return body.progreso ?? null;
 }
 
 // ── Categoría de estatus → color neón ────────────────────────────────────────
@@ -72,8 +120,48 @@ function StatusBadge({ status }: { status: string }) {
   return <span className={cn("font-medium", NEON[statusCat(status)].badge)}>{status || "—"}</span>;
 }
 
-const EXPORT_COLS = ["Incidente", "Apertura", "Empresa", "Servicio", "Distrito", "CASE", "SISA", "Asignado", "Estatus"];
-const COLUMNS = ["Incidente", "Apertura", "Empresa", "Servicio", "Distrito", "CASE", "SISA", "Asignado", "Estatus", "EDC"];
+// ── Estatus del folio en el portal Manto ─────────────────────────────────────
+// Manto reporta dos códigos crudos de 3 letras (Edo. del EMS y Edo. del EFA,
+// ej. "EMA" / "LOC"). No se traducen: el catálogo de códigos no está
+// confirmado, y mostrar una traducción inventada sería peor que el código.
+function EstatusManto({ it }: { it: SisaItem }) {
+  if (!it.estatusCheckedAt) {
+    return <span className="text-text-muted">—</span>;
+  }
+  if (it.estatusError && !it.estadoEfa && !it.estadoEms) {
+    return (
+      <span className="text-text-muted" title={`Manto: ${it.estatusError}`}>
+        No está en Manto
+      </span>
+    );
+  }
+  const consultado = formatHpsm(it.estatusCheckedAt);
+  const fecha = it.fechaEstadoEfa ? formatHpsm(it.fechaEstadoEfa) : null;
+  const tooltip = [
+    it.estadoEms ? `Edo. EMS: ${it.estadoEms}` : null,
+    it.estadoEfa ? `Edo. EFA: ${it.estadoEfa}` : null,
+    fecha ? `F/H Ini. EFA: ${fecha}` : null,
+    `Consultado: ${consultado}`,
+    // Un error con estado previo = el folio salió de Manto después de haberse
+    // consultado con éxito; se conserva el último estado conocido.
+    it.estatusError ? `Última consulta: ${it.estatusError}` : null,
+  ]
+    .filter(Boolean)
+    .join("\n");
+
+  return (
+    <span className="flex items-center gap-1.5 font-mono text-[11px]" title={tooltip}>
+      <span className="rounded bg-cyan-500/15 px-1.5 py-0.5 text-cyan-300">{it.estadoEfa || "—"}</span>
+      {it.estadoEms && it.estadoEms !== it.estadoEfa && (
+        <span className="rounded bg-sky-500/10 px-1.5 py-0.5 text-sky-300/80">{it.estadoEms}</span>
+      )}
+      {it.estatusError && <span className="text-amber-400" title={it.estatusError}>!</span>}
+    </span>
+  );
+}
+
+const EXPORT_COLS = ["Incidente", "Apertura", "Empresa", "Servicio", "Distrito", "CASE", "SISA", "Asignado", "Estatus", "Edo. EFA", "Edo. EMS", "F/H Ini. EFA"];
+const COLUMNS = ["Incidente", "Apertura", "Empresa", "Servicio", "Distrito", "CASE", "SISA", "Asignado", "Estatus", "Manto", "EDC"];
 
 export function SisaView() {
   const [q, setQ] = useState("");
@@ -82,6 +170,9 @@ export function SisaView() {
   const [selectedCase, setSelectedCase] = useState<string | null>(null);
   const [exporting, setExporting] = useState(false);
   const [copiedId, setCopiedId] = useState<string | null>(null);
+  const [arrancandoManto, setArrancandoManto] = useState(false);
+  const [mantoMsg, setMantoMsg] = useState<{ tone: "ok" | "err" | "caido"; text: string } | null>(null);
+  const [progreso, setProgreso] = useState<ProgresoRefresh | null>(null);
 
   const { data, isLoading, isFetching, refetch } = useQuery({
     queryKey: ["sisa"],
@@ -90,6 +181,50 @@ export function SisaView() {
   });
 
   const items = data?.items ?? [];
+
+  // Al montar, ver si ya hay una corrida en curso (arrancada en otra pestaña o
+  // antes de recargar) para retomar el seguimiento.
+  useEffect(() => {
+    let vivo = true;
+    void fetchProgresoManto().then((p) => {
+      if (vivo && p?.enCurso) setProgreso(p);
+    });
+    return () => {
+      vivo = false;
+    };
+  }, []);
+
+  // Mientras la corrida esté en curso: sondear el progreso y refrescar la tabla
+  // para que los folios ya consultados aparezcan sin esperar el refetch de 4 min.
+  useEffect(() => {
+    if (!progreso?.enCurso) return;
+    let vivo = true;
+    const id = setInterval(() => {
+      void (async () => {
+        const p = await fetchProgresoManto();
+        if (!vivo || !p) return;
+        setProgreso(p);
+        await refetch();
+        if (!p.enCurso) {
+          // Terminó: reportar el resultado con el mismo criterio de tonos.
+          if (p.portalFueraDeGestion) {
+            setMantoMsg({
+              tone: "caido",
+              text: `Portal fuera de gestión — la consulta se detuvo tras ${p.consultados} de ${p.total} folios. El estatus mostrado es el de la última consulta exitosa.`,
+            });
+          } else if (p.ultimoMensaje?.startsWith("Error:")) {
+            setMantoMsg({ tone: "err", text: p.ultimoMensaje });
+          } else if (p.ultimoMensaje) {
+            setMantoMsg({ tone: "ok", text: p.ultimoMensaje });
+          }
+        }
+      })();
+    }, 15_000);
+    return () => {
+      vivo = false;
+      clearInterval(id);
+    };
+  }, [progreso?.enCurso, refetch]);
 
   // Base: solo el buscador general. Las tarjetas muestran totales sobre esta
   // base; la selección de estatus/CASE filtra la TABLA de abajo (no las tarjetas).
@@ -173,6 +308,44 @@ export function SisaView() {
     setTimeout(() => setCopiedId((cur) => (cur === it.incidentId ? null : cur)), 1800);
   }
 
+  // Arranca la consulta al portal Manto. Es bajo demanda a propósito (Manto es
+  // un sistema ajeno y lento: ~18 s por folio), así que corre en segundo plano
+  // en el scraper y la tabla se va poblando conforme llegan resultados.
+  async function handleRefreshManto() {
+    setArrancandoManto(true);
+    setMantoMsg(null);
+    try {
+      const r = await refreshEstatusManto();
+      if (!r.iniciado) {
+        // No había nada que consultar (p. ej. ningún IM en seguimiento).
+        setMantoMsg({ tone: "ok", text: r.message ?? "No hay folios por consultar." });
+        return;
+      }
+      setMantoMsg({ tone: "ok", text: r.message ?? `Consulta iniciada para ${r.total} folios.` });
+      setProgreso({
+        enCurso: true,
+        total: r.total,
+        consultados: 0,
+        encontrados: 0,
+        ultimoMensaje: null,
+        portalFueraDeGestion: false,
+      });
+    } catch (e) {
+      if (e instanceof PortalFueraDeGestion) {
+        // El portal de Manto se cayó: no se actualizó nada, el estatus que ya
+        // estaba guardado sigue intacto.
+        setMantoMsg({
+          tone: "caido",
+          text: "Portal fuera de gestión — no se pudo consultar Manto. El estatus mostrado es el de la última consulta exitosa.",
+        });
+      } else {
+        setMantoMsg({ tone: "err", text: e instanceof Error ? e.message : "Error al consultar Manto" });
+      }
+    } finally {
+      setArrancandoManto(false);
+    }
+  }
+
   async function handleExport() {
     setExporting(true);
     try {
@@ -186,6 +359,9 @@ export function SisaView() {
         it.vendorTicket,
         it.assignee ?? "—",
         it.status,
+        it.estadoEfa ?? "—",
+        it.estadoEms ?? "—",
+        it.fechaEstadoEfa ? formatHpsm(it.fechaEstadoEfa) : "—",
       ]);
       const stamp = new Date().toISOString().slice(0, 10);
       await downloadXLSX(`sisa-${stamp}`, "SISA", EXPORT_COLS, rows);
@@ -312,6 +488,26 @@ export function SisaView() {
           </span>
           <button
             type="button"
+            onClick={() => void handleRefreshManto()}
+            disabled={arrancandoManto || progreso?.enCurso}
+            title="Consultar en el portal Manto el estatus de los folios cuyo IM esté en Pending Vendor, Work in Progress o Pending Other (~18 s por folio; corre en segundo plano y la tabla se va poblando)"
+            className="flex items-center gap-1.5 rounded-md border border-cyan-500/50 bg-cyan-500/10 px-2.5 py-2 text-xs font-medium text-cyan-300 hover:bg-cyan-500/20 disabled:opacity-60"
+          >
+            {arrancandoManto || progreso?.enCurso ? (
+              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+            ) : (
+              <RefreshCw className="h-3.5 w-3.5" />
+            )}
+            <span className="hidden sm:inline">
+              {progreso?.enCurso
+                ? `Consultando ${progreso.consultados}/${progreso.total}…`
+                : arrancandoManto
+                  ? "Iniciando…"
+                  : "Estatus Manto"}
+            </span>
+          </button>
+          <button
+            type="button"
             onClick={handleExport}
             disabled={exporting}
             title="Descargar Excel"
@@ -329,6 +525,50 @@ export function SisaView() {
             <RefreshCw className={cn("h-3.5 w-3.5", isFetching && "animate-spin")} />
           </button>
         </div>
+
+        {progreso?.enCurso && (
+          <div className="border-b border-border/60 bg-cyan-500/5 px-3 py-2">
+            <div className="flex items-center justify-between gap-2 text-xs text-cyan-200">
+              <span>
+                Consultando Manto: {progreso.consultados} de {progreso.total} folios
+                {progreso.encontrados > 0 && ` · ${progreso.encontrados} con estatus`}
+              </span>
+              {/* ~18 s por folio es la medida real del portal. */}
+              <span className="font-mono text-[11px] text-cyan-300/70">
+                ~{Math.max(1, Math.round(((progreso.total - progreso.consultados) * 18) / 60))} min restantes
+              </span>
+            </div>
+            <div className="mt-1.5 h-1 overflow-hidden rounded-full bg-cyan-500/15">
+              <div
+                className="h-full rounded-full bg-cyan-400 transition-all duration-500"
+                style={{
+                  width: `${progreso.total > 0 ? Math.round((progreso.consultados / progreso.total) * 100) : 0}%`,
+                }}
+              />
+            </div>
+          </div>
+        )}
+
+        {mantoMsg && (
+          <div
+            className={cn(
+              "flex items-start justify-between gap-2 border-b border-border/60 px-3 py-2 text-xs",
+              mantoMsg.tone === "ok" && "bg-cyan-500/10 text-cyan-200",
+              mantoMsg.tone === "err" && "bg-red-500/10 text-red-200",
+              mantoMsg.tone === "caido" && "bg-amber-500/10 text-amber-200"
+            )}
+          >
+            <span className={cn(mantoMsg.tone === "caido" && "font-medium")}>{mantoMsg.text}</span>
+            <button
+              type="button"
+              onClick={() => setMantoMsg(null)}
+              title="Cerrar"
+              className="shrink-0 opacity-70 hover:opacity-100"
+            >
+              <X className="h-3.5 w-3.5" />
+            </button>
+          </div>
+        )}
 
         <div className="max-h-[70vh] overflow-auto">
           <table className="w-full border-collapse text-sm">
@@ -387,6 +627,9 @@ export function SisaView() {
                     <td className="px-3 py-2 font-mono text-xs text-text-muted">{it.assignee ?? "—"}</td>
                     <td className="px-3 py-2 text-xs">
                       <StatusBadge status={it.status} />
+                    </td>
+                    <td className="px-3 py-2 text-xs">
+                      <EstatusManto it={it} />
                     </td>
                     <td className="px-3 py-2">
                       <button
