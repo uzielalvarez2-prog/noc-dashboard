@@ -122,53 +122,8 @@ function StatusBadge({ status }: { status: string }) {
   return <span className={cn("font-medium", NEON[statusCat(status)].badge)}>{status || "—"}</span>;
 }
 
-// ── Estatus del folio en el portal Manto ─────────────────────────────────────
-// Manto reporta dos códigos crudos de 3 letras (Edo. del EMS y Edo. del EFA,
-// ej. "EMA" / "LOC"). No se traducen: el catálogo de códigos no está
-// confirmado, y mostrar una traducción inventada sería peor que el código.
-function EstatusManto({ it }: { it: SisaItem }) {
-  if (!it.estatusCheckedAt) {
-    return <span className="text-text-muted">—</span>;
-  }
-  if (it.estatusError && !it.estadoEfa && !it.estadoEms) {
-    return (
-      <span className="text-text-muted" title={`Manto: ${it.estatusError}`}>
-        No está en Manto
-      </span>
-    );
-  }
-  const consultado = formatHpsm(it.estatusCheckedAt);
-  const fechaEfa = it.fechaEstadoEfa ? formatHpsm(it.fechaEstadoEfa) : null;
-  const fechaEms = it.fechaEstadoEms ? formatHpsm(it.fechaEstadoEms) : null;
-  const tooltip = [
-    it.estadoEms ? `Edo. EMS: ${it.estadoEms}` : null,
-    it.estadoEfa ? `Edo. EFA: ${it.estadoEfa}` : null,
-    // La del EMS es la que el EDC usa como "Inicio:" — se marca para que se
-    // entienda de dónde sale la fecha al copiar.
-    fechaEms ? `F/H Ini. EMS: ${fechaEms}  (Inicio del EDC)` : null,
-    fechaEfa ? `F/H Ini. EFA: ${fechaEfa}` : null,
-    `Consultado: ${consultado}`,
-    it.notasEfa ? "\nNotas del EFA (van en el EDC):\n" + it.notasEfa : null,
-    // Un error con estado previo = el folio salió de Manto después de haberse
-    // consultado con éxito; se conserva el último estado conocido.
-    it.estatusError ? `Última consulta: ${it.estatusError}` : null,
-  ]
-    .filter(Boolean)
-    .join("\n");
-
-  return (
-    <span className="flex items-center gap-1.5 font-mono text-[11px]" title={tooltip}>
-      <span className="rounded bg-cyan-500/15 px-1.5 py-0.5 text-cyan-300">{it.estadoEfa || "—"}</span>
-      {it.estadoEms && it.estadoEms !== it.estadoEfa && (
-        <span className="rounded bg-sky-500/10 px-1.5 py-0.5 text-sky-300/80">{it.estadoEms}</span>
-      )}
-      {it.estatusError && <span className="text-amber-400" title={it.estatusError}>!</span>}
-    </span>
-  );
-}
-
-const EXPORT_COLS = ["Incidente", "Apertura", "Empresa", "Servicio", "Distrito", "CASE", "SISA", "Asignado", "Estatus", "Edo. EFA", "Edo. EMS", "F/H Ini. EFA"];
-const COLUMNS = ["Incidente", "Apertura", "Empresa", "Servicio", "Distrito", "CASE", "SISA", "Asignado", "Estatus", "Manto", "EDC"];
+const EXPORT_COLS = ["Incidente", "Apertura", "Empresa", "Servicio", "Distrito", "CASE", "SISA", "Asignado", "Estatus"];
+const COLUMNS = ["Incidente", "Apertura", "Empresa", "Servicio", "Distrito", "CASE", "SISA", "Asignado", "Estatus", "EDC"];
 
 export function SisaView() {
   const [q, setQ] = useState("");
@@ -366,9 +321,6 @@ export function SisaView() {
         it.vendorTicket,
         it.assignee ?? "—",
         it.status,
-        it.estadoEfa ?? "—",
-        it.estadoEms ?? "—",
-        it.fechaEstadoEfa ? formatHpsm(it.fechaEstadoEfa) : "—",
       ]);
       const stamp = new Date().toISOString().slice(0, 10);
       await downloadXLSX(`sisa-${stamp}`, "SISA", EXPORT_COLS, rows);
@@ -634,9 +586,6 @@ export function SisaView() {
                     <td className="px-3 py-2 font-mono text-xs text-text-muted">{it.assignee ?? "—"}</td>
                     <td className="px-3 py-2 text-xs">
                       <StatusBadge status={it.status} />
-                    </td>
-                    <td className="px-3 py-2 text-xs">
-                      <EstatusManto it={it} />
                     </td>
                     <td className="px-3 py-2">
                       <button
