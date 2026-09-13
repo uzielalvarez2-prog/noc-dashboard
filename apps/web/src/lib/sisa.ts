@@ -32,8 +32,12 @@ export interface SisaEdcInput {
   // del folio SISA, más confiable que la apertura del incidente en HPSM.
   fechaEstadoEms?: string | Date | null;
   // "Estatus:" usa las notas del EFA (última actualización del folio) en vez
-  // del texto de opciones por defecto.
+  // del texto de opciones por defecto, precedidas por el Edo. del EFA.
   notasEfa?: string | null;
+  // Edo. del EFA (ej. "LIQ", "LOC", "REP"): abre la línea "Estatus:" en
+  // negrita. Es el del EFA, no el del EMS — se confirmó con folios donde
+  // difieren (12614302: EMS=EMA pero EFA=LOC, y LOC es el que aplica).
+  estadoEfa?: string | null;
 }
 
 // SOLO para el formato EDC: Monterrey → Mty, Guadalajara → Gdl.
@@ -113,7 +117,10 @@ export function buildEdcText(it: SisaEdcInput): string {
   // "Estatus": las notas del EFA traen la última actualización del folio
   // (falla, contacto, técnico asignado, diagnóstico). Si no hay notas todavía,
   // se deja el texto de opciones por defecto para depurar a mano.
-  const estatus = (it.notasEfa ?? "").trim() || "ONT fuera de gestión | Demarcador fuera de gestión";
+  // El Edo. del EFA abre la línea en negrita (*LOC*), seguido de las notas.
+  const edo = (it.estadoEfa ?? "").trim();
+  const cuerpoEstatus = (it.notasEfa ?? "").trim() || "ONT fuera de gestión | Demarcador fuera de gestión";
+  const estatus = edo ? `*${edo}* ${cuerpoEstatus}` : cuerpoEstatus;
   // "Alto impacto" sigue trayendo su opción por defecto, que se depura a mano
   // antes de enviar al grupo.
   return [
