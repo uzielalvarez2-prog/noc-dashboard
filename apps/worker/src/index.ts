@@ -34,11 +34,6 @@ async function main(): Promise<void> {
   logger.info(`  Pausa  : ${config.schedule.pauseStart}–${config.schedule.pauseEnd} (${config.schedule.timezone})`);
   logger.info("═══════════════════════════════════════");
 
-  if (process.env.VPN_PROBE === "true") {
-    const { vpnProbe } = await import("./_vpn-probe.js");
-    await vpnProbe();
-  }
-
   // Verificar conexión a HPSM
   const hpsmOk = await hpsm.ping();
   logger.info(`HPSM ping: ${hpsmOk ? "✓ OK" : "✗ sin conexión (se reintentará)"}`);
