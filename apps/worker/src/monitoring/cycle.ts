@@ -146,9 +146,14 @@ export async function runIpMonitoringCycle(): Promise<void> {
 
   const stillActive = active.filter((m) => stillOpen.has(m.incidentId));
 
+  // Las IPs de VPN sólo son alcanzables desde la red interna: con el ping
+  // saliendo del jump host ya se pueden medir de verdad, en vez de depender de
+  // que alguien mueva el incidente a RESOLV en HPSM.
+  const pingVpn = config.sshPing.enabled;
+
   for (const monitor of stillActive) {
     try {
-      if (monitor.monitoredIp.kind === "VPN") {
+      if (monitor.monitoredIp.kind === "VPN" && !pingVpn) {
         await checkVpnMonitor(monitor, resolved, now);
       } else {
         await checkPingMonitor(monitor, now);
@@ -160,10 +165,11 @@ export async function runIpMonitoringCycle(): Promise<void> {
 }
 
 /**
- * IP de VPN: no es alcanzable desde internet, así que no se pinguea. La señal de
- * "servicio arriba" es que el incidente pasó a RESOLV en HPSM. Si el incidente
- * desaparece de OpenIncident sin que hayamos visto ese status, no se avisa nada
- * — solo se desactiva el monitor (decisión de negocio: no inventar el UP).
+ * IP de VPN medida SIN el jump host: no es alcanzable desde internet, así que no
+ * se pinguea. La señal de "servicio arriba" es que el incidente pasó a RESOLV en
+ * HPSM. Si el incidente desaparece de OpenIncident sin que hayamos visto ese
+ * status, no se avisa nada — solo se desactiva el monitor (decisión de negocio:
+ * no inventar el UP). Con SSH_PING_ENABLED estas IPs van por checkPingMonitor.
  */
 async function checkVpnMonitor(
   monitor: ActiveMonitor,
@@ -190,6 +196,11 @@ async function checkVpnMonitor(
 /** IP alcanzable: alerta cuando el ping responde sostenido `sustainedUpMs`. */
 async function checkPingMonitor(monitor: ActiveMonitor, now: Date): Promise<void> {
   const result = await checkIp(monitor.monitoredIp.ip);
+
+  // null = no se pudo medir (SSH caído/credenciales). Conservar el estado: darlo
+  // por caído reiniciaría upSince y podría perder la alerta de una recuperación
+  // real; darlo por arriba inventaría un UP que nadie verificó.
+  if (result === null) return;
 
   const upSince = result.up ? (monitor.upSince ?? now) : null;
   const sustainedMs = upSince ? now.getTime() - upSince.getTime() : 0;

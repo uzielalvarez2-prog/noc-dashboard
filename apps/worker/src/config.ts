@@ -41,4 +41,22 @@ export const config = {
     // Ventana de "arriba sostenido" antes de alertar UP (ver IpMonitor.upSince).
     sustainedUpMs: Number(process.env.IP_MONITOR_SUSTAINED_UP_MS ?? "60000"),
   },
+  sshPing: {
+    // Los enlaces MPLS/VPN sólo responden desde la red interna: con esto activo
+    // el ping sale del jump host en vez de Railway. Ver monitoring/ssh-ping.ts.
+    enabled: process.env.SSH_PING_ENABLED === "true",
+    host: process.env.SSH_PING_HOST ?? "",
+    port: Number(process.env.SSH_PING_PORT ?? "22"),
+    user: process.env.SSH_PING_USER ?? "",
+    password: process.env.SSH_PING_PASSWORD ?? "",
+    connectTimeoutMs: Number(process.env.SSH_PING_CONNECT_TIMEOUT_MS ?? "20000"),
+    pingCount: Number(process.env.SSH_PING_COUNT ?? "3"),
+    pingTimeoutS: Number(process.env.SSH_PING_TIMEOUT_S ?? "2"),
+  },
 };
+
+if (config.sshPing.enabled) {
+  for (const key of ["SSH_PING_HOST", "SSH_PING_USER", "SSH_PING_PASSWORD"] as const) {
+    requireEnv(key);
+  }
+}

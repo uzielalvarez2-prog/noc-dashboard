@@ -2,12 +2,13 @@ import { execFile } from "node:child_process";
 import net from "node:net";
 import { promisify } from "node:util";
 import { config } from "../config.js";
+import { sshPing } from "./ssh-ping.js";
 
 const execFileAsync = promisify(execFile);
 
 export interface PingResult {
   up: boolean;
-  method: "icmp" | "tcp";
+  method: "icmp" | "tcp" | "ssh";
   latencyMs: number | null;
 }
 
@@ -52,8 +53,18 @@ function pingTcp(ip: string, port: number, timeoutMs: number): Promise<PingResul
   });
 }
 
-/** Chequea si una IP responde: ICMP real con fallback a TCP connect. Nunca lanza. */
-export async function checkIp(ip: string): Promise<PingResult> {
+/**
+ * Chequea si una IP responde. Con SSH_PING_ENABLED el ping sale del jump host
+ * de la red interna (única forma de ver los enlaces MPLS/VPN); `null` indica
+ * que no se pudo medir y el llamador debe conservar el estado previo.
+ * Sin SSH: ICMP local con fallback a TCP connect. Nunca lanza.
+ */
+export async function checkIp(ip: string): Promise<PingResult | null> {
+  if (config.sshPing.enabled) {
+    const result = await sshPing(ip);
+    return result && { ...result, method: "ssh" };
+  }
+
   const icmpResult = await pingIcmp(ip, config.monitoring.pingTimeoutMs);
   if (icmpResult?.up) return icmpResult;
 
