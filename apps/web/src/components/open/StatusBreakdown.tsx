@@ -77,19 +77,20 @@ export function StatusBreakdown({
               onClick={() => onStatusSelect(selectedStatus === ALL_STATUS ? null : ALL_STATUS)}
               title="Ver todos los incidentes abiertos"
               className={cn(
-                "group flex flex-col items-start rounded-xl border p-4 text-left backdrop-blur-md transition-all",
+                "group flex flex-col items-center rounded-xl border p-4 text-center backdrop-blur-md transition-all",
                 selectedStatus === ALL_STATUS
                   ? "border-warning bg-warning/10 ring-2 ring-warning shadow-[0_0_14px_2px_rgba(245,158,11,0.30)]"
                   : "border-warning/50 bg-warning/5 ring-1 ring-warning/40 shadow-[0_0_14px_2px_rgba(245,158,11,0.30)] hover:border-warning"
               )}
             >
-              <div className="flex w-full items-center justify-between gap-2">
+              {/* Chevron absoluto: así no desplaza el título y éste queda centrado de verdad. */}
+              <div className="relative w-full px-5">
                 <p className="truncate text-xs font-medium uppercase tracking-wider text-warning/90">
                   Incidentes abiertos
                 </p>
                 <ChevronDown
                   className={cn(
-                    "h-3.5 w-3.5 shrink-0 transition-all",
+                    "absolute right-0 top-1/2 h-3.5 w-3.5 -translate-y-1/2 transition-all",
                     selectedStatus === ALL_STATUS
                       ? "rotate-180 text-warning"
                       : "text-warning/40 group-hover:text-warning"
@@ -111,19 +112,19 @@ export function StatusBreakdown({
                 onClick={() => onStatusSelect(isSelected ? null : status)}
                 title={`Ver incidentes con estatus "${status}"`}
                 className={cn(
-                  "group flex flex-col items-start rounded-xl border p-4 text-left backdrop-blur-md transition-colors",
+                  "group flex flex-col items-center rounded-xl border p-4 text-center backdrop-blur-md transition-colors",
                   isSelected
                     ? "border-accent bg-accent/10 ring-1 ring-accent"
                     : "border-border/60 bg-surface/60 hover:border-accent/60"
                 )}
               >
-                <div className="flex w-full items-center justify-between gap-2">
+                <div className="relative w-full px-5">
                   <p className="truncate text-xs font-medium uppercase tracking-wider text-text-muted" title={status}>
                     {status}
                   </p>
                   <ChevronDown
                     className={cn(
-                      "h-3.5 w-3.5 shrink-0 transition-all",
+                      "absolute right-0 top-1/2 h-3.5 w-3.5 -translate-y-1/2 transition-all",
                       isSelected ? "rotate-180 text-accent" : "text-text-muted/40 group-hover:text-accent"
                     )}
                   />
