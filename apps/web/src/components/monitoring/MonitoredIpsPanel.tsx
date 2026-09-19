@@ -14,6 +14,7 @@ interface MonitoredIp {
   company: string;
   serviceRef: string;
   siglasIm: string;
+  siteName: string;
   label: string;
   kind: IpKind;
   note: string | null;
@@ -39,6 +40,7 @@ interface FormState {
   company: string;
   serviceRef: string;
   siglasIm: string;
+  siteName: string;
   label: string;
   kind: IpKind;
   notifyEnabled: boolean;
@@ -50,6 +52,7 @@ const EMPTY_FORM: FormState = {
   company: "",
   serviceRef: "",
   siglasIm: "",
+  siteName: "",
   label: "",
   kind: "PING",
   notifyEnabled: false,
@@ -148,6 +151,7 @@ export function MonitoredIpsPanel() {
       company: item.company,
       serviceRef: item.serviceRef,
       siglasIm: item.siglasIm,
+      siteName: item.siteName,
       label: item.label,
       kind: item.kind === "VPN" ? "VPN" : "PING",
       notifyEnabled: item.notifyEnabled,
@@ -262,6 +266,8 @@ export function MonitoredIpsPanel() {
               onChange={(e) => setForm({ ...form, serviceRef: e.target.value })} className={inputCls} />
             <input placeholder="Siglas IM (opcional)" value={form.siglasIm}
               onChange={(e) => setForm({ ...form, siglasIm: e.target.value })} className={inputCls} />
+            <input placeholder="Sitio (para el grupo de TIENDAS 3B)" value={form.siteName}
+              onChange={(e) => setForm({ ...form, siteName: e.target.value })} className={inputCls} />
           </div>
           <input placeholder="Etiqueta (ej. Enlace principal MTY)" value={form.label}
             onChange={(e) => setForm({ ...form, label: e.target.value })} className={inputCls} />
@@ -332,6 +338,7 @@ export function MonitoredIpsPanel() {
                         <input value={editForm.company} onChange={(e) => setEditForm({ ...editForm, company: e.target.value })} className={inputCls} placeholder="Empresa" />
                         <input value={editForm.serviceRef} onChange={(e) => setEditForm({ ...editForm, serviceRef: e.target.value })} className={inputCls} placeholder="Servicio" />
                         <input value={editForm.siglasIm} onChange={(e) => setEditForm({ ...editForm, siglasIm: e.target.value })} className={inputCls} placeholder="Siglas IM" />
+                        <input value={editForm.siteName} onChange={(e) => setEditForm({ ...editForm, siteName: e.target.value })} className={inputCls} placeholder="Sitio" />
                       </div>
                       <input value={editForm.label} onChange={(e) => setEditForm({ ...editForm, label: e.target.value })} className={inputCls} placeholder="Etiqueta" />
                       <KindPicker value={editForm.kind} onChange={(v) => setEditForm({ ...editForm, kind: v })} />
