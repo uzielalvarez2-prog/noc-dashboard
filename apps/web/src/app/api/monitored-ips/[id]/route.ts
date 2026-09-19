@@ -22,6 +22,7 @@ export async function PATCH(req: NextRequest, ctx: { params: Promise<{ id: strin
       company?: string;
       serviceRef?: string;
       siglasIm?: string;
+      siteName?: string;
       label?: string;
       kind?: string;
       note?: string;
@@ -34,6 +35,7 @@ export async function PATCH(req: NextRequest, ctx: { params: Promise<{ id: strin
     if (typeof body.company === "string") data.company = body.company.trim();
     if (typeof body.serviceRef === "string") data.serviceRef = body.serviceRef.trim();
     if (typeof body.siglasIm === "string") data.siglasIm = body.siglasIm.trim();
+    if (typeof body.siteName === "string") data.siteName = body.siteName.trim();
     if (typeof body.label === "string") data.label = body.label.trim();
     if (body.kind === "VPN" || body.kind === "PING") data.kind = body.kind;
     if (typeof body.note === "string") data.note = body.note.trim() || null;

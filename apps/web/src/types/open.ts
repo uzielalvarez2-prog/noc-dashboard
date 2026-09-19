@@ -9,6 +9,7 @@ export interface OpenIncidentRow {
   serviceId: string;
   state: string;
   district: string;
+  siteName: string;
   assignee: string | null;
   group: string;
   summary: string | null;

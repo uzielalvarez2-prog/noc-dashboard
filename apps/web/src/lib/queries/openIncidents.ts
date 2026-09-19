@@ -149,6 +149,7 @@ export async function getOpenIncidents(f: OpenFilters) {
     serviceId: a.serviceId,
     state: a._states.size > 1 ? `Varios (${a._states.size})` : a.state,
     district: a._districts.size > 1 ? `Varios (${a._districts.size})` : a.district,
+    siteName: a.siteName,
     assignee: a.assignee,
     group: a.group,
     summary: a.summary,

@@ -331,6 +331,7 @@ export function OpenIncidentTable({
                         incidentId={r.incidentId}
                         company={r.company}
                         serviceId={r.serviceId}
+                        siteName={r.siteName ?? ""}
                         match={pickIpMatchForRow(ipMatches, r.company, r.serviceId)}
                         monitor={monitorByIncident.get(r.incidentId)}
                       />

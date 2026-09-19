@@ -88,6 +88,7 @@ model OpenIncident {
   serviceId  String
   state      String
   district   String
+  siteName   String   @default("") // columna "Site Name" del CSV — nombre del sitio, distinto de state/district
   assignee   String?
   group      String
   summary    String?
@@ -389,6 +390,7 @@ model MonitoredIp {
   company       String
   serviceRef    String   @default("")
   siglasIm      String   @default("")
+  siteName      String   @default("") // columna "Site Name" del CSV de HPSM, para el mensaje al grupo del cliente
   label         String   @default("") // nombre libre, ej. "Enlace principal MTY"
   // "PING" = alcanzable desde internet, se monitorea con ping. "VPN" = no responde
   // desde internet, así que no se pinguea: la alerta UP se dispara cuando el

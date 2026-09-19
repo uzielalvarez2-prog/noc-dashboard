@@ -2,7 +2,7 @@ import { db } from "../sync/incidents.js";
 import { logger } from "../logger.js";
 import { config } from "../config.js";
 import { checkIp } from "./ping.js";
-import { buildAlertMessage, phoneToJid } from "./format.js";
+import { buildAlertMessage, phoneToJid, CHAT_ID_TIENDAS_3B } from "./format.js";
 import { sendWhatsappViaListener } from "./whatsapp.js";
 import { isChatSuspendido } from "./suppressed.js";
 
@@ -68,14 +68,14 @@ async function sendAlert(monitor: ActiveMonitor): Promise<void> {
     return "";
   });
 
-  const text = buildAlertMessage({
+  const alertData = {
     siglasIm: monitoredIp.siglasIm,
     incidentId: monitor.incidentId,
     serviceRef: monitoredIp.serviceRef,
     company: monitor.company || monitoredIp.company,
+    siteName: monitoredIp.siteName,
     assigneePhone,
-  });
-  const mentions = assigneePhone ? [phoneToJid(assigneePhone)] : [];
+  };
 
   // Sin destinos configurados no hay nada que entregar: se da por atendida
   // para no repetir el intento cada ciclo.
@@ -89,6 +89,12 @@ async function sendAlert(monitor: ActiveMonitor): Promise<void> {
       delivered = true;
       continue;
     }
+    // El grupo del cliente TIENDAS 3B usa su propio template (ver format.ts) y
+    // no lleva @mención — el texto y las menciones se arman por chat, no una
+    // sola vez para todos los destinos.
+    const text = buildAlertMessage(alertData, chatId);
+    const mentions =
+      chatId === CHAT_ID_TIENDAS_3B ? [] : assigneePhone ? [phoneToJid(assigneePhone)] : [];
     const sent = await sendWhatsappViaListener(chatId, text, mentions);
     if (sent.ok) {
       delivered = true;

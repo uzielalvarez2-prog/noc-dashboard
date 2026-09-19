@@ -63,6 +63,7 @@ export interface EdcEscaladoItem {
   serviceId: string;
   state: string;
   district: string;
+  siteName: string;
   assignee: string | null;
   flagged: boolean;
   note: string;
@@ -86,6 +87,7 @@ export async function getEdcEscaladoItems(): Promise<EdcEscaladoItem[]> {
         serviceId: true,
         state: true,
         district: true,
+        siteName: true,
         assignee: true,
       },
     }),
@@ -113,6 +115,7 @@ export async function getEdcEscaladoItems(): Promise<EdcEscaladoItem[]> {
       serviceId: live.serviceId,
       state: live.state,
       district: live.district,
+      siteName: live.siteName,
       assignee: live.assignee,
       flagged: mark?.flagged ?? false,
       note: mark?.note ?? "",

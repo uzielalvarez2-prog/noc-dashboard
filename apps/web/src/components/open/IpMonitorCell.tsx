@@ -11,6 +11,7 @@ export interface MonitoredIpMatch {
   company: string;
   serviceRef: string;
   siglasIm: string;
+  siteName: string;
   notifyEnabled: boolean;
   notifyChatIds: string[];
 }
@@ -27,6 +28,7 @@ interface Props {
   incidentId: string;
   company: string;
   serviceId: string;
+  siteName: string;
   match: MonitoredIpMatch | undefined;
   monitor: ActiveIpMonitor | undefined;
 }
@@ -54,6 +56,7 @@ async function activateMonitor(body: {
   ip: string;
   company: string;
   serviceRef?: string;
+  siteName?: string;
 }): Promise<void> {
   const res = await fetch("/api/monitored-ips/monitors", {
     method: "POST",
@@ -73,7 +76,7 @@ async function deactivateMonitor(id: string): Promise<void> {
  * conocida (editable inline, mismo patrón que NoteCell de WarRoomView) y el
  * botón/badge de monitoreo. ADMIN-only — el padre ya filtra por rol.
  */
-export function IpMonitorCell({ incidentId, company, serviceId, match, monitor }: Props) {
+export function IpMonitorCell({ incidentId, company, serviceId, siteName, match, monitor }: Props) {
   const qc = useQueryClient();
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(match?.ip ?? "");
@@ -109,7 +112,7 @@ export function IpMonitorCell({ incidentId, company, serviceId, match, monitor }
     setBusy(true);
     setError(null);
     try {
-      await activateMonitor({ incidentId, ip: match.ip, company, serviceRef: serviceId });
+      await activateMonitor({ incidentId, ip: match.ip, company, serviceRef: serviceId, siteName });
       invalidate();
     } catch (e) {
       setError(e instanceof Error ? e.message : "Error al activar");

@@ -14,6 +14,7 @@ export interface StatusCardItem {
   serviceId: string;
   state: string;
   district: string;
+  siteName?: string;
   assignee: string | null;
   flagged: boolean;
   note: string;

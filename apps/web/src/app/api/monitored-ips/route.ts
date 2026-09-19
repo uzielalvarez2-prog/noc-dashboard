@@ -41,6 +41,7 @@ export async function POST(req: NextRequest) {
       company?: string;
       serviceRef?: string;
       siglasIm?: string;
+      siteName?: string;
       label?: string;
       kind?: string;
       note?: string;
@@ -59,6 +60,7 @@ export async function POST(req: NextRequest) {
       company,
       serviceRef: (body.serviceRef ?? "").trim(),
       siglasIm: (body.siglasIm ?? "").trim(),
+      siteName: (body.siteName ?? "").trim(),
       label: (body.label ?? "").trim(),
       kind: body.kind === "VPN" ? "VPN" : "PING",
       note: (body.note ?? "").trim() || null,

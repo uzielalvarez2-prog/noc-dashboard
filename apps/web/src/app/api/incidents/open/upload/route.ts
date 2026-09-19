@@ -45,9 +45,13 @@ export async function POST(req: NextRequest) {
     const cService = pickCol(headers, ["Service Uniqueid", "Service"]);
     // El scraper exporta "Region" (región Telmex) y "Divisional"; los nombres
     // "Site Name State/District" se aceptan por compatibilidad con CSVs manuales.
-    const cState = pickCol(headers, ["Site Name State", "Site State", "Region", "Site Name"]);
+    const cState = pickCol(headers, ["Site Name State", "Site State", "Region"]);
     const cAssignee = pickCol(headers, ["Assigned To", "Assignee", "Opened by"]);
     const cDistrict = pickCol(headers, ["Site Name District", "Site District", "Divisional"]);
+    // Columna propia "Site Name": nombre del sitio (ej. "COLEGIO HEBREO"), distinta
+    // de Site Name State/District. Antes vivía como último alias de cState y nunca
+    // se usaba porque "Site Name State"/"Region" siempre matcheaban primero.
+    const cSiteName = pickCol(headers, ["Site Name"]);
     const cGroup = pickCol(headers, ["Assignment Group"]);
     const cSummary = pickCol(headers, ["Summary"]);
 
@@ -73,6 +77,7 @@ export async function POST(req: NextRequest) {
       serviceId: string;
       state: string;
       district: string;
+      siteName: string;
       assignee: string | null;
       group: string;
       summary: string | null;
@@ -102,6 +107,7 @@ export async function POST(req: NextRequest) {
         serviceId: cService ? (row[cService] ?? "").trim() : "",
         state,
         district,
+        siteName: cSiteName ? (row[cSiteName] ?? "").trim() : "",
         assignee: (cAssignee && (row[cAssignee] ?? "").trim()) || null,
         group,
         summary: (cSummary && (row[cSummary] ?? "").trim()) || null,

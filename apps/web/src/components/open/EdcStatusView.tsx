@@ -22,6 +22,7 @@ interface EdcEscaladoItem {
   serviceId: string;
   state: string;
   district: string;
+  siteName: string;
   assignee: string | null;
   flagged: boolean;
   note: string;
@@ -57,6 +58,7 @@ export function EdcStatusView() {
         serviceId: it.serviceId,
         state: it.state,
         district: it.district,
+        siteName: it.siteName,
         assignee: it.assignee,
         flagged: it.flagged,
         note: it.note ?? "",
@@ -155,6 +157,7 @@ export function EdcStatusView() {
                 incidentId={it.incidentId}
                 company={it.company}
                 serviceId={it.serviceId}
+                siteName={it.siteName ?? ""}
                 match={pickIpMatchForRow(ipMatches, it.company, it.serviceId)}
                 monitor={monitorByIncident.get(it.incidentId)}
               />

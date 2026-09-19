@@ -45,6 +45,7 @@ export async function POST(req: NextRequest) {
       company?: string;
       serviceRef?: string;
       siglasIm?: string;
+      siteName?: string;
     };
 
     const incidentId = (body.incidentId ?? "").trim();
@@ -79,8 +80,12 @@ export async function POST(req: NextRequest) {
         company,
         serviceRef,
         siglasIm: (body.siglasIm ?? "").trim(),
+        siteName: (body.siteName ?? "").trim(),
         createdBy: session.id,
       },
+      // No se pisa siteName/siglasIm en el update: si ya existía la fila (con esos
+      // datos capturados a mano en el panel de IPs), reactivar el monitoreo desde
+      // Incidentes Abiertos no debe borrarlos.
       update: { ip },
     });
 
