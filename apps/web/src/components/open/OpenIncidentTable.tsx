@@ -19,6 +19,7 @@ const COLUMNS = [
   { key: "serviceId", label: "Servicio" },
   { key: "state", label: "Estado" },
   { key: "district", label: "Distrito" },
+  { key: "siteName", label: "Sitio" },
   { key: "assignee", label: "Asignado" },
   { key: "status", label: "Estatus" },
   { key: "group", label: "Grupo" },
@@ -308,6 +309,11 @@ export function OpenIncidentTable({
                   </td>
                   <td className="px-3 py-2 text-xs text-text-primary">{r.state}</td>
                   <td className="px-3 py-2 text-xs text-text-primary">{r.district}</td>
+                  <td className="px-3 py-2 text-xs text-text-primary">
+                    <span className="block max-w-[12rem] truncate" title={r.siteName}>
+                      {r.siteName || "—"}
+                    </span>
+                  </td>
                   <td className="px-3 py-2 font-mono text-xs text-text-muted">{r.assignee ?? "—"}</td>
                   <td className="px-3 py-2 text-xs">
                     <StatusBadge status={r.status} />
