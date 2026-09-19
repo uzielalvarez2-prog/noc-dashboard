@@ -140,6 +140,51 @@ export async function exportCurrentViewToCsv(
   contentFrame?: Frame,
   onlyVisibleMore = false,
 ): Promise<void> {
+  await openExportDialog(page, contentFrame, onlyVisibleMore);
+
+  // Esperar a que aparezca el diálogo de export (frame detail.do). Antes era una
+  // espera fija de 2 s: con HPSM lento (p.ej. tras una caída) el diálogo llegaba
+  // después, no se encontraba el ✓, se mandaba Enter a ciegas y la corrida se
+  // quedaba 10 min esperando una descarga que nunca arrancó.
+  let tokReady = await waitForConfirmButton(page, EXPORT_DIALOG_TIMEOUT_MS);
+  if (!tokReady) {
+    // A veces el clic en "Export to Text File" no se registra y el diálogo no
+    // abre nunca (esperar más no sirve): se repite el menú una vez.
+    logger.warn(
+      `Diálogo de export sin ✓ tras ${EXPORT_DIALOG_TIMEOUT_MS / 1_000}s — reintentando More → Export to Text File`,
+    );
+    await openExportDialog(page, contentFrame, onlyVisibleMore);
+    tokReady = await waitForConfirmButton(page, EXPORT_DIALOG_TIMEOUT_MS);
+    if (!tokReady) logger.warn("Diálogo de export sin ✓ también tras el reintento");
+  }
+
+  // Screenshot para diagnóstico del diálogo
+  await page.screenshot({ path: "debug-export-dialog.png", fullPage: true });
+
+  // Seleccionar "Comma Separated Value (CSV)" en el diálogo de export.
+  // HPSM recuerda el último delimitador — puede quedar en "Tab" entre corridas.
+  for (const frame of page.frames()) {
+    const changed = await frame.evaluate(() => {
+      const spans = Array.from(document.querySelectorAll("span, label, td"));
+      const label = spans.find(el => el.textContent?.includes("Comma Separated Value"));
+      if (!label) return false;
+      const row = label.closest("tr") ?? label.parentElement;
+      const radio = row?.querySelector<HTMLInputElement>('input[type="radio"]');
+      if (radio) { radio.click(); return true; }
+      return false;
+    }).catch(() => false);
+    if (changed) { logger.info("Delimitador CSV seleccionado"); break; }
+  }
+
+  await confirmExportAndDownload(page, destPath, tokReady);
+}
+
+/** Abre el menú More → "Export to Text File" sobre la vista actual. */
+async function openExportDialog(
+  page: Page,
+  contentFrame: Frame | undefined,
+  onlyVisibleMore: boolean,
+): Promise<void> {
   // Buscar el botón "More" en el frame indicado o en todos los frames
   const framesToSearch = contentFrame
     ? [contentFrame, page.mainFrame()]
@@ -197,34 +242,14 @@ export async function exportCurrentViewToCsv(
     await page.screenshot({ path: "debug-export-menu.png", fullPage: true });
     throw new Error('"Export to Text File" no visible en ningún frame');
   }
+}
 
-  // Esperar a que aparezca el diálogo de export (frame detail.do). Antes era una
-  // espera fija de 2 s: con HPSM lento (p.ej. tras una caída) el diálogo llegaba
-  // después, no se encontraba el ✓, se mandaba Enter a ciegas y la corrida se
-  // quedaba 10 min esperando una descarga que nunca arrancó.
-  const tokReady = await waitForConfirmButton(page, EXPORT_DIALOG_TIMEOUT_MS);
-  if (!tokReady) {
-    logger.warn(`Diálogo de export sin ✓ tras ${EXPORT_DIALOG_TIMEOUT_MS / 1_000}s`);
-  }
-
-  // Screenshot para diagnóstico del diálogo
-  await page.screenshot({ path: "debug-export-dialog.png", fullPage: true });
-
-  // Seleccionar "Comma Separated Value (CSV)" en el diálogo de export.
-  // HPSM recuerda el último delimitador — puede quedar en "Tab" entre corridas.
-  for (const frame of page.frames()) {
-    const changed = await frame.evaluate(() => {
-      const spans = Array.from(document.querySelectorAll("span, label, td"));
-      const label = spans.find(el => el.textContent?.includes("Comma Separated Value"));
-      if (!label) return false;
-      const row = label.closest("tr") ?? label.parentElement;
-      const radio = row?.querySelector<HTMLInputElement>('input[type="radio"]');
-      if (radio) { radio.click(); return true; }
-      return false;
-    }).catch(() => false);
-    if (changed) { logger.info("Delimitador CSV seleccionado"); break; }
-  }
-
+/** Confirma el diálogo de export con el ✓ (o Enter a ciegas) y guarda la descarga. */
+async function confirmExportAndDownload(
+  page: Page,
+  destPath: string,
+  tokReady: boolean,
+): Promise<void> {
   // El botón de confirmar es img[src*="tok"] (✓ verde).
   // CRÍTICO: usar .click({ force:true }) — ExtJS panels intercept pointer events en ese frame.
   // Iniciar downloadPromise ANTES del click para no perder el evento. Si el
