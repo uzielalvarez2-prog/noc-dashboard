@@ -12,6 +12,24 @@ export interface HpsmSession {
 
 const COOKIE_FILE = join(process.cwd(), "hpsm-cookies.json");
 
+// Cuánto esperar a que el diálogo de export muestre el ✓ (normal: ~2 s).
+const EXPORT_DIALOG_TIMEOUT_MS = 45_000;
+// Tope de descarga cuando se confirmó a ciegas con Enter (sin ✓ visible).
+const BLIND_CONFIRM_DOWNLOAD_TIMEOUT_MS = 90_000;
+
+/** Sondea todos los frames hasta que el ✓ (img[src*="tok"]) sea visible. */
+async function waitForConfirmButton(page: Page, timeoutMs: number): Promise<boolean> {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    for (const frame of page.frames()) {
+      const visible = await frame.locator('img[src*="tok"]').first().isVisible().catch(() => false);
+      if (visible) return true;
+    }
+    await page.waitForTimeout(1_000);
+  }
+  return false;
+}
+
 /** Elimina el archivo de cookies — fuerza login fresco en la siguiente apertura de sesión. */
 export function clearSession(): void {
   try {
@@ -180,8 +198,14 @@ export async function exportCurrentViewToCsv(
     throw new Error('"Export to Text File" no visible en ningún frame');
   }
 
-  // Esperar a que aparezca el diálogo de export (frame detail.do)
-  await page.waitForTimeout(2_000);
+  // Esperar a que aparezca el diálogo de export (frame detail.do). Antes era una
+  // espera fija de 2 s: con HPSM lento (p.ej. tras una caída) el diálogo llegaba
+  // después, no se encontraba el ✓, se mandaba Enter a ciegas y la corrida se
+  // quedaba 10 min esperando una descarga que nunca arrancó.
+  const tokReady = await waitForConfirmButton(page, EXPORT_DIALOG_TIMEOUT_MS);
+  if (!tokReady) {
+    logger.warn(`Diálogo de export sin ✓ tras ${EXPORT_DIALOG_TIMEOUT_MS / 1_000}s`);
+  }
 
   // Screenshot para diagnóstico del diálogo
   await page.screenshot({ path: "debug-export-dialog.png", fullPage: true });
@@ -203,8 +227,12 @@ export async function exportCurrentViewToCsv(
 
   // El botón de confirmar es img[src*="tok"] (✓ verde).
   // CRÍTICO: usar .click({ force:true }) — ExtJS panels intercept pointer events en ese frame.
-  // Iniciar downloadPromise ANTES del click para no perder el evento.
-  const downloadPromise = page.waitForEvent("download", { timeout: 600_000 });
+  // Iniciar downloadPromise ANTES del click para no perder el evento. Si el
+  // diálogo nunca mostró el ✓, el Enter de abajo es a ciegas: se espera poco
+  // para liberar el scheduler en vez de bloquear las siguientes corridas.
+  const downloadPromise = page.waitForEvent("download", {
+    timeout: tokReady ? 600_000 : BLIND_CONFIRM_DOWNLOAD_TIMEOUT_MS,
+  });
 
   // Confirmar con img[src*="tok"].
   // NO usar .click({ force:true }): los paneles ExtJS interceptan a nivel de coordenadas de browser.
