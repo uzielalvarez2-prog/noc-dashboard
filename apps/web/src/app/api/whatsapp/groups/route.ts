@@ -38,14 +38,16 @@ export async function PATCH(req: NextRequest) {
     id?: unknown;
     note?: unknown;
     enabled?: unknown;
+    isClientGroup?: unknown;
   } | null;
 
   const id = typeof body?.id === "string" ? body.id.trim() : "";
   if (!id) return NextResponse.json({ error: "id requerido" }, { status: 400 });
 
-  const data: { note?: string | null; enabled?: boolean } = {};
+  const data: { note?: string | null; enabled?: boolean; isClientGroup?: boolean } = {};
   if (typeof body?.note === "string") data.note = body.note.trim() || null;
   if (typeof body?.enabled === "boolean") data.enabled = body.enabled;
+  if (typeof body?.isClientGroup === "boolean") data.isClientGroup = body.isClientGroup;
 
   const group = await db.whatsappGroup.update({ where: { id }, data }).catch(() => null);
   if (!group) return NextResponse.json({ error: "Grupo no encontrado" }, { status: 404 });

@@ -307,14 +307,17 @@ model SisaTicket {
 // WhatsApp Web. `enabled` permite ocultar un grupo del selector sin borrarlo.
 // ─────────────────────────────────────────────────────────────────────────────
 model WhatsappGroup {
-  id         String   @id @default(cuid())
-  chatId     String   @unique // identificador real del grupo (xxxx@g.us) — llave de envío
-  name       String   @default("") // nombre visible del grupo (último visto)
-  enabled    Boolean  @default(true)
-  note       String?
-  createdBy  String   @default("") // "" cuando lo descubrió el listener
-  createdAt  DateTime @default(now())
-  lastSeenAt DateTime @default(now())
+  id            String   @id @default(cuid())
+  chatId        String   @unique // identificador real del grupo (xxxx@g.us) — llave de envío
+  name          String   @default("") // nombre visible del grupo (último visto)
+  enabled       Boolean  @default(true)
+  // Grupos de cliente (ej. TIENDAS 3B) reciben el template "Incidente/Sitio/
+  // Referencia" de la alerta de servicio activo en vez del genérico interno.
+  isClientGroup Boolean  @default(false)
+  note          String?
+  createdBy     String   @default("") // "" cuando lo descubrió el listener
+  createdAt     DateTime @default(now())
+  lastSeenAt    DateTime @default(now())
 
   @@index([enabled])
 }

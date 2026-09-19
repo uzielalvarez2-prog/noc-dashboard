@@ -11,6 +11,7 @@ interface Group {
   name: string;
   enabled: boolean;
   note: string | null;
+  isClientGroup: boolean;
 }
 
 async function fetchGroups(all: boolean): Promise<{ groups: Group[] }> {
@@ -207,6 +208,20 @@ function GroupsAdmin({ onClose, onChanged }: { onClose: () => void; onChanged: (
     }
   }
 
+  async function toggleClientGroup(g: Group) {
+    setBusy(true);
+    try {
+      await fetch("/api/whatsapp/groups", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: g.id, isClientGroup: !g.isClientGroup }),
+      });
+      refresh();
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function remove(id: string) {
     setBusy(true);
     try {
@@ -253,6 +268,18 @@ function GroupsAdmin({ onClose, onChanged }: { onClose: () => void; onChanged: (
                   }`}
                 >
                   {g.enabled ? "habilitado" : "deshabilitado"}
+                </button>
+                <button
+                  disabled={busy}
+                  onClick={() => toggleClientGroup(g)}
+                  title="Grupos de cliente reciben el formato Incidente/Sitio/Referencia en la alerta de servicio activo"
+                  className={`rounded border px-2 py-0.5 text-[10px] ${
+                    g.isClientGroup
+                      ? "border-accent/40 bg-accent/10 text-accent"
+                      : "border-border text-text-muted"
+                  }`}
+                >
+                  {g.isClientGroup ? "grupo de cliente" : "grupo interno"}
                 </button>
                 <button
                   disabled={busy}

@@ -8,16 +8,17 @@ export interface AlertData {
   assigneePhone?: string;
 }
 
-// Grupo del cliente TIENDAS 3B: recibe un template propio (sin @mención, sin
-// "Company", con "Sitio" y la leyenda de cierre) que NO debe tocar el template
-// genérico que usan el resto de los grupos.
-export const CHAT_ID_TIENDAS_3B = "120363418861405181@g.us";
-
-/** Arma el texto exacto del template de "servicio activo" para WhatsApp. */
-export function buildAlertMessage(data: AlertData, chatId?: string): string {
+/**
+ * Arma el texto exacto del template de "servicio activo" para WhatsApp.
+ * `isClientGroup` viene de WhatsappGroup.isClientGroup (marcado desde el panel de
+ * administración de grupos) — los grupos de cliente reciben el template propio
+ * (sin @mención, sin "Company", con "Sitio" y la leyenda de cierre) que NO debe
+ * tocar el template genérico que usan los grupos internos.
+ */
+export function buildAlertMessage(data: AlertData, isClientGroup: boolean): string {
   const header = data.siglasIm || data.incidentId;
 
-  if (chatId === CHAT_ID_TIENDAS_3B) {
+  if (isClientGroup) {
     return [
       "✅ *ACTIVO*",
       `Incidente: ${header}`,
