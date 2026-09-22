@@ -69,10 +69,16 @@ export async function POST(req: NextRequest) {
     }
 
     const serviceRef = (body.serviceRef ?? "").trim();
+    const siteName = (body.siteName ?? "").trim();
 
     // Se busca por (empresa, servicio) porque esa es la identidad del enlace; la IP
     // es el valor que se actualiza. Buscar por IP haría que un servicio reusara la
     // fila de otro servicio de la misma empresa (ver comentario en schema.prisma).
+    const existingMonitoredIp = await db.monitoredIp.findUnique({
+      where: { company_serviceRef: { company, serviceRef } },
+      select: { siteName: true },
+    });
+
     const monitoredIp = await db.monitoredIp.upsert({
       where: { company_serviceRef: { company, serviceRef } },
       create: {
@@ -80,13 +86,17 @@ export async function POST(req: NextRequest) {
         company,
         serviceRef,
         siglasIm: (body.siglasIm ?? "").trim(),
-        siteName: (body.siteName ?? "").trim(),
+        siteName,
         createdBy: session.id,
       },
-      // No se pisa siteName/siglasIm en el update: si ya existía la fila (con esos
-      // datos capturados a mano en el panel de IPs), reactivar el monitoreo desde
-      // Incidentes Abiertos no debe borrarlos.
-      update: { ip },
+      // No se pisa siglasIm/siteName ya capturados a mano; pero si la fila existía
+      // con siteName vacío (caso más común: se creó antes de que el CSV trajera la
+      // columna Sitio), se rellena con el del incidente en vez de quedar vacío para
+      // siempre.
+      update: {
+        ip,
+        ...(existingMonitoredIp && !existingMonitoredIp.siteName && siteName ? { siteName } : {}),
+      },
     });
 
     const monitor = await db.ipMonitor.create({
