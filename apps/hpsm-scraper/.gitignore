@@ -9,3 +9,4 @@ hpsm-cookies.json
 # Token de Control Center (NUNCA versionar — es secreto)
 .cc-token.json
 .cc-token*.json
+im-estatus.json

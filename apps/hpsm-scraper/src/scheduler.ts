@@ -23,6 +23,8 @@ const DRY = process.env.SCHEDULER_DRY === "1";
 const OPEN_TIMEOUT_MS = 12 * 60_000; // corrida sana ~2 min; degradada ~10 min
 const CLOSED_TIMEOUT_MS = 30 * 60_000; // el export de cerrados tarda ~13 min normal
 const SISA_TIMEOUT_MS = 12 * 60_000; // mismo margen que open — sesión HPSM completa propia
+const IM_ESTATUS_TIMEOUT_MS = 30 * 60_000; // ~30 s por IM; tope de 50 IMs en server.ts
+const IM_ESTATUS_WAIT_MS = 15 * 60_000; // bajo demanda: espera a que termine open/sisa/closed
 
 let running: string | null = null;
 
@@ -90,17 +92,17 @@ async function runJob(
   timeoutMs: number,
   waitIfBusyMs = 0,
   envOverride: NodeJS.ProcessEnv = {},
-): Promise<void> {
+): Promise<boolean> {
   if (running) {
     if (waitIfBusyMs <= 0) {
       logger.info(`${label}: ocupado con ${running} — saltado`);
-      return;
+      return false;
     }
     const deadline = Date.now() + waitIfBusyMs;
     while (running && Date.now() < deadline) await sleep(10_000);
     if (running) {
       logger.error(`${label}: ocupado con ${running} tras ${waitIfBusyMs / 1_000}s — abortado`);
-      return;
+      return false;
     }
   }
   running = label;
@@ -109,11 +111,12 @@ async function runJob(
   try {
     if (DRY) {
       logger.info(`${label}: DRY — no se ejecuta`);
-      return;
+      return false;
     }
     const code = await spawnScript(label, script, timeoutMs, envOverride);
     const secs = Math.round((Date.now() - t0) / 1_000);
     logger.info(`${label}: fin exit=${code} (${secs}s)`);
+    return true;
   } finally {
     running = null;
   }
@@ -162,7 +165,12 @@ cron.schedule(
 // portal Manto). Vive en ESTE proceso, no como job hijo: Manto es un sistema
 // distinto de HPSM (sin riesgo de colisión de logins) y `server.ts` ya
 // serializa sus consultas con su propio lock. No hay cron para Manto.
-startScraperServer();
+// La consulta de estatus de IMs SÍ entra a HPSM, así que va como job hijo por
+// runJob: espera su turno detrás de open/sisa en vez de abrir otro login.
+startScraperServer({
+  runImEstatus: (env) =>
+    runJob("run-im-estatus", "src/run-im-estatus.ts", IM_ESTATUS_TIMEOUT_MS, IM_ESTATUS_WAIT_MS, env),
+});
 
 logger.info(
   `scheduler: iniciado (TZ ${TZ}) — open+sisa */5 06:00-23:00, closed PEXA 14:02 y 22:12, closed CECOR 21:00${DRY ? " [DRY]" : ""}`,

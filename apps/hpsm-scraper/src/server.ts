@@ -1,7 +1,10 @@
 import { createServer, type IncomingMessage } from "node:http";
+import { existsSync, readFileSync, unlinkSync } from "node:fs";
+import { join } from "node:path";
 import { config } from "./config.js";
 import { logger } from "./logger.js";
 import { consultarEstatusFolios, PortalFueraDeGestionError, type MantoEstatusResult } from "./manto.js";
+import { IM_REGEX, type ImEstatusResult } from "./hpsm-incident.js";
 
 // Servidor HTTP mínimo del scraper, para el flujo INVERSO: el dashboard pide
 // consultar el estatus de folios SISA en el portal Manto. Mismo molde que
@@ -105,6 +108,75 @@ async function correrRefresh(folios: string[]): Promise<void> {
   }
 }
 
+// ── Estatus de IMs en HPSM (bajo demanda, solo ADMIN en el dashboard) ────────
+// A diferencia de Manto, esto SÍ entra a HPSM: corre como job hijo del
+// scheduler (runJob) para compartir la fila con open/sisa/closed. El hijo
+// escribe sus resultados en IM_ESTATUS_FILE tras cada IM; aquí solo se lee.
+
+const MAX_IMS = 50;
+const IM_ESTATUS_FILE = join(process.cwd(), "im-estatus.json");
+
+export interface ScraperServerDeps {
+  /** Encola run-im-estatus en el scheduler. Resuelve false si no llegó a correr. */
+  runImEstatus(env: NodeJS.ProcessEnv): Promise<boolean>;
+}
+
+interface ProgresoIm {
+  estado: "inactivo" | "en_cola" | "consultando" | "terminado" | "error";
+  total: number;
+  iniciadoEn: string | null;
+  terminadoEn: string | null;
+  mensaje: string | null;
+}
+
+const progresoIm: ProgresoIm = {
+  estado: "inactivo",
+  total: 0,
+  iniciadoEn: null,
+  terminadoEn: null,
+  mensaje: null,
+};
+
+function leerResultadosIm(): ImEstatusResult[] {
+  try {
+    return JSON.parse(readFileSync(IM_ESTATUS_FILE, "utf8")) as ImEstatusResult[];
+  } catch {
+    return [];
+  }
+}
+
+async function correrImEstatus(deps: ScraperServerDeps, ims: string[]): Promise<void> {
+  try {
+    if (existsSync(IM_ESTATUS_FILE)) unlinkSync(IM_ESTATUS_FILE);
+  } catch { /* se sobrescribe igual */ }
+  Object.assign(progresoIm, {
+    estado: "en_cola",
+    total: ims.length,
+    iniciadoEn: new Date().toISOString(),
+    terminadoEn: null,
+    mensaje: null,
+  });
+  try {
+    const corrio = await deps.runImEstatus({ IM_LIST: ims.join(","), IM_ESTATUS_OUT: IM_ESTATUS_FILE });
+    const n = leerResultadosIm().length;
+    if (!corrio) {
+      progresoIm.estado = "error";
+      progresoIm.mensaje = "El scraper siguió ocupado con otra corrida de HPSM; intenta de nuevo en unos minutos.";
+    } else if (n < ims.length) {
+      progresoIm.estado = "error";
+      progresoIm.mensaje = `La consulta se interrumpió: ${n} de ${ims.length} IMs consultados (ver logs del scraper).`;
+    } else {
+      progresoIm.estado = "terminado";
+      progresoIm.mensaje = `${n} IMs consultados.`;
+    }
+  } catch (e) {
+    progresoIm.estado = "error";
+    progresoIm.mensaje = `Error: ${(e as Error).message}`;
+  } finally {
+    progresoIm.terminadoEn = new Date().toISOString();
+  }
+}
+
 function readJsonBody(req: IncomingMessage): Promise<unknown> {
   return new Promise((resolve, reject) => {
     let size = 0;
@@ -129,7 +201,7 @@ function readJsonBody(req: IncomingMessage): Promise<unknown> {
   });
 }
 
-export function startScraperServer(): void {
+export function startScraperServer(deps: ScraperServerDeps): void {
   const server = createServer((req, res) => {
     const url = req.url ?? "";
     const json = (status: number, obj: unknown) => {
@@ -151,6 +223,59 @@ export function startScraperServer(): void {
         return;
       }
       json(200, { ok: true, progreso });
+      return;
+    }
+
+    if (req.method === "GET" && url === "/im-estatus/progreso") {
+      if (req.headers["x-internal-key"] !== config.internalApiKey) {
+        json(401, { error: "No autorizado" });
+        return;
+      }
+      // "en_cola" pasa a "consultando" en cuanto el hijo crea el archivo.
+      const estado =
+        progresoIm.estado === "en_cola" && existsSync(IM_ESTATUS_FILE) ? "consultando" : progresoIm.estado;
+      json(200, { ok: true, progreso: { ...progresoIm, estado }, resultados: leerResultadosIm() });
+      return;
+    }
+
+    if (req.method === "POST" && url === "/im-estatus") {
+      if (req.headers["x-internal-key"] !== config.internalApiKey) {
+        json(401, { error: "No autorizado" });
+        return;
+      }
+      void (async () => {
+        let body: unknown;
+        try {
+          body = await readJsonBody(req);
+        } catch (e) {
+          json(400, { error: (e as Error).message });
+          return;
+        }
+        const b = (body ?? {}) as { ims?: unknown };
+        // Solo IMs con formato válido: el valor va dentro de una query de HPSM.
+        const ims = Array.isArray(b.ims)
+          ? [...new Set(
+              b.ims
+                .filter((s): s is string => typeof s === "string")
+                .map((s) => s.trim().toUpperCase())
+                .filter((s) => IM_REGEX.test(s)),
+            )]
+          : [];
+        if (ims.length === 0) {
+          json(400, { error: "ims requerido (arreglo de números de incidente IM…)" });
+          return;
+        }
+        if (ims.length > MAX_IMS) {
+          json(400, { error: `Demasiados IMs (máximo ${MAX_IMS})` });
+          return;
+        }
+        if (progresoIm.estado === "en_cola" || progresoIm.estado === "consultando") {
+          json(409, { error: "Ya hay una consulta de IMs en curso" });
+          return;
+        }
+        void correrImEstatus(deps, ims);
+        json(202, { ok: true, iniciado: true, total: ims.length });
+      })();
       return;
     }
 

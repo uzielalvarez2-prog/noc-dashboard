@@ -53,6 +53,14 @@ export function canManageAgentContacts(role: string | undefined): boolean {
   return role === "ADMIN";
 }
 
+/**
+ * Consulta de estatus + bitácora de una lista de IMs directo en HPSM (página
+ * /estatus-im). ADMIN estricto: cada consulta ocupa el login único del scraper.
+ */
+export function canConsultarEstatusIm(role: string | undefined): boolean {
+  return role === "ADMIN";
+}
+
 export function isValidRole(role: string): role is Role {
   return (ROLES as string[]).includes(role);
 }
