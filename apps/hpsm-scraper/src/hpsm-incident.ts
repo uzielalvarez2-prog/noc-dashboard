@@ -84,8 +84,12 @@ async function leerEstatus(page: Page, im: string): Promise<{ found: boolean; st
   );
   if (!detail) throw new Error("el formulario del incidente no cargó");
 
+  await assertSinTopeDePestanas(page);
   const numero = (await detail.locator('input[name="instance/number"]').first().inputValue().catch(() => "")).trim();
-  if (numero.toUpperCase() !== im) return { found: false, status: "" };
+  // Vacío = HPSM cayó al form de búsqueda: el IM no existe. Otro número = HPSM
+  // mostró un registro que no es el pedido: error, NO "no encontrado".
+  if (!numero) return { found: false, status: "" };
+  if (numero.toUpperCase() !== im) throw new Error(`HPSM mostró ${numero} en lugar de ${im}`);
 
   // En un incidente cerrado el input de Status NO tiene name (solo lectura):
   // se localiza por su <label> "Status:" (excluye "KPI Status"). En abiertos
@@ -112,6 +116,7 @@ async function leerActividades(page: Page, im: string): Promise<ImActividad[]> {
     async (f) => f.url().includes("list.do") && (await f.locator(FILA_ACTIVIDAD).count()) > 0,
     LIST_TIMEOUT_MS,
   );
+  await assertSinTopeDePestanas(page);
   if (!list) return []; // sin bitácora (o no cargó): se reporta sin actividades
 
   const filas = await list.evaluate(
@@ -130,11 +135,46 @@ async function leerActividades(page: Page, im: string): Promise<ImActividad[]> {
   return filas.map(([fecha = "", operador = "", tipo = "", descripcion = ""]) => ({ fecha, operador, tipo, descripcion }));
 }
 
+/**
+ * Cada deep link abre una pestaña NUEVA del lado del servidor de HPSM, que
+ * sobrevive al page.goto. HPSM tiene tope ("Maximum number of application tabs
+ * exceeded"): con 2 pestañas por IM, sin cerrarlas, la consulta se rompía en
+ * el 5º IM. Se cierran con su × (solo las closable; To Do Queue no lo es).
+ */
+async function cerrarPestanas(page: Page): Promise<void> {
+  const main = page.mainFrame();
+  const closes = main.locator("li.x-tab-strip-closable a.x-tab-strip-close");
+  for (let i = 0; i < 6; i++) {
+    const n = await closes.count().catch(() => 0);
+    if (n === 0) return;
+    await closes.last().evaluate((el) => (el as HTMLElement).click()).catch(() => {});
+    const deadline = Date.now() + 5_000;
+    while (Date.now() < deadline && (await closes.count().catch(() => 0)) >= n) {
+      await page.waitForTimeout(300);
+    }
+  }
+  const quedan = await closes.count().catch(() => 0);
+  if (quedan > 0) logger.warn(`Quedaron ${quedan} pestañas de HPSM sin cerrar`);
+}
+
+async function assertSinTopeDePestanas(page: Page): Promise<void> {
+  for (const f of page.frames()) {
+    const tope = await f
+      .locator("text=Maximum number of application tabs")
+      .count()
+      .catch(() => 0);
+    if (tope > 0) throw new Error("HPSM: tope de pestañas abiertas alcanzado");
+  }
+}
+
 /** Consulta un IM. No lanza: los errores quedan en `error` del resultado. */
 export async function consultarIncidente(page: Page, im: string): Promise<ImEstatusResult> {
   try {
     const { found, status } = await leerEstatus(page, im);
-    if (!found) return { im, found: false };
+    if (!found) {
+      logger.info(`IM ${im}: no encontrado`);
+      return { im, found: false };
+    }
 
     const cerrado = status.toUpperCase() === "CLOSED";
     const actividades = cerrado ? [] : await leerActividades(page, im);
@@ -144,5 +184,7 @@ export async function consultarIncidente(page: Page, im: string): Promise<ImEsta
     const error = (e as Error).message;
     logger.warn(`IM ${im}: error consultando`, { error });
     return { im, found: false, error };
+  } finally {
+    await cerrarPestanas(page);
   }
 }
