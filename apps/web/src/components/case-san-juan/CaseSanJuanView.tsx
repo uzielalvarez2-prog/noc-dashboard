@@ -46,9 +46,9 @@ function statusClass(status: string): string {
 export function CaseSanJuanView() {
   const [q, setQ] = useState("");
   const [abierto, setAbierto] = useState<string | null>(null);
-  // Orden por Estatus: clic en el encabezado cicla A→Z, Z→A y sin orden
-  // (sin orden = por apertura, más viejo primero, como llega de la API).
-  const [ordenEstatus, setOrdenEstatus] = useState<"asc" | "desc" | null>(null);
+  // Orden por Estatus: clic en el encabezado cicla A→Z, Vendor primero y sin
+  // orden (sin orden = por apertura, más viejo primero, como llega de la API).
+  const [ordenEstatus, setOrdenEstatus] = useState<"asc" | "vendor" | null>(null);
 
   const { data, isLoading, error, refetch } = useQuery({
     queryKey: ["case-san-juan"],
@@ -71,13 +71,17 @@ export function CaseSanJuanView() {
         )
       : items;
     if (!ordenEstatus) return lista;
-    const dir = ordenEstatus === "asc" ? 1 : -1;
+    const esVendor = (st: string) => ((st ?? "").toUpperCase().includes("VENDOR") ? 0 : 1);
     // sort estable: dentro del mismo estatus se conserva el orden por apertura.
-    return [...lista].sort((a, b) => dir * (a.status ?? "").localeCompare(b.status ?? "", "es"));
+    return [...lista].sort(
+      (a, b) =>
+        (ordenEstatus === "vendor" ? esVendor(a.status) - esVendor(b.status) : 0) ||
+        (a.status ?? "").localeCompare(b.status ?? "", "es")
+    );
   }, [items, q, ordenEstatus]);
 
   function ciclarOrdenEstatus() {
-    setOrdenEstatus((o) => (o === null ? "asc" : o === "asc" ? "desc" : null));
+    setOrdenEstatus((o) => (o === null ? "asc" : o === "asc" ? "vendor" : null));
   }
 
   return (
@@ -110,7 +114,7 @@ export function CaseSanJuanView() {
                     <button
                       type="button"
                       onClick={ciclarOrdenEstatus}
-                      title="Ordenar por estatus (A→Z, Z→A, sin orden)"
+                      title="Ordenar por estatus (A→Z, Vendor primero, sin orden)"
                       className={cn(
                         "flex items-center gap-1 uppercase tracking-wider transition-colors hover:text-text-primary",
                         ordenEstatus && "text-accent"
@@ -119,7 +123,7 @@ export function CaseSanJuanView() {
                       {h}
                       {ordenEstatus === "asc" ? (
                         <ArrowUp className="h-3 w-3" />
-                      ) : ordenEstatus === "desc" ? (
+                      ) : ordenEstatus === "vendor" ? (
                         <ArrowDown className="h-3 w-3" />
                       ) : (
                         <ArrowUpDown className="h-3 w-3" />
