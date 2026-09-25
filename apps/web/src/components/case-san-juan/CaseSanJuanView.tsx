@@ -21,16 +21,17 @@ interface CaseItem {
 interface CaseResponse {
   items: CaseItem[];
   puedeEditar: boolean;
+  abreHpsm: boolean;
 }
 
 async function fetchCase(): Promise<CaseResponse> {
   const res = await fetch("/api/case-san-juan");
   const body = (await res.json().catch(() => ({}))) as Partial<CaseResponse> & { error?: string };
   if (!res.ok) throw new Error(body.error ?? "Error al leer CASE San Juan");
-  return { items: body.items ?? [], puedeEditar: body.puedeEditar ?? false };
+  return { items: body.items ?? [], puedeEditar: body.puedeEditar ?? false, abreHpsm: body.abreHpsm ?? false };
 }
 
-const COLUMNS = ["", "Incidente", "Empresa", "Servicio", "Sitio", "SISA", "Estatus", "Estatus CASE"];
+const COLUMNS = ["", "SISA", "Empresa", "Servicio", "Sitio", "Incidente", "Estatus", "Estatus CASE"];
 
 // Mismo código de color que la vista SISA: vendor rojo · resolved verde ·
 // customer azul · resto ámbar.
@@ -54,12 +55,13 @@ export function CaseSanJuanView() {
 
   const items = data?.items ?? [];
   const puedeEditar = data?.puedeEditar ?? false;
+  const abreHpsm = data?.abreHpsm ?? false;
 
   const filtrados = useMemo(() => {
     const needle = q.trim().toLowerCase();
     if (!needle) return items;
     return items.filter((it) =>
-      [it.incidentId, it.company, it.serviceId, it.siteName, it.vendorTicket, it.status]
+      [it.vendorTicket, it.company, it.serviceId, it.siteName, it.incidentId, it.status]
         .join(" ")
         .toLowerCase()
         .includes(needle)
@@ -74,7 +76,7 @@ export function CaseSanJuanView() {
           <input
             value={q}
             onChange={(e) => setQ(e.target.value)}
-            placeholder="Buscar por incidente, empresa, servicio, sitio, SISA o estatus…"
+            placeholder="Buscar por SISA, empresa, servicio, sitio, incidente o estatus…"
             className="w-full rounded-md border border-border bg-surface py-1.5 pl-8 pr-3 text-xs text-text-primary"
           />
         </div>
@@ -124,10 +126,7 @@ export function CaseSanJuanView() {
                       <td className="px-2 py-2 text-text-muted">
                         {expandido ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronRight className="h-3.5 w-3.5" />}
                       </td>
-                      {/* El doble clic abre HPSM: no debe abrir/cerrar la bitácora. */}
-                      <td className="px-3 py-2" onClick={(e) => e.stopPropagation()}>
-                        <HpsmIncidentId incidentId={it.incidentId} className="font-mono text-xs text-text-muted" />
-                      </td>
+                      <td className="px-3 py-2 font-mono text-xs text-accent">{it.vendorTicket || "—"}</td>
                       <td className="px-3 py-2 text-xs text-text-primary">
                         <span className="block max-w-[14rem] truncate" title={it.company}>{it.company || "—"}</span>
                       </td>
@@ -137,7 +136,14 @@ export function CaseSanJuanView() {
                       <td className="px-3 py-2 text-xs text-text-primary">
                         <span className="block max-w-[12rem] truncate" title={it.siteName}>{it.siteName || "—"}</span>
                       </td>
-                      <td className="px-3 py-2 font-mono text-xs text-accent">{it.vendorTicket || "—"}</td>
+                      {abreHpsm ? (
+                        // El doble clic abre HPSM: no debe abrir/cerrar la bitácora.
+                        <td className="px-3 py-2" onClick={(e) => e.stopPropagation()}>
+                          <HpsmIncidentId incidentId={it.incidentId} className="font-mono text-xs text-text-muted" />
+                        </td>
+                      ) : (
+                        <td className="px-3 py-2 font-mono text-xs text-text-muted">{it.incidentId}</td>
+                      )}
                       <td className={cn("px-3 py-2 text-xs font-medium", statusClass(it.status))}>{it.status || "—"}</td>
                       <td className="px-3 py-2 text-xs">
                         {ultima ? (

@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSessionFromRequest } from "@/lib/auth-session";
-import { canVerCaseSanJuan, canEditarEstatusCase } from "@/lib/permissions";
+import { canVerCaseSanJuan, canEditarEstatusCase, isRolCase } from "@/lib/permissions";
 import { db } from "@/lib/db";
 
 export const dynamic = "force-dynamic";
@@ -76,7 +76,12 @@ export async function GET(req: NextRequest) {
       })
       .sort((a, b) => a.openTime.getTime() - b.openTime.getTime());
 
-    return NextResponse.json({ items, puedeEditar: canEditarEstatusCase(session.role) });
+    // El rol CASE no tiene acceso a HPSM: su vista no liga el IM a HPSM.
+    return NextResponse.json({
+      items,
+      puedeEditar: canEditarEstatusCase(session.role),
+      abreHpsm: !isRolCase(session.role),
+    });
   } catch (err) {
     console.error("[GET /api/case-san-juan]", err);
     return NextResponse.json({ error: "Error al leer CASE San Juan" }, { status: 500 });

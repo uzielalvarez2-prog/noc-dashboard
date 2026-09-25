@@ -73,9 +73,9 @@ export function canVerCaseSanJuan(role: string | undefined): boolean {
   return role === "ADMIN" || role === "CASE";
 }
 
-/** Agregar notas a la bitácora "Estatus CASE". Los demás roles solo leen y copian. */
+/** Agregar notas a la bitácora "Estatus CASE" — todos los roles (CASE y usuarios NOC). */
 export function canEditarEstatusCase(role: string | undefined): boolean {
-  return role === "ADMIN" || role === "CASE";
+  return role === "ADMIN" || role === "SUPERVISOR" || role === "IDS" || role === "CASE";
 }
 
 /** Rol encerrado en /case-san-juan: el proxy le bloquea cualquier otra ruta. */
