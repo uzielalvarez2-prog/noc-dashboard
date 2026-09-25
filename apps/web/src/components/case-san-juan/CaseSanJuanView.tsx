@@ -2,7 +2,7 @@
 
 import { Fragment, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { ChevronDown, ChevronRight, Search } from "lucide-react";
+import { ArrowDown, ArrowUp, ArrowUpDown, ChevronDown, ChevronRight, Search } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { HpsmIncidentId } from "@/components/shared/HpsmIncidentId";
 import { CaseNotasPanel, formatNotaFecha, type CaseNota } from "@/components/case-san-juan/CaseNotasPanel";
@@ -46,6 +46,9 @@ function statusClass(status: string): string {
 export function CaseSanJuanView() {
   const [q, setQ] = useState("");
   const [abierto, setAbierto] = useState<string | null>(null);
+  // Orden por Estatus: clic en el encabezado cicla A→Z, Z→A y sin orden
+  // (sin orden = por apertura, más viejo primero, como llega de la API).
+  const [ordenEstatus, setOrdenEstatus] = useState<"asc" | "desc" | null>(null);
 
   const { data, isLoading, error, refetch } = useQuery({
     queryKey: ["case-san-juan"],
@@ -59,14 +62,23 @@ export function CaseSanJuanView() {
 
   const filtrados = useMemo(() => {
     const needle = q.trim().toLowerCase();
-    if (!needle) return items;
-    return items.filter((it) =>
-      [it.vendorTicket, it.company, it.serviceId, it.siteName, it.incidentId, it.status]
-        .join(" ")
-        .toLowerCase()
-        .includes(needle)
-    );
-  }, [items, q]);
+    const lista = needle
+      ? items.filter((it) =>
+          [it.vendorTicket, it.company, it.serviceId, it.siteName, it.incidentId, it.status]
+            .join(" ")
+            .toLowerCase()
+            .includes(needle)
+        )
+      : items;
+    if (!ordenEstatus) return lista;
+    const dir = ordenEstatus === "asc" ? 1 : -1;
+    // sort estable: dentro del mismo estatus se conserva el orden por apertura.
+    return [...lista].sort((a, b) => dir * (a.status ?? "").localeCompare(b.status ?? "", "es"));
+  }, [items, q, ordenEstatus]);
+
+  function ciclarOrdenEstatus() {
+    setOrdenEstatus((o) => (o === null ? "asc" : o === "asc" ? "desc" : null));
+  }
 
   return (
     <div className="space-y-4">
@@ -94,7 +106,28 @@ export function CaseSanJuanView() {
                   key={i}
                   className="border-b border-border/60 px-3 py-2 text-left text-xs font-medium uppercase tracking-wider text-text-muted"
                 >
-                  {h}
+                  {h === "Estatus" ? (
+                    <button
+                      type="button"
+                      onClick={ciclarOrdenEstatus}
+                      title="Ordenar por estatus (A→Z, Z→A, sin orden)"
+                      className={cn(
+                        "flex items-center gap-1 uppercase tracking-wider transition-colors hover:text-text-primary",
+                        ordenEstatus && "text-accent"
+                      )}
+                    >
+                      {h}
+                      {ordenEstatus === "asc" ? (
+                        <ArrowUp className="h-3 w-3" />
+                      ) : ordenEstatus === "desc" ? (
+                        <ArrowDown className="h-3 w-3" />
+                      ) : (
+                        <ArrowUpDown className="h-3 w-3" />
+                      )}
+                    </button>
+                  ) : (
+                    h
+                  )}
                 </th>
               ))}
             </tr>
