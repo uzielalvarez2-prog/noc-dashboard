@@ -1,6 +1,6 @@
 export type Severity = "CRITICAL" | "HIGH" | "MEDIUM" | "LOW";
 export type IncidentStatus = "OPEN" | "IN_PROGRESS" | "RESOLVED" | "CLOSED";
-export type UserRole = "IDS" | "SUPERVISOR" | "ADMIN";
+export type UserRole = "IDS" | "SUPERVISOR" | "ADMIN" | "CASE";
 export type AlertTrigger =
   | "SLA_RISK"
   | "SLA_BREACHED"

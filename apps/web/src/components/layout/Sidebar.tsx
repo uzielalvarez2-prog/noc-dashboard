@@ -4,7 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
 import { cn } from "@/lib/utils";
-import { canAccessSettings, canAccessMonitoring, canConsultarEstatusIm } from "@/lib/permissions";
+import { canAccessSettings, canAccessMonitoring, canConsultarEstatusIm, canVerCaseSanJuan, isRolCase } from "@/lib/permissions";
 import {
   LayoutDashboard,
   AlertTriangle,
@@ -20,6 +20,7 @@ import {
   MessageCircle,
   Radar,
   ListChecks,
+  NotebookPen,
 } from "lucide-react";
 import { useTheme } from "@/components/layout/ThemeProvider";
 
@@ -33,6 +34,7 @@ const NAV_ITEMS = [
   { href: "/import", label: "Importar CSV", icon: Upload },
   { href: "/monitoreo-ip", label: "Monitoreo IP", icon: Radar, monitoringOnly: true },
   { href: "/estatus-im", label: "Estatus IMs", icon: ListChecks, imEstatusOnly: true },
+  { href: "/case-san-juan", label: "Case San Juan", icon: NotebookPen, caseSanJuanOnly: true },
   { href: "/settings", label: "Configuración", icon: Settings, settingsOnly: true },
 ];
 
@@ -53,8 +55,11 @@ export function Sidebar({ collapsed, onToggle }: SidebarProps) {
       .catch(() => {});
   }, []);
 
+  // El rol CASE solo ve su página; el resto, según permisos.
   const items = NAV_ITEMS.filter(
     (item) =>
+      (!isRolCase(role) || item.href === "/case-san-juan") &&
+      (!("caseSanJuanOnly" in item) || !item.caseSanJuanOnly || canVerCaseSanJuan(role)) &&
       (!item.settingsOnly || canAccessSettings(role)) &&
       (!("monitoringOnly" in item) || !item.monitoringOnly || canAccessMonitoring(role)) &&
       (!("imEstatusOnly" in item) || !item.imEstatusOnly || canConsultarEstatusIm(role))

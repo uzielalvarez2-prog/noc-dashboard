@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSessionFromCookie, COOKIE_NAME } from "@/lib/session";
-import { canAccessSettings } from "@/lib/permissions";
+import { canAccessSettings, isRolCase } from "@/lib/permissions";
 
 const PUBLIC_PATHS = [
   "/login",
@@ -33,6 +33,16 @@ export function proxy(request: NextRequest) {
     const loginUrl = new URL("/login", request.url);
     loginUrl.searchParams.set("callbackUrl", pathname);
     return NextResponse.redirect(loginUrl);
+  }
+
+  // Rol CASE: solo su página y su API; cualquier otra ruta lo regresa ahí.
+  if (isRolCase(session.role)) {
+    const permitido = pathname.startsWith("/case-san-juan") || pathname.startsWith("/api/case-san-juan");
+    if (permitido) return NextResponse.next();
+    if (pathname.startsWith("/api/")) {
+      return NextResponse.json({ error: "Sin permiso" }, { status: 403 });
+    }
+    return NextResponse.redirect(new URL("/case-san-juan", request.url));
   }
 
   // Configuración (página, usuarios y alertas) — solo ADMIN y SUPERVISOR

@@ -4,14 +4,17 @@
 //               dashboard e importa CSV de HPSM. NO ve Configuración.
 //  SUPERVISOR — todo lo de IDS + Configuración (alta de usuarios y reglas de alerta).
 //  ADMIN      — acceso total. Rol protegido: siempre debe existir al menos uno.
-export type Role = "IDS" | "SUPERVISOR" | "ADMIN";
+//  CASE       — personal del CASE San Juan: SOLO ve /case-san-juan y agrega
+//               notas "Estatus CASE". El proxy lo encierra en esa página.
+export type Role = "IDS" | "SUPERVISOR" | "ADMIN" | "CASE";
 
-export const ROLES: Role[] = ["IDS", "SUPERVISOR", "ADMIN"];
+export const ROLES: Role[] = ["IDS", "SUPERVISOR", "ADMIN", "CASE"];
 
 export const ROLE_LABELS: Record<Role, string> = {
   IDS: "IDS",
   SUPERVISOR: "Supervisor",
   ADMIN: "Administrador",
+  CASE: "CASE San Juan",
 };
 
 /** Acceso a Configuración (botón, página /settings, gestión de usuarios y alertas). */
@@ -59,6 +62,25 @@ export function canManageAgentContacts(role: string | undefined): boolean {
  */
 export function canConsultarEstatusIm(role: string | undefined): boolean {
   return role === "ADMIN";
+}
+
+/**
+ * Vista /case-san-juan (incidentes SISA del CASE SAN JUAN + bitácora "Estatus CASE").
+ * EN PRUEBAS: solo ADMIN (y el rol CASE, que aún no tiene usuarios). Al aprobarse
+ * se abre a IDS y SUPERVISOR en solo lectura.
+ */
+export function canVerCaseSanJuan(role: string | undefined): boolean {
+  return role === "ADMIN" || role === "CASE";
+}
+
+/** Agregar notas a la bitácora "Estatus CASE". Los demás roles solo leen y copian. */
+export function canEditarEstatusCase(role: string | undefined): boolean {
+  return role === "ADMIN" || role === "CASE";
+}
+
+/** Rol encerrado en /case-san-juan: el proxy le bloquea cualquier otra ruta. */
+export function isRolCase(role: string | undefined): boolean {
+  return role === "CASE";
 }
 
 export function isValidRole(role: string): role is Role {
