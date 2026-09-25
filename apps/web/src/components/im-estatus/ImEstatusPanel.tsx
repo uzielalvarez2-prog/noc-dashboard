@@ -160,6 +160,7 @@ export function ImEstatusPanel() {
           </div>
         )}
         {resultados.length > 0 && (
+          <div className="max-h-[32rem] overflow-y-auto rounded-md border border-border px-3 [&_tr:first-child]:border-t-0">
           <table className="w-full text-xs">
             <tbody>
               {resultados.map((r) => (
@@ -170,6 +171,7 @@ export function ImEstatusPanel() {
               ))}
             </tbody>
           </table>
+          </div>
         )}
       </section>
 
@@ -181,7 +183,7 @@ export function ImEstatusPanel() {
             {copiado ? "Copiado" : "Copiar"}
           </Button>
         </div>
-        <pre className="min-h-64 flex-1 overflow-auto whitespace-pre-wrap rounded-md border border-border bg-background p-3 font-mono text-xs text-text-primary">
+        <pre className="max-h-[32rem] min-h-64 flex-1 overflow-auto whitespace-pre-wrap rounded-md border border-border bg-background p-3 font-mono text-xs text-text-primary">
           {salida || "Aquí aparece el resultado conforme se consulta cada IM."}
         </pre>
         <p className="text-xs text-text-muted">
