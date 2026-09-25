@@ -60,7 +60,9 @@ export async function GET(req: NextRequest) {
     }
 
     const items = tickets
-      .filter((t) => openById.has(t.incidentId))
+      // Solo servicios numéricos (IDN, ej. 5521242661): los que empiezan con
+      // letra (C00-…, A02-…) no los atiende el CASE San Juan.
+      .filter((t) => /^\d/.test((openById.get(t.incidentId)?.serviceId ?? "").trim()))
       .map((t) => {
         const o = openById.get(t.incidentId)!;
         return {
