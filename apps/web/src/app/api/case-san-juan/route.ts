@@ -11,7 +11,7 @@ const MAX_NOTA = 4000;
 
 // Incidentes SISA del CASE SAN JUAN que siguen abiertos, con su bitácora
 // "Estatus CASE". Mismo cruce que /api/sisa: el ticket aporta CASE y folio SISA;
-// Abiertos aporta empresa, servicio, distrito, sitio y estatus HPSM.
+// Abiertos aporta empresa, servicio, sitio y estatus HPSM.
 export async function GET(req: NextRequest) {
   const session = getSessionFromRequest(req);
   if (!session) return NextResponse.json({ error: "No autorizado" }, { status: 401 });
@@ -37,7 +37,6 @@ export async function GET(req: NextRequest) {
           status: true,
           company: true,
           serviceId: true,
-          district: true,
           siteName: true,
         },
       }),
@@ -69,7 +68,6 @@ export async function GET(req: NextRequest) {
           openTime: o.openTime,
           company: o.company,
           serviceId: o.serviceId,
-          district: o.district,
           siteName: o.siteName,
           vendorTicket: t.vendorTicket,
           status: o.status,

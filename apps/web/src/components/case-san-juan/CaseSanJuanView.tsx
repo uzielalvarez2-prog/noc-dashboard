@@ -12,7 +12,6 @@ interface CaseItem {
   openTime: string;
   company: string;
   serviceId: string;
-  district: string;
   siteName: string;
   vendorTicket: string;
   status: string;
@@ -31,7 +30,7 @@ async function fetchCase(): Promise<CaseResponse> {
   return { items: body.items ?? [], puedeEditar: body.puedeEditar ?? false };
 }
 
-const COLUMNS = ["", "Incidente", "Empresa", "Servicio", "Distrito", "Sitio", "SISA", "Estatus", "Estatus CASE"];
+const COLUMNS = ["", "Incidente", "Empresa", "Servicio", "Sitio", "SISA", "Estatus", "Estatus CASE"];
 
 // Mismo código de color que la vista SISA: vendor rojo · resolved verde ·
 // customer azul · resto ámbar.
@@ -60,7 +59,7 @@ export function CaseSanJuanView() {
     const needle = q.trim().toLowerCase();
     if (!needle) return items;
     return items.filter((it) =>
-      [it.incidentId, it.company, it.serviceId, it.district, it.siteName, it.vendorTicket, it.status]
+      [it.incidentId, it.company, it.serviceId, it.siteName, it.vendorTicket, it.status]
         .join(" ")
         .toLowerCase()
         .includes(needle)
@@ -134,9 +133,6 @@ export function CaseSanJuanView() {
                       </td>
                       <td className="px-3 py-2 font-mono text-xs text-text-muted">
                         <span className="block max-w-[11rem] truncate" title={it.serviceId}>{it.serviceId || "—"}</span>
-                      </td>
-                      <td className="px-3 py-2 text-xs text-text-primary">
-                        <span className="block max-w-[10rem] truncate" title={it.district}>{it.district || "—"}</span>
                       </td>
                       <td className="px-3 py-2 text-xs text-text-primary">
                         <span className="block max-w-[12rem] truncate" title={it.siteName}>{it.siteName || "—"}</span>
