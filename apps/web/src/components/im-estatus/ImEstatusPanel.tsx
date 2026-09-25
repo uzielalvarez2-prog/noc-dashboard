@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Check, Copy, Loader2, Search } from "lucide-react";
+import { Check, Copy, Eraser, Loader2, Search } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   extraerIms,
@@ -46,6 +46,9 @@ export function ImEstatusPanel() {
   const [enviando, setEnviando] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [copiado, setCopiado] = useState(false);
+  const [copiadoTabla, setCopiadoTabla] = useState(false);
+  // "Limpiar" solo oculta en pantalla: los resultados siguen en el worker hasta la próxima consulta.
+  const [limpio, setLimpio] = useState(false);
 
   const { data, error: errorProgreso } = useQuery({
     queryKey: ["im-estatus"],
@@ -55,12 +58,13 @@ export function ImEstatusPanel() {
 
   const ims = extraerIms(texto);
   const progreso = data?.progreso;
-  const resultados = data?.resultados ?? [];
+  const resultados = limpio ? [] : (data?.resultados ?? []);
   const enCurso = progreso ? EN_CURSO.includes(progreso.estado) : false;
   const salida = textoWhatsapp(resultados);
 
   async function consultar() {
     setError(null);
+    setLimpio(false);
     setEnviando(true);
     try {
       const res = await fetch("/api/im-estatus", {
@@ -91,6 +95,22 @@ export function ImEstatusPanel() {
     }
   }
 
+  async function copiarTabla() {
+    try {
+      await navigator.clipboard.writeText(resultados.map((r) => `${r.im}\t${estatusLabel(r)}`).join("\n"));
+      setCopiadoTabla(true);
+      setTimeout(() => setCopiadoTabla(false), 1500);
+    } catch {
+      /* clipboard no disponible (contexto inseguro) */
+    }
+  }
+
+  function limpiar() {
+    setTexto("");
+    setError(null);
+    setLimpio(true);
+  }
+
   return (
     <div className="grid gap-6 lg:grid-cols-2">
       <section className="space-y-3 rounded-lg border border-border bg-surface p-4">
@@ -119,7 +139,7 @@ export function ImEstatusPanel() {
         </div>
         {error && <p className="text-xs text-critical">{error}</p>}
         {errorProgreso && <p className="text-xs text-critical">{(errorProgreso as Error).message}</p>}
-        {progreso && progreso.estado !== "inactivo" && (
+        {progreso && progreso.estado !== "inactivo" && !limpio && (
           <p className="text-xs text-text-muted">
             {progreso.estado === "en_cola" && "En cola: esperando a que el scraper termine su corrida de HPSM…"}
             {progreso.estado === "consultando" && `Consultando… ${resultados.length} de ${progreso.total}`}
@@ -127,6 +147,18 @@ export function ImEstatusPanel() {
           </p>
         )}
 
+        {resultados.length > 0 && (
+          <div className="flex items-center justify-end gap-2">
+            <Button variant="outline" size="sm" onClick={limpiar} disabled={enCurso}>
+              <Eraser />
+              Limpiar
+            </Button>
+            <Button variant="outline" size="sm" onClick={copiarTabla}>
+              {copiadoTabla ? <Check /> : <Copy />}
+              {copiadoTabla ? "Copiado" : "Copiar"}
+            </Button>
+          </div>
+        )}
         {resultados.length > 0 && (
           <table className="w-full text-xs">
             <tbody>
