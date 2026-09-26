@@ -470,7 +470,21 @@ export async function sendToGroup(
   let finalText = text;
   let finalMentions = mentions;
 
-  if (miembros !== null) {
+  // "@all"/"@todos" en el texto: se menciona a todos los miembros. Sus números NO
+  // van en el texto (serían decenas de líneas); WhatsApp notifica igual a cada JID
+  // del arreglo `mentions` aunque no aparezca escrito.
+  const mencionaTodos = /(^|\s)@(all|todos)\b/i.test(text);
+  if (mencionaTodos) {
+    if (miembros !== null) {
+      const propio = client.info?.wid?._serialized;
+      const todos = [...miembros].filter((jid) => jid !== propio);
+      finalMentions = [...new Set([...mentions, ...todos])];
+    } else {
+      logger.warn("@all sin efecto: no se pudieron leer los miembros del grupo", { chatId });
+    }
+  }
+
+  if (miembros !== null && !mencionaTodos) {
     finalMentions = mentions.filter((jid) => miembros.has(jid));
     for (const jid of mentions) {
       if (!miembros.has(jid)) {
@@ -499,7 +513,8 @@ export async function sendToGroup(
     chatId,
     chars: finalText.length,
     menciones: finalMentions.length,
-    mencionesOmitidas: mentions.length - finalMentions.length,
+    mencionesOmitidas: Math.max(0, mentions.length - finalMentions.length),
+    mencionaTodos,
     validado: destino.estado === "existe",
   });
 }
