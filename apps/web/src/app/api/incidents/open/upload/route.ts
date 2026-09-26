@@ -12,6 +12,7 @@ import {
 import { syncWarRoom } from "@/lib/war-room";
 import { syncContratoMarco } from "@/lib/contrato-marco";
 import { syncAperturaNotify } from "@/lib/apertura-incidente";
+import { syncPosibleBajaNotify } from "@/lib/posible-baja";
 
 // Carga del CSV de incidentes ABIERTOS.
 // El archivo trae todos los grupos; filtramos a PEXA/CECOR, quitamos duplicados
@@ -155,6 +156,13 @@ export async function POST(req: NextRequest) {
       await syncAperturaNotify(records);
     } catch (e) {
       console.error("[open/upload] syncAperturaNotify falló (no crítico):", e);
+    }
+
+    // Posible baja: Servicio marcado a mano por el ADMIN → WhatsApp a los grupos elegidos.
+    try {
+      await syncPosibleBajaNotify(records);
+    } catch (e) {
+      console.error("[open/upload] syncPosibleBajaNotify falló (no crítico):", e);
     }
 
     await db.auditLog

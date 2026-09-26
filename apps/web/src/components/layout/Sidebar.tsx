@@ -21,6 +21,7 @@ import {
   Radar,
   ListChecks,
   NotebookPen,
+  AlertOctagon,
 } from "lucide-react";
 import { useTheme } from "@/components/layout/ThemeProvider";
 
@@ -33,6 +34,7 @@ const NAV_ITEMS = [
   { href: "/whatsapp", label: "Enviar WhatsApp", icon: MessageCircle },
   { href: "/import", label: "Importar CSV", icon: Upload },
   { href: "/monitoreo-ip", label: "Monitoreo IP", icon: Radar, monitoringOnly: true },
+  { href: "/servicios-vigilados", label: "Servicios en posible baja", icon: AlertOctagon, monitoringOnly: true },
   { href: "/estatus-im", label: "Estatus IMs", icon: ListChecks, imEstatusOnly: true },
   { href: "/case-san-juan", label: "Case San Juan", icon: NotebookPen, caseSanJuanOnly: true },
   { href: "/settings", label: "Configuración", icon: Settings, settingsOnly: true },

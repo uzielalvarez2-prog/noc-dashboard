@@ -1,9 +1,14 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Send, Loader2, CheckCircle2, AlertCircle, Trash2, Settings2, X } from "lucide-react";
+import { Send, Loader2, CheckCircle2, AlertCircle, Trash2, Settings2, X, Search, ChevronDown } from "lucide-react";
 import { Button } from "@/components/ui/button";
+
+/** Normaliza para buscar sin acentos ni mayúsculas: "supervisión" encuentra "SUPERVISION". */
+function norm(s: string): string {
+  return s.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase();
+}
 
 interface Group {
   id: string;
@@ -98,17 +103,7 @@ export function WhatsappSendPanel() {
               y recarga en unos segundos.
             </p>
           ) : (
-            <select
-              value={chatId}
-              onChange={(e) => setChatId(e.target.value)}
-              className={inputCls}
-            >
-              {groups.map((g) => (
-                <option key={g.chatId} value={g.chatId}>
-                  {g.name || g.chatId}
-                </option>
-              ))}
-            </select>
+            <GroupCombobox groups={groups} value={chatId} onChange={setChatId} />
           )}
         </div>
 
@@ -170,6 +165,91 @@ export function WhatsappSendPanel() {
           onClose={() => setAdminOpen(false)}
           onChanged={() => qc.invalidateQueries({ queryKey: ["whatsapp-groups"] })}
         />
+      )}
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Selector de grupo con buscador. Antes era un <select> plano con ~90
+// opciones — el usuario tenía que usar Ctrl+F del navegador para encontrar un
+// grupo. Ahora un input filtra la lista en vivo (por nombre, sin acentos).
+// ─────────────────────────────────────────────────────────────────────────────
+function GroupCombobox({
+  groups,
+  value,
+  onChange,
+}: {
+  groups: Group[];
+  value: string;
+  onChange: (chatId: string) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [query, setQuery] = useState("");
+
+  const selected = groups.find((g) => g.chatId === value);
+
+  const results = useMemo(() => {
+    const q = norm(query.trim());
+    const sorted = [...groups].sort((a, b) => (a.name || a.chatId).localeCompare(b.name || b.chatId, "es"));
+    if (!q) return sorted;
+    return sorted.filter((g) => norm(g.name || g.chatId).includes(q));
+  }, [groups, query]);
+
+  function pick(chatId: string) {
+    onChange(chatId);
+    setOpen(false);
+    setQuery("");
+  }
+
+  return (
+    <div className="relative">
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        className="flex w-full items-center justify-between rounded-md border border-border bg-surface px-3 py-2 text-left text-sm text-text-primary focus:border-accent focus:outline-none"
+      >
+        <span className="truncate">{selected?.name || selected?.chatId || "Selecciona un grupo…"}</span>
+        <ChevronDown className="h-4 w-4 shrink-0 text-text-muted" />
+      </button>
+
+      {open && (
+        <>
+          {/* Overlay para cerrar al hacer clic fuera. */}
+          <div className="fixed inset-0 z-10" onClick={() => setOpen(false)} />
+          <div className="absolute z-20 mt-1 w-full overflow-hidden rounded-md border border-border bg-surface shadow-lg">
+            <div className="relative border-b border-border">
+              <Search className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-text-muted" />
+              <input
+                autoFocus
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                placeholder="Buscar grupo…"
+                className="w-full bg-transparent py-2 pl-8 pr-3 text-sm text-text-primary placeholder:text-text-muted/60 focus:outline-none"
+              />
+            </div>
+            <div className="max-h-64 overflow-y-auto">
+              {results.length === 0 ? (
+                <p className="px-3 py-3 text-sm text-text-muted">Sin coincidencias para "{query}"</p>
+              ) : (
+                results.map((g) => (
+                  <button
+                    key={g.chatId}
+                    type="button"
+                    onClick={() => pick(g.chatId)}
+                    className={`block w-full truncate px-3 py-2 text-left text-sm transition-colors ${
+                      g.chatId === value
+                        ? "bg-accent/10 text-accent"
+                        : "text-text-primary hover:bg-surface-elevated"
+                    }`}
+                  >
+                    {g.name || g.chatId}
+                  </button>
+                ))
+              )}
+            </div>
+          </div>
+        </>
       )}
     </div>
   );

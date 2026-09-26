@@ -378,6 +378,40 @@ model AperturaNotificada {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// WHATSAPP — SERVICIOS EN POSIBLE BAJA: catálogo ADMIN-only de números de
+// Servicio (REF completo, ej. "C20-2210-0003") que el usuario ya identificó
+// como probablemente dados de baja en HPSM (aunque la base aún no lo refleje).
+// Si ese Servicio EXACTO vuelve a aparecer en una carga futura de Incidentes
+// Abiertos, se manda WhatsApp a los grupos elegidos con la nota capturada aquí.
+// ─────────────────────────────────────────────────────────────────────────────
+model WatchedServiceFlag {
+  id            String   @id @default(cuid())
+  serviceRef    String   @unique // REF completo del Servicio, ej. "C20-2210-0003"
+  note          String   @default("") // reemplaza el texto genérico "*REVISAR PREVIOS, Posible baja*" cuando no está vacía
+  notifyChatIds String[] @default([]) // WhatsappGroup.chatId destino(s), elegidos al marcar
+  enabled       Boolean  @default(true)
+  createdBy     String   @default("")
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@index([enabled])
+}
+
+// Control de "ya avisé este incidente" para la alerta de posible baja — mismo
+// patrón que AperturaNotificada: OpenIncident es un snapshot recargado
+// completo cada ~5 min, así que "nuevo" = primera vez que el incidentId
+// aparece aquí. Evita reavisar en cada carga mientras el incidente sigue vivo.
+model PosibleBajaNotificada {
+  id         String   @id @default(cuid())
+  incidentId String   @unique
+  serviceRef String
+  notifiedAt DateTime @default(now())
+  chatId     String   @default("") // primer chatId enviado, informativo (puede haber varios)
+  ok         Boolean  @default(false)
+  error      String?
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // WHATSAPP — MENSAJES ENVIADOS: bitácora de lo que se manda desde el dashboard
 // (quién, a qué grupo, qué texto, si salió bien). Bajo volumen. Complementa el
 // AuditLog: aquí queda el texto completo para trazabilidad operativa.
