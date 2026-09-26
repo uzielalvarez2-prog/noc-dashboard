@@ -2,8 +2,22 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Send, Loader2, CheckCircle2, AlertCircle, Trash2, Settings2, X, Search, ChevronDown } from "lucide-react";
+import {
+  Send,
+  Loader2,
+  CheckCircle2,
+  AlertCircle,
+  Trash2,
+  Settings2,
+  X,
+  Search,
+  ChevronDown,
+  CalendarClock,
+  Ban,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { GroupPicker } from "@/components/monitoring/GroupPicker";
+import { canAccessMonitoring } from "@/lib/permissions";
 
 /** Normaliza para buscar sin acentos ni mayúsculas: "supervisión" encuentra "SUPERVISION". */
 function norm(s: string): string {
@@ -28,10 +42,15 @@ async function fetchGroups(all: boolean): Promise<{ groups: Group[] }> {
 export function WhatsappSendPanel() {
   const qc = useQueryClient();
   const [isAdmin, setIsAdmin] = useState(false);
+  // Programar recordatorios es ADMIN estricto (Supervisor no).
+  const [canSchedule, setCanSchedule] = useState(false);
   useEffect(() => {
     fetch("/api/auth/me")
       .then((r) => r.json())
-      .then((d) => setIsAdmin(d.role === "ADMIN" || d.role === "SUPERVISOR"))
+      .then((d) => {
+        setIsAdmin(d.role === "ADMIN" || d.role === "SUPERVISOR");
+        setCanSchedule(canAccessMonitoring(d.role));
+      })
       .catch(() => {});
   }, []);
 
@@ -47,6 +66,12 @@ export function WhatsappSendPanel() {
   const [sending, setSending] = useState(false);
   const [feedback, setFeedback] = useState<{ ok: boolean; msg: string } | null>(null);
   const [adminOpen, setAdminOpen] = useState(false);
+
+  // Modo "Programar": permite elegir varios grupos y una fecha/hora futura en
+  // vez de mandar de inmediato a un solo grupo.
+  const [scheduling, setScheduling] = useState(false);
+  const [scheduleChatIds, setScheduleChatIds] = useState<string[]>([]);
+  const [scheduleAt, setScheduleAt] = useState("");
 
   // Pre-selecciona el primer grupo cuando cargan.
   useEffect(() => {
@@ -85,15 +110,94 @@ export function WhatsappSendPanel() {
     }
   }
 
+  async function schedule() {
+    if (scheduleChatIds.length === 0) {
+      setFeedback({ ok: false, msg: "Elige al menos un grupo" });
+      return;
+    }
+    if (!text.trim()) {
+      setFeedback({ ok: false, msg: "El mensaje está vacío" });
+      return;
+    }
+    if (!scheduleAt) {
+      setFeedback({ ok: false, msg: "Elige fecha y hora" });
+      return;
+    }
+    setSending(true);
+    setFeedback(null);
+    try {
+      const res = await fetch("/api/scheduled-whatsapp", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          text,
+          notifyChatIds: scheduleChatIds,
+          sendAt: new Date(scheduleAt).toISOString(),
+        }),
+      });
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setFeedback({ ok: false, msg: body.error ?? "No se pudo programar" });
+        return;
+      }
+      setFeedback({ ok: true, msg: "Recordatorio programado" });
+      setText("");
+      setScheduleChatIds([]);
+      setScheduleAt("");
+      qc.invalidateQueries({ queryKey: ["scheduled-whatsapp"] });
+    } catch {
+      setFeedback({ ok: false, msg: "Error de conexión" });
+    } finally {
+      setSending(false);
+    }
+  }
+
+  // Mínimo seleccionable: ahora + 1 min, en horario local del navegador, en el
+  // formato que exige <input type="datetime-local"> (sin segundos ni zona).
+  const minDateTimeLocal = useMemo(() => {
+    const d = new Date(Date.now() + 60_000);
+    d.setSeconds(0, 0);
+    const pad = (n: number) => String(n).padStart(2, "0");
+    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  }, []);
+
   const inputCls =
     "w-full rounded-md border border-border bg-surface px-3 py-2 text-sm text-text-primary placeholder:text-text-muted/60 focus:border-accent focus:outline-none";
 
   return (
     <div className="max-w-2xl space-y-4">
       <div className="space-y-4 rounded-xl border border-border bg-surface p-5">
+        {/* Toggle envío inmediato / programado */}
+        {canSchedule && (
+        <div className="flex gap-1.5 rounded-md border border-border bg-surface-elevated p-1">
+          <button
+            type="button"
+            onClick={() => setScheduling(false)}
+            className={`flex-1 rounded px-3 py-1.5 text-xs font-medium transition-colors ${
+              !scheduling ? "bg-accent text-white" : "text-text-muted hover:text-text-primary"
+            }`}
+          >
+            Enviar ahora
+          </button>
+          <button
+            type="button"
+            onClick={() => setScheduling(true)}
+            className={`flex-1 rounded px-3 py-1.5 text-xs font-medium transition-colors ${
+              scheduling ? "bg-accent text-white" : "text-text-muted hover:text-text-primary"
+            }`}
+          >
+            <span className="inline-flex items-center gap-1.5">
+              <CalendarClock className="h-3.5 w-3.5" /> Programar
+            </span>
+          </button>
+        </div>
+        )}
+
         {/* Grupo */}
         <div>
-          <label className="mb-1 block text-xs font-medium text-text-muted">Grupo destino</label>
+          <label className="mb-1 block text-xs font-medium text-text-muted">
+            {scheduling ? "Grupo(s) destino" : "Grupo destino"}
+          </label>
           {isLoading ? (
             <p className="text-sm text-text-muted">Cargando grupos…</p>
           ) : groups.length === 0 ? (
@@ -102,10 +206,26 @@ export function WhatsappSendPanel() {
               un mensaje a ellos por el WhatsApp de la empresa. Manda algo a un grupo
               y recarga en unos segundos.
             </p>
+          ) : scheduling ? (
+            <GroupPicker value={scheduleChatIds} onChange={setScheduleChatIds} groups={groups} />
           ) : (
             <GroupCombobox groups={groups} value={chatId} onChange={setChatId} />
           )}
         </div>
+
+        {/* Fecha/hora (solo modo programado) */}
+        {scheduling && (
+          <div>
+            <label className="mb-1 block text-xs font-medium text-text-muted">Enviar el</label>
+            <input
+              type="datetime-local"
+              value={scheduleAt}
+              min={minDateTimeLocal}
+              onChange={(e) => setScheduleAt(e.target.value)}
+              className={inputCls}
+            />
+          </div>
+        )}
 
         {/* Mensaje */}
         <div>
@@ -149,14 +269,25 @@ export function WhatsappSendPanel() {
           ) : (
             <span />
           )}
-          <Button
-            onClick={send}
-            disabled={sending || groups.length === 0}
-            className="gap-1.5 bg-accent text-white hover:bg-accent/90"
-          >
-            {sending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
-            Enviar
-          </Button>
+          {scheduling ? (
+            <Button
+              onClick={schedule}
+              disabled={sending || groups.length === 0}
+              className="gap-1.5 bg-accent text-white hover:bg-accent/90"
+            >
+              {sending ? <Loader2 className="h-4 w-4 animate-spin" /> : <CalendarClock className="h-4 w-4" />}
+              Programar
+            </Button>
+          ) : (
+            <Button
+              onClick={send}
+              disabled={sending || groups.length === 0}
+              className="gap-1.5 bg-accent text-white hover:bg-accent/90"
+            >
+              {sending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
+              Enviar
+            </Button>
+          )}
         </div>
       </div>
 
@@ -166,6 +297,121 @@ export function WhatsappSendPanel() {
           onChanged={() => qc.invalidateQueries({ queryKey: ["whatsapp-groups"] })}
         />
       )}
+
+      {canSchedule && <ScheduledWhatsappList groups={groups} />}
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Lista de recordatorios programados: pendientes primero (con botón cancelar),
+// luego los ya procesados (enviado/error/cancelado) como historial reciente.
+// ─────────────────────────────────────────────────────────────────────────────
+interface ScheduledItem {
+  id: string;
+  text: string;
+  notifyChatIds: string[];
+  sendAt: string;
+  sentAt: string | null;
+  ok: boolean;
+  error: string | null;
+  cancelledAt: string | null;
+  createdByName: string;
+}
+
+async function fetchScheduled(): Promise<{ items: ScheduledItem[] }> {
+  const res = await fetch("/api/scheduled-whatsapp");
+  if (!res.ok) throw new Error("Error al cargar recordatorios");
+  return res.json();
+}
+
+function groupNames(chatIds: string[], groups: Group[]): string {
+  if (chatIds.length === 0) return "—";
+  return chatIds.map((id) => groups.find((g) => g.chatId === id)?.name ?? id).join(", ");
+}
+
+function ScheduledWhatsappList({ groups }: { groups: Group[] }) {
+  const qc = useQueryClient();
+  const { data, isLoading } = useQuery({
+    queryKey: ["scheduled-whatsapp"],
+    queryFn: fetchScheduled,
+    refetchInterval: 30_000,
+  });
+  const [busyId, setBusyId] = useState<string | null>(null);
+  const items = data?.items ?? [];
+
+  async function cancel(id: string) {
+    setBusyId(id);
+    try {
+      await fetch(`/api/scheduled-whatsapp/${id}`, { method: "DELETE" });
+      qc.invalidateQueries({ queryKey: ["scheduled-whatsapp"] });
+    } finally {
+      setBusyId(null);
+    }
+  }
+
+  if (isLoading || items.length === 0) return null;
+
+  const pending = items.filter((i) => !i.sentAt && !i.cancelledAt);
+  const done = items.filter((i) => i.sentAt || i.cancelledAt).slice(0, 20);
+
+  function StatusBadge({ item }: { item: ScheduledItem }) {
+    if (item.cancelledAt) {
+      return (
+        <span className="flex items-center gap-1 text-text-muted">
+          <Ban className="h-3.5 w-3.5" /> cancelado
+        </span>
+      );
+    }
+    if (item.sentAt) {
+      return item.ok ? (
+        <span className="flex items-center gap-1 text-success">
+          <CheckCircle2 className="h-3.5 w-3.5" /> enviado
+        </span>
+      ) : (
+        <span className="flex items-center gap-1 text-critical" title={item.error ?? undefined}>
+          <AlertCircle className="h-3.5 w-3.5" /> falló
+        </span>
+      );
+    }
+    return (
+      <span className="flex items-center gap-1 text-accent">
+        <CalendarClock className="h-3.5 w-3.5" /> pendiente
+      </span>
+    );
+  }
+
+  return (
+    <div className="space-y-3 rounded-xl border border-border bg-surface p-5">
+      <h2 className="text-sm font-semibold text-text-primary">Recordatorios programados</h2>
+      <ul className="divide-y divide-border/60">
+        {[...pending, ...done].map((item) => (
+          <li key={item.id} className="flex items-start justify-between gap-3 py-2.5">
+            <div className="min-w-0 flex-1">
+              <p className="truncate text-sm text-text-primary" title={item.text}>
+                {item.text}
+              </p>
+              <p className="mt-0.5 text-xs text-text-muted">
+                {new Date(item.sendAt).toLocaleString("es-MX", { dateStyle: "medium", timeStyle: "short" })} ·{" "}
+                {groupNames(item.notifyChatIds, groups)}
+              </p>
+            </div>
+            <div className="flex shrink-0 items-center gap-2 text-xs">
+              <StatusBadge item={item} />
+              {!item.sentAt && !item.cancelledAt && (
+                <button
+                  disabled={busyId === item.id}
+                  onClick={() => cancel(item.id)}
+                  title="Cancelar"
+                  className="rounded p-1 text-text-muted hover:bg-critical-dim hover:text-critical"
+                >
+                  <Trash2 className="h-3.5 w-3.5" />
+                </button>
+              )}
+            </div>
+          </li>
+        ))}
+      </ul>
     </div>
   );
 }

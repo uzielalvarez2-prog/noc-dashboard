@@ -5,6 +5,7 @@ import { syncIncidents, db } from "./sync/incidents.js";
 import { HpsmClient } from "./hpsm/client.js";
 import { isPaused } from "./schedule.js";
 import { runIpMonitoringCycle } from "./monitoring/cycle.js";
+import { runScheduledWhatsappCycle } from "./monitoring/scheduled-whatsapp.js";
 
 const hpsm = new HpsmClient();
 
@@ -60,6 +61,16 @@ async function main(): Promise<void> {
     }
   }, config.monitoring.intervalMs);
 
+  // Ciclo de recordatorios de WhatsApp programados — independiente de isPaused(),
+  // debe seguir funcionando de noche (igual que el monitoreo de IP).
+  const scheduledWhatsappInterval = setInterval(async () => {
+    try {
+      await runScheduledWhatsappCycle();
+    } catch (err) {
+      logger.error("Error en ciclo de WhatsApp programado", { err });
+    }
+  }, config.scheduledWhatsapp.intervalMs);
+
   // Heartbeat cada 60s (Railway monitoring)
   setInterval(() => logger.debug("[heartbeat] worker activo"), 60_000);
 
@@ -68,6 +79,7 @@ async function main(): Promise<void> {
     logger.info(`${signal} recibido — cerrando...`);
     clearInterval(interval);
     clearInterval(monitorInterval);
+    clearInterval(scheduledWhatsappInterval);
     await db.$disconnect();
     process.exit(0);
   };

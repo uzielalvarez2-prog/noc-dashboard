@@ -41,6 +41,11 @@ export const config = {
     // Ventana de "arriba sostenido" antes de alertar UP (ver IpMonitor.upSince).
     sustainedUpMs: Number(process.env.IP_MONITOR_SUSTAINED_UP_MS ?? "60000"),
   },
+  scheduledWhatsapp: {
+    // Ciclo de recordatorios programados: independiente de isPaused(), un
+    // recordatorio de madrugada debe salir aunque Neon esté "dormido" para HPSM.
+    intervalMs: Number(process.env.SCHEDULED_WHATSAPP_INTERVAL_MS ?? "60000"),
+  },
   sshPing: {
     // Los enlaces MPLS/VPN sólo responden desde la red interna: con esto activo
     // el ping sale del jump host en vez de Railway. Ver monitoring/ssh-ping.ts.

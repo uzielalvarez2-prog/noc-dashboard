@@ -431,6 +431,29 @@ model WhatsappSentMessage {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// WHATSAPP — MENSAJES PROGRAMADOS: recordatorio de texto libre que el usuario
+// redacta desde /whatsapp con fecha/hora y grupo(s) destino. El worker (mismo
+// ciclo que ya corre cada 30s para monitoreo de IP) revisa cada minuto los que
+// ya cumplieron su sendAt y los envía. Envío único, sin repetición.
+// ─────────────────────────────────────────────────────────────────────────────
+model ScheduledWhatsappMessage {
+  id            String    @id @default(cuid())
+  text          String
+  notifyChatIds String[]  @default([]) // WhatsappGroup.chatId destino(s)
+  sendAt        DateTime  // momento programado de envío
+  sentAt        DateTime? // se llena cuando el worker lo procesa (éxito o falla)
+  ok            Boolean   @default(false)
+  error         String?
+  cancelledAt   DateTime? // cancelado antes de enviarse — el worker lo ignora
+  createdBy     String    @default("") // userId
+  createdByName String    @default("")
+  createdAt     DateTime  @default(now())
+
+  @@index([sendAt])
+  @@index([sentAt])
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // MONITOREO DE IP — BASE: IPs capturadas a mano por el ADMIN, asociadas a una
 // empresa/servicio. Persiste independientemente de los incidentes (no se borra
 // al cerrarse un IM). Se va construyendo con el tiempo: se captura una vez y el
