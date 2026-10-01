@@ -38,6 +38,10 @@ export interface SisaEdcInput {
   // negrita. Es el del EFA, no el del EMS — se confirmó con folios donde
   // difieren (12614302: EMS=EMA pero EFA=LOC, y LOC es el que aplica).
   estadoEfa?: string | null;
+  // Error de la última consulta a Manto (ej. HTTP 500 — folio purgado). Cuando
+  // lo hay, la línea "Estatus:" lo deja ver para distinguir una falla del
+  // portal externo de un folio sin notas aún.
+  estatusError?: string | null;
 }
 
 // SOLO para el formato EDC: Monterrey → Mty, Guadalajara → Gdl.
@@ -115,12 +119,22 @@ export function buildEdcText(it: SisaEdcInput): string {
   // SISA; solo se cae a la apertura de HPSM si el folio aún no se ha consultado.
   const inicio = formatInicioEdc(it.fechaEstadoEms ?? it.openTime);
   // "Estatus": las notas del EFA traen la última actualización del folio
-  // (falla, contacto, técnico asignado, diagnóstico). Si no hay notas todavía,
-  // se deja el texto de opciones por defecto para depurar a mano.
-  // El Edo. del EFA abre la línea en negrita (*LOC*), seguido de las notas.
+  // (falla, contacto, técnico asignado, diagnóstico). Prioridad de la línea:
+  //   1. Error 500 de Manto → aviso explícito de que es el PORTAL el que falló
+  //      (folio purgado/no disponible), no el dashboard, para no confundirlo con
+  //      un estatus real ni con un folio sin notas.
+  //   2. Notas del EFA (lo normal), con el Edo. del EFA en negrita si lo hay.
+  //   3. Texto de opciones por defecto, a depurar a mano.
+  const errManto = (it.estatusError ?? "").trim();
   const edo = (it.estadoEfa ?? "").trim();
-  const cuerpoEstatus = (it.notasEfa ?? "").trim() || "ONT fuera de gestión | Demarcador fuera de gestión";
-  const estatus = edo ? `*${edo}* ${cuerpoEstatus}` : cuerpoEstatus;
+  const notas = (it.notasEfa ?? "").trim();
+  let estatus: string;
+  if (/\b500\b/.test(errManto)) {
+    estatus = "⚠ Error 500 en Manto — consultar folio manualmente";
+  } else {
+    const cuerpoEstatus = notas || "ONT fuera de gestión | Demarcador fuera de gestión";
+    estatus = edo ? `*${edo}* ${cuerpoEstatus}` : cuerpoEstatus;
+  }
   // "Alto impacto" sigue trayendo su opción por defecto, que se depura a mano
   // antes de enviar al grupo.
   return [
