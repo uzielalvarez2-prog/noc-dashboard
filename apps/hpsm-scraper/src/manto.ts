@@ -10,19 +10,24 @@ import { logger } from "./logger.js";
  * Estructura confirmada a mano (exploración 2026-09-12):
  *  1. Login: POST a /manto/servlet/seguridad.AccesoUsuario vía form1
  *     (inputs #usuario / #password). Frameset clásico tras login.
- *  2. Dentro del frame MarcoMenu.jsp vive form2 (búsqueda rápida):
- *     - form2.buscar = folio (numérico)
- *     - form2.busqueda_por = "efa"  (el folio SISA es el "EFA" de Manto)
- *     - target del form: BusEmsSer.jsp → si existe, redirige a
- *       BusquedaEfa.jsp?efa=N, que carga un iframe hijo
- *       ListaEmsEscalador.jsp?origen=efa&folioefa=N con la fila de resultado.
- *     - Si el folio no existe (purgado/muy viejo), Manto navega a
- *       jsp/Error.jsp?mensaje=No%20Existe%20el%20EFA%20con%20el%20folio%20N
- *  3. La fila de resultado trae columnas EMS/Edo./F-H Ini. y EFA/Edo./F-H Ini.
- *     (cuando EMS y EFA son el mismo folio, ambos números coinciden).
+ *  2. Con la sesión abierta, VentanaZoom.jsp?tipo=EFA&folio=N devuelve DIRECTO
+ *     el <textarea> con toda la bitácora del folio (ver descargarNotasEfa).
  *
- * NO se scrapea la bitácora (VentanaZoom) ni los OIN/OGE — decisión explícita
- * del usuario: solo estatus (Edo. EMS/EFA) + fecha.
+ * ── Cambio 2026-10-01: SOLO NOTAS, por petición directa ──────────────────────
+ * Antes se obtenía además el ESTATUS (Edo. EMS/EFA) navegando tres frames
+ * encadenados (form2.submit → BusquedaEfa.jsp → ListaEmsEscalador.jsp?folioefa=N).
+ * Ese camino tardaba ~18 s/folio (~13 min con ~45 folios) y era lo que rompía la
+ * actualización cuando el portal iba lento. El usuario sólo necesita las NOTAS,
+ * así que ese baile de frames se eliminó: ahora cada folio es UNA petición
+ * directa a VentanaZoom (~80-125 ms medidos → ~6-10 s para 45 folios).
+ *
+ * El estatus EMS/EFA ya NO se consulta: los resultados vienen sin estadoEms/
+ * estadoEfa y la ruta estatus-parcial los deja en null al refrescar cada folio
+ * ("vaciar al correr cada folio"). Para reactivarlo cuando el flujo de frames
+ * valga la pena otra vez, restaurar consultarFolioConFrames (ver historial git).
+ *
+ * El código de parseo de la tabla (parseResultFrame) y el espaciado de frames
+ * quedan sin uso a propósito, como referencia para esa reactivación.
  */
 
 export interface MantoEstatusResult {
@@ -127,33 +132,10 @@ async function openMantoSession(): Promise<MantoSession> {
     throw new Error("Manto: login fallido — credenciales inválidas");
   }
 
-  // El frameset tarda en montar todos sus frames. Sin esperar a MarcoMenu (el
-  // que tiene el form de búsqueda), la PRIMERA consulta se va en timeout.
-  const menuDeadline = Date.now() + 20_000;
-  let menuListo = false;
-  while (Date.now() < menuDeadline) {
-    const menu = page.frames().find((f) => f.url().includes("MarcoMenu"));
-    // No basta con que el frame exista: su form2 debe estar parseado.
-    if (menu) {
-      const tieneForm = await menu
-        .evaluate(() => Boolean(document.forms.namedItem("form2")))
-        .catch(() => false);
-      if (tieneForm) {
-        menuListo = true;
-        break;
-      }
-    }
-    await page.waitForTimeout(500);
-  }
-  if (!menuListo) {
-    // Login aceptado pero el frameset nunca montó: típico de portal a medio
-    // caer (el servlet de acceso responde, los JSP de datos no).
-    const huella = detectarPortalCaido(await page.content());
-    await browser.close();
-    throw new PortalFueraDeGestionError(
-      huella ?? "el menú de búsqueda no cargó tras el login",
-    );
-  }
+  // El camino directo (VentanaZoom) solo necesita las cookies de sesión, no el
+  // frame MarcoMenu/form2 de búsqueda — así que ya no se espera a que monte el
+  // frameset completo (eso agregaba hasta 20 s al arranque). La sesión queda
+  // lista en cuanto el login deja de mostrar el form de acceso.
 
   return {
     browser,
@@ -164,66 +146,58 @@ async function openMantoSession(): Promise<MantoSession> {
   };
 }
 
-/** Consulta el estatus de UN folio en Manto (busqueda_por=efa). Reutiliza la página/sesión dada. */
+/** Señal interna: VentanaZoom respondió HTTP 500 para este folio. Es la
+ * respuesta de Manto a un folio purgado (el JSP revienta en vez de negar
+ * limpio). El llamador lo trata SIEMPRE como "folio no encontrado" y sigue
+ * con el resto — ver consultarEstatusFolios. */
+class FolioHttp500Error extends Error {
+  constructor(public readonly status: number) {
+    super(`VentanaZoom respondió HTTP ${status}`);
+    this.name = "FolioHttp500Error";
+  }
+}
+
+/**
+ * Consulta las NOTAS de UN folio en Manto por petición directa a VentanaZoom,
+ * reusando la sesión ya autenticada. Ya NO navega el frameset de búsqueda ni
+ * obtiene el estatus (Edo. EMS/EFA) — ver el encabezado del archivo.
+ *
+ * Distinción de errores (importante para no abortar de más):
+ *  - HTTP 500 → lanza FolioHttp500Error, que el llamador trata como folio
+ *    purgado (saltar y seguir). NO se usa como señal de portal caído: Manto
+ *    devuelve 500 para cada folio purgado, y una tanda real trae varios viejos.
+ *  - Huella de error de Oracle/servlet en el cuerpo (ORA-xxxx, stacktrace) →
+ *    portal caído inequívoco: aborta la corrida completa.
+ */
 async function consultarFolio(page: Page, folio: string): Promise<MantoEstatusResult> {
-  const menuFrame = page.frames().find((f) => f.url().includes("MarcoMenu"));
-  if (!menuFrame) {
-    return { folio, found: false, error: "No se encontró el frame de menú (MarcoMenu.jsp) — sesión inválida" };
+  const origen = new URL(config.manto.url).origin;
+  const res = await page.context().request.get(
+    `${origen}/manto/jsp/VentanaZoom.jsp?tipo=EFA&folio=${folio}`,
+    { timeout: 20_000 },
+  );
+
+  if (res.status() >= 500) {
+    throw new FolioHttp500Error(res.status());
+  }
+  if (!res.ok()) {
+    return { folio, found: false, error: `Manto respondió HTTP ${res.status()}` };
   }
 
-  await menuFrame.evaluate(({ buscar }) => {
-    const f = document.forms.namedItem("form2") as HTMLFormElement | null;
-    if (!f) throw new Error("form2 no encontrado en MarcoMenu");
-    (f.elements.namedItem("buscar") as HTMLInputElement).value = buscar;
-    (f.elements.namedItem("busqueda_por") as HTMLInputElement).value = "efa";
-    f.submit();
-  }, { buscar: folio });
+  // Los acentos llegan como "?" ("S?BADO", "Asignaci?n"): NO es un problema de
+  // decodificación de aquí — Manto ya tiene el signo de interrogación guardado
+  // en sus datos (se comprobó leyendo el buffer como iso-8859-1, mismo
+  // resultado). La letra original no es recuperable.
+  const html = await res.text();
+  // Error de SQL/servlet DENTRO de una respuesta 200 = portal a medio caer:
+  // aborta la corrida completa en vez de marcar este folio como sin notas.
+  const huella = detectarPortalCaido(html);
+  if (huella) throw new PortalFueraDeGestionError(huella);
 
-  // Esperar el resultado de ESTE folio. Clave: los frames del folio anterior
-  // siguen montados mientras Manto responde, así que se exige que la URL del
-  // frame corresponda al folio consultado — si no, se leería el estado del
-  // folio previo y se guardaría como si fuera de este (dato incorrecto
-  // silencioso, peor que un error).
-  const deadline = Date.now() + 25_000;
-  while (Date.now() < deadline) {
-    // "No Existe el EFA con el folio N" es una respuesta LEGÍTIMA (folio
-    // purgado), no un portal caído: se acepta tal cual.
-    const errorFrame = page
-      .frames()
-      .find((f) => f.url().includes("Error.jsp") && f.url().includes(`folio%20${folio}`));
-    if (errorFrame) {
-      const url = new URL(errorFrame.url());
-      const mensaje = url.searchParams.get("mensaje") ?? "Folio no encontrado en Manto";
-      return { folio, found: false, error: mensaje };
-    }
-    const resultFrame = page.frames().find((f) => f.url().includes(`folioefa=${folio}`));
-    if (resultFrame) {
-      const html = await resultFrame.content();
-      // Un error de SQL/servidor en el JSP de datos = portal caído: aborta la
-      // corrida completa en vez de marcar este folio como no encontrado.
-      const huella = detectarPortalCaido(html);
-      if (huella) throw new PortalFueraDeGestionError(huella);
-      // El iframe puede existir con la URL nueva pero aún sin el HTML de la
-      // tabla; si no hay tabla todavía, se sigue esperando.
-      if (/Total de Registros/i.test(html)) {
-        const base = parseResultFrame(folio, html);
-        if (!base.found) return base;
-        // Notas del EFA: petición aparte reusando la sesión ya autenticada. Si
-        // falla, se devuelve el estatus igual — las notas son un extra para el
-        // formato EDC, no deben tumbar la consulta del folio.
-        const notasEfa = await descargarNotasEfa(page, folio);
-        return { ...base, notasEfa };
-      }
-    }
-    await page.waitForTimeout(500);
-  }
-
-  // Timeout: puede ser lentitud puntual o portal caído. Se revisa el documento
-  // completo por si quedó una huella de error de servidor.
-  const huellaFinal = detectarPortalCaido(await page.content().catch(() => ""));
-  if (huellaFinal) throw new PortalFueraDeGestionError(huellaFinal);
-
-  return { folio, found: false, error: "Timeout esperando respuesta de Manto" };
+  const notasEfa = extraerNotasEfa(html);
+  // Sin <textarea> aprovechable: el folio existe pero no tiene bitácora útil.
+  // Se marca como encontrado (found) con notas vacías — al persistir, la ruta
+  // estatus-parcial deja estadoEms/estadoEfa en null ("vaciar al correr").
+  return { folio, found: true, notasEfa };
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -337,31 +311,10 @@ export function extraerNotasEfa(htmlZoom: string): string | undefined {
 }
 
 /**
- * Descarga VentanaZoom.jsp del EFA (la ventana de notas) reusando las cookies
- * de la sesión abierta, y devuelve el resumen. Nunca lanza: si el portal no
- * responde o el HTML cambia, el folio conserva su estatus y se queda sin notas.
+ * Parsea la tabla de ListaEmsEscalador.jsp (fila EMS/Edo./F-H Ini./.../EFA/Edo./
+ * F-H Ini.). SIN USO desde 2026-10-01: el flujo directo ya no obtiene el estatus.
+ * Se conserva como referencia para reactivarlo (ver encabezado del archivo).
  */
-async function descargarNotasEfa(page: Page, folio: string): Promise<string | undefined> {
-  try {
-    // Se deriva del host configurado (no fijo) para seguir a config.manto.url.
-    const origen = new URL(config.manto.url).origin;
-    const res = await page.context().request.get(
-      `${origen}/manto/jsp/VentanaZoom.jsp?tipo=EFA&folio=${folio}`,
-      { timeout: 20_000 },
-    );
-    if (!res.ok()) return undefined;
-    // Los acentos llegan como "?" ("S?BADO", "Asignaci?n"): NO es un problema
-    // de decodificación de aquí — Manto ya tiene el signo de interrogación
-    // guardado en sus datos (se comprobó leyendo el buffer como iso-8859-1,
-    // que devuelve lo mismo). La letra original no es recuperable.
-    return extraerNotasEfa(await res.text());
-  } catch (e) {
-    logger.warn("Manto: no se pudieron leer las notas del EFA", { folio, err: String(e) });
-    return undefined;
-  }
-}
-
-/** Parsea la tabla de ListaEmsEscalador.jsp (fila EMS/Edo./F-H Ini./.../EFA/Edo./F-H Ini.). */
 function parseResultFrame(folio: string, html: string): MantoEstatusResult {
   // "Total de Registros: 0" → el folio no tiene fila (equivalente a no encontrado,
   // aunque Manto no haya mandado a Error.jsp).
@@ -413,41 +366,51 @@ export async function consultarEstatusFolios(
 
   const session = await openMantoSession();
   const results: MantoEstatusResult[] = [];
-  // Varios timeouts seguidos sin una sola respuesta útil = el portal dejó de
-  // responder a media corrida. Se corta en vez de gastar ~18 s por folio
-  // restante contra un servidor caído.
-  const MAX_TIMEOUTS_SEGUIDOS = 3;
-  let timeoutsSeguidos = 0;
+
+  // Portal caído se detecta por DOS señales inequívocas, NO por acumular fallos:
+  //   1. Login fallido / frameset que no monta → en openMantoSession (arriba).
+  //   2. Huella de Oracle/servlet en el cuerpo de una respuesta → aborta aquí.
+  // Un HTTP 500 por folio NO es una de ellas: Manto devuelve 500 también para
+  // folios purgados (el JSP revienta en vez de negar limpio), y una tanda real
+  // trae folios viejos mezclados. Contar esos 500 hacia un umbral abortaría la
+  // corrida por folios viejos, dejando sin actualizar los reales que siguen.
+  // Por eso cada 500 se salta y se sigue — ver reporte 2026-10-01.
+
+  const reportar = async (r: MantoEstatusResult) => {
+    results.push(r);
+    if (onResult) {
+      await onResult(r).catch((e) =>
+        logger.error("Manto: fallo al reportar resultado parcial", { folio: r.folio, err: String(e) }),
+      );
+    }
+  };
 
   try {
     for (const folio of folioLimpios) {
       try {
         const r = await consultarFolio(session.page, folio);
-        results.push(r);
         logger.info("Manto: folio consultado", r);
-
-        if (onResult) {
-          await onResult(r).catch((e) =>
-            logger.error("Manto: fallo al reportar resultado parcial", { folio, err: String(e) }),
-          );
-        }
-
-        if (!r.found && /Timeout/i.test(r.error ?? "")) {
-          timeoutsSeguidos++;
-          if (timeoutsSeguidos >= MAX_TIMEOUTS_SEGUIDOS) {
-            throw new PortalFueraDeGestionError(
-              `${timeoutsSeguidos} consultas seguidas sin respuesta`,
-            );
-          }
-        } else {
-          timeoutsSeguidos = 0;
-        }
+        await reportar(r);
       } catch (err) {
-        // Portal caído: se propaga para abortar la corrida completa. El
-        // servidor HTTP lo traduce a un mensaje único para el dashboard.
+        // Portal caído inequívoco (huella Oracle/servlet): aborta la corrida.
         if (err instanceof PortalFueraDeGestionError) throw err;
+
+        // HTTP 500 = folio purgado: se salta y se SIGUE siempre, sin contar
+        // hacia ningún umbral de aborto.
+        if (err instanceof FolioHttp500Error) {
+          logger.info("Manto: folio no encontrado (HTTP 500 — folio purgado)", { folio });
+          await reportar({
+            folio,
+            found: false,
+            error: "No encontrado en Manto (HTTP 500 — folio purgado)",
+          });
+          continue;
+        }
+
+        // Error inesperado de ESTE folio (ej. timeout de red): se registra y se
+        // sigue; no debe tumbar el resto de la tanda.
         logger.error("Manto: error consultando folio", { folio, err: String(err) });
-        results.push({ folio, found: false, error: String(err) });
+        await reportar({ folio, found: false, error: String(err) });
       }
     }
   } finally {
