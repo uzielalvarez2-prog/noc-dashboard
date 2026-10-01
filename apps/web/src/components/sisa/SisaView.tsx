@@ -132,6 +132,7 @@ export function SisaView() {
   const [selectedCase, setSelectedCase] = useState<string | null>(null);
   const [exporting, setExporting] = useState(false);
   const [copiedId, setCopiedId] = useState<string | null>(null);
+  const [erroresCopiados, setErroresCopiados] = useState(false);
   const [arrancandoManto, setArrancandoManto] = useState(false);
   const [mantoMsg, setMantoMsg] = useState<{ tone: "ok" | "err" | "caido"; text: string } | null>(null);
   const [progreso, setProgreso] = useState<ProgresoRefresh | null>(null);
@@ -236,6 +237,30 @@ export function SisaView() {
   );
 
   const hasFilter = selectedStatus !== null || selectedCase !== null;
+
+  // Folios que Manto no deja consultar (error 500 / no encontrado) en la última
+  // corrida. Se deriva de TODOS los items (no de `filtered`) para que la lista
+  // no dependa de los filtros de la tabla. Un mismo folio SISA puede estar en
+  // varios incidentes: se muestra un renglón por incidente, como en la tabla.
+  const foliosConError = useMemo(
+    () =>
+      items
+        .filter((it) => (it.estatusError ?? "").trim().length > 0)
+        .sort((a, b) => a.vendorTicket.localeCompare(b.vendorTicket)),
+    [items]
+  );
+
+  async function copiarFoliosConError() {
+    const header = "SISA\tIncidente\tEmpresa";
+    const filas = foliosConError.map((it) => `${it.vendorTicket}\t${it.incidentId}\t${it.company}`);
+    try {
+      await navigator.clipboard.writeText([header, ...filas].join("\n"));
+      setErroresCopiados(true);
+      setTimeout(() => setErroresCopiados(false), 1500);
+    } catch {
+      /* clipboard no disponible: no romper la vista */
+    }
+  }
 
   const sortBtn = (dir: SortDir, label: string, Icon: typeof ArrowDownWideNarrow) => (
     <button
@@ -526,6 +551,71 @@ export function SisaView() {
             >
               <X className="h-3.5 w-3.5" />
             </button>
+          </div>
+        )}
+
+        {/* Folios que Manto no deja consultar (error 500 / no encontrado). Es
+            tema del portal externo, no del dashboard — se listan para revisar
+            manualmente. */}
+        {foliosConError.length > 0 && (
+          <div className="border-b border-amber-500/30 bg-amber-500/[0.06] px-3 py-3">
+            <div className="mb-2 flex items-center justify-between gap-2">
+              <span className="text-xs font-medium text-amber-200">
+                ⚠ {foliosConError.length} folio{foliosConError.length === 1 ? "" : "s"} que Manto no dejó consultar — revisar manualmente
+              </span>
+              <button
+                type="button"
+                onClick={() => void copiarFoliosConError()}
+                title="Copiar la tabla (SISA · Incidente · Empresa)"
+                className={cn(
+                  "flex shrink-0 items-center gap-1 rounded-md border px-2 py-1 text-[11px] font-medium transition-colors",
+                  erroresCopiados
+                    ? "border-success/50 bg-success/10 text-success"
+                    : "border-amber-500/40 bg-amber-500/10 text-amber-200 hover:bg-amber-500/20"
+                )}
+              >
+                {erroresCopiados ? (
+                  <>
+                    <Check className="h-3.5 w-3.5" /> Copiado
+                  </>
+                ) : (
+                  <>
+                    <Copy className="h-3.5 w-3.5" /> Copiar
+                  </>
+                )}
+              </button>
+            </div>
+            <div className="max-h-48 overflow-auto rounded-md border border-amber-500/20">
+              <table className="w-full border-collapse text-xs">
+                <thead className="sticky top-0 bg-amber-500/10">
+                  <tr>
+                    {["SISA", "Incidente", "Empresa"].map((h) => (
+                      <th
+                        key={h}
+                        className="border-b border-amber-500/20 px-2.5 py-1.5 text-left font-medium uppercase tracking-wider text-amber-200/80"
+                      >
+                        {h}
+                      </th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {foliosConError.map((it) => (
+                    <tr key={it.incidentId} className="border-b border-amber-500/10 last:border-0">
+                      <td className="px-2.5 py-1.5 font-mono text-accent">{it.vendorTicket || "—"}</td>
+                      <td className="px-2.5 py-1.5">
+                        <HpsmIncidentId incidentId={it.incidentId} className="font-mono text-text-muted" />
+                      </td>
+                      <td className="px-2.5 py-1.5 text-text-primary">
+                        <span className="block max-w-[18rem] truncate" title={it.company}>
+                          {it.company || "—"}
+                        </span>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           </div>
         )}
 
