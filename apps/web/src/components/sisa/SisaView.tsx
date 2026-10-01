@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Search, Download, RefreshCw, Loader2, Copy, Check, X, ArrowDownWideNarrow, ArrowUpNarrowWide } from "lucide-react";
+import { Search, Download, RefreshCw, Loader2, Copy, Check, X, ArrowDownWideNarrow, ArrowUpNarrowWide, ArrowUp, ArrowDown, ArrowUpDown } from "lucide-react";
 import { cn, formatHpsm } from "@/lib/utils";
 import { downloadXLSX } from "@/lib/excelExport";
 import { HpsmIncidentId } from "@/components/shared/HpsmIncidentId";
@@ -133,6 +133,12 @@ export function SisaView() {
   const [exporting, setExporting] = useState(false);
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [erroresCopiados, setErroresCopiados] = useState(false);
+  // Ocultar la tablita de folios con error en Manto (p. ej. tras copiarla). Se
+  // vuelve a mostrar sola si una nueva corrida arroja folios con error.
+  const [erroresOculto, setErroresOculto] = useState(false);
+  // Orden por Estatus en la tabla: clic en el encabezado cicla A→Z, Vendor
+  // primero, sin orden (mismo patrón que Case San Juan).
+  const [ordenEstatus, setOrdenEstatus] = useState<"asc" | "vendor" | null>(null);
   const [arrancandoManto, setArrancandoManto] = useState(false);
   const [mantoMsg, setMantoMsg] = useState<{ tone: "ok" | "err" | "caido"; text: string } | null>(null);
   const [progreso, setProgreso] = useState<ProgresoRefresh | null>(null);
@@ -220,21 +226,29 @@ export function SisaView() {
     return [...m.entries()].map(([name, count]) => ({ name, count })).sort((a, b) => b.count - a.count);
   }, [baseQ]);
 
-  const filtered = useMemo(
-    () =>
-      baseQ
-        .filter((it) => {
-          if (selectedStatus && (it.status || "—") !== selectedStatus) return false;
-          if (selectedCase && (it.vendor || "—") !== selectedCase) return false;
-          return true;
-        })
-        .sort((a, b) => {
-          const da = new Date(a.openTime).getTime();
-          const db = new Date(b.openTime).getTime();
-          return sortDir === "asc" ? da - db : db - da;
-        }),
-    [baseQ, selectedStatus, selectedCase, sortDir]
-  );
+  const filtered = useMemo(() => {
+    const lista = baseQ.filter((it) => {
+      if (selectedStatus && (it.status || "—") !== selectedStatus) return false;
+      if (selectedCase && (it.vendor || "—") !== selectedCase) return false;
+      return true;
+    });
+    // Orden por estatus (mismo patrón que Case San Juan): si está activo, manda
+    // sobre el orden por apertura. Con "vendor" se agrupan primero los VENDOR.
+    if (ordenEstatus) {
+      const esVendor = (st: string) => ((st ?? "").toUpperCase().includes("VENDOR") ? 0 : 1);
+      return [...lista].sort(
+        (a, b) =>
+          (ordenEstatus === "vendor" ? esVendor(a.status) - esVendor(b.status) : 0) ||
+          (a.status ?? "").localeCompare(b.status ?? "", "es")
+      );
+    }
+    // Sin orden por estatus: por apertura, como siempre.
+    return [...lista].sort((a, b) => {
+      const da = new Date(a.openTime).getTime();
+      const db = new Date(b.openTime).getTime();
+      return sortDir === "asc" ? da - db : db - da;
+    });
+  }, [baseQ, selectedStatus, selectedCase, sortDir, ordenEstatus]);
 
   const hasFilter = selectedStatus !== null || selectedCase !== null;
 
@@ -262,10 +276,27 @@ export function SisaView() {
     }
   }
 
+  function ciclarOrdenEstatus() {
+    setOrdenEstatus((o) => (o === null ? "asc" : o === "asc" ? "vendor" : null));
+  }
+
+  // Si el conjunto de folios con error cambia (p. ej. tras una nueva corrida de
+  // Manto), se vuelve a mostrar la tablita aunque el usuario la hubiera cerrado:
+  // los errores nuevos deben ser visibles.
+  const claveErrores = foliosConError.map((it) => it.incidentId).join("|");
+  useEffect(() => {
+    setErroresOculto(false);
+  }, [claveErrores]);
+
   const sortBtn = (dir: SortDir, label: string, Icon: typeof ArrowDownWideNarrow) => (
     <button
       type="button"
-      onClick={() => setSortDir(dir)}
+      onClick={() => {
+        setSortDir(dir);
+        // Volver al orden por apertura desactiva el orden por estatus, para que
+        // los dos controles no queden marcados a la vez.
+        setOrdenEstatus(null);
+      }}
       title={`Ordenar tabla por apertura: ${label}`}
       className={cn(
         "flex items-center gap-1 rounded-md px-2 py-1 text-[11px] font-medium transition-colors",
@@ -556,34 +587,45 @@ export function SisaView() {
 
         {/* Folios que Manto no deja consultar (error 500 / no encontrado). Es
             tema del portal externo, no del dashboard — se listan para revisar
-            manualmente. */}
-        {foliosConError.length > 0 && (
+            manualmente. El usuario puede cerrarla; reaparece si una nueva
+            corrida arroja folios con error distintos. */}
+        {foliosConError.length > 0 && !erroresOculto && (
           <div className="border-b border-amber-500/30 bg-amber-500/[0.06] px-3 py-3">
             <div className="mb-2 flex items-center justify-between gap-2">
               <span className="text-xs font-medium text-amber-200">
                 ⚠ {foliosConError.length} folio{foliosConError.length === 1 ? "" : "s"} que Manto no dejó consultar — revisar manualmente
               </span>
-              <button
-                type="button"
-                onClick={() => void copiarFoliosConError()}
-                title="Copiar la tabla (SISA · Incidente · Empresa)"
-                className={cn(
-                  "flex shrink-0 items-center gap-1 rounded-md border px-2 py-1 text-[11px] font-medium transition-colors",
-                  erroresCopiados
-                    ? "border-success/50 bg-success/10 text-success"
-                    : "border-amber-500/40 bg-amber-500/10 text-amber-200 hover:bg-amber-500/20"
-                )}
-              >
-                {erroresCopiados ? (
-                  <>
-                    <Check className="h-3.5 w-3.5" /> Copiado
-                  </>
-                ) : (
-                  <>
-                    <Copy className="h-3.5 w-3.5" /> Copiar
-                  </>
-                )}
-              </button>
+              <div className="flex shrink-0 items-center gap-1.5">
+                <button
+                  type="button"
+                  onClick={() => void copiarFoliosConError()}
+                  title="Copiar la tabla (SISA · Incidente · Empresa)"
+                  className={cn(
+                    "flex items-center gap-1 rounded-md border px-2 py-1 text-[11px] font-medium transition-colors",
+                    erroresCopiados
+                      ? "border-success/50 bg-success/10 text-success"
+                      : "border-amber-500/40 bg-amber-500/10 text-amber-200 hover:bg-amber-500/20"
+                  )}
+                >
+                  {erroresCopiados ? (
+                    <>
+                      <Check className="h-3.5 w-3.5" /> Copiado
+                    </>
+                  ) : (
+                    <>
+                      <Copy className="h-3.5 w-3.5" /> Copiar
+                    </>
+                  )}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setErroresOculto(true)}
+                  title="Cerrar — se ocultará esta lista"
+                  className="rounded-md p-1 text-amber-200/70 transition-colors hover:bg-amber-500/15 hover:text-amber-200"
+                >
+                  <X className="h-3.5 w-3.5" />
+                </button>
+              </div>
             </div>
             <div className="max-h-48 overflow-auto rounded-md border border-amber-500/20">
               <table className="w-full border-collapse text-xs">
@@ -628,7 +670,28 @@ export function SisaView() {
                     key={h}
                     className="border-b border-border/60 px-3 py-2 text-left text-xs font-medium uppercase tracking-wider text-text-muted"
                   >
-                    {h}
+                    {h === "Estatus" ? (
+                      <button
+                        type="button"
+                        onClick={ciclarOrdenEstatus}
+                        title="Ordenar por estatus (A→Z, Vendor primero, sin orden)"
+                        className={cn(
+                          "flex items-center gap-1 uppercase tracking-wider transition-colors hover:text-text-primary",
+                          ordenEstatus && "text-accent"
+                        )}
+                      >
+                        {h}
+                        {ordenEstatus === "asc" ? (
+                          <ArrowUp className="h-3 w-3" />
+                        ) : ordenEstatus === "vendor" ? (
+                          <ArrowDown className="h-3 w-3" />
+                        ) : (
+                          <ArrowUpDown className="h-3 w-3" />
+                        )}
+                      </button>
+                    ) : (
+                      h
+                    )}
                   </th>
                 ))}
               </tr>
