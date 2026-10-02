@@ -77,20 +77,38 @@ html[data-theme="light"] {
   --surface-elevated: #f8fafc;
   --border: #e2e8f0;
   --text-primary: #0f172a;
-  --text-muted: #64748b;
+  --text-muted: #475569;
   --text-disabled: #94a3b8;
+  /* Semantic colors con mayor contraste en fondos claros */
+  --critical: #dc2626;
+  --warning: #d97706;
+  --success: #16a34a;
+  --accent: #2563eb;
+  --info: #0284c7;
   --critical-dim: #fef2f2;
   --warning-dim: #fffbeb;
   --success-dim: #f0fdf4;
-  --info: #0ea5e9;
 }
 
 html[data-theme="light"] .badge-info {
   background-color: #e0f2fe;
+  color: #0284c7;
 }
 html[data-theme="light"] .badge-low {
-  background-color: #f8fafc;
+  background-color: #f1f5f9;
+  color: #334155;
+  border-color: #cbd5e1;
 }
+/* Colores neón de estado (StatusCardsTable, SisaView, CaseSanJuan) —
+   versiones más oscuras para mantener contraste sobre fondos claros. */
+html[data-theme="light"] .text-red-400    { color: #dc2626 !important; }
+html[data-theme="light"] .text-red-500    { color: #b91c1c !important; }
+html[data-theme="light"] .text-green-400  { color: #15803d !important; }
+html[data-theme="light"] .text-amber-400  { color: #b45309 !important; }
+html[data-theme="light"] .text-blue-400   { color: #1d4ed8 !important; }
+html[data-theme="light"] .text-violet-300 { color: #6d28d9 !important; }
+/* Quitar drop-shadow neón en modo día (no aportan contraste sobre blanco) */
+html[data-theme="light"] [class*="drop-shadow"] { filter: none !important; }
 
 /* ── Scrollbar ── */
 ::-webkit-scrollbar { width: 6px; height: 6px; }
