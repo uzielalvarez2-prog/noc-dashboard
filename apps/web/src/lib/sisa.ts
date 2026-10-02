@@ -101,10 +101,12 @@ export function buildEdcText(it: SisaEdcInput): string {
   const rawCase = (it.vendor ?? "").trim().replace(/^CASE\s+/i, "");
   // Capitalizado ("Puebla"), a diferencia del distrito, que va en mayúsculas.
   const caseAbbr = capitalizarCaseEdc(abreviarCaseEdc(rawCase));
+  // Siglas internas (GNOC, GFC, TELNOR) no son plazas — no van en el Ticket.
+  const casePlaza = SIGLAS_VENDOR.has(caseAbbr.toUpperCase()) ? "" : caseAbbr;
   const district = (it.district ?? "").trim();
   // Formato del CASE: "CASE Puebla - *VERACRUZ*" — el distrito va entre
   // asteriscos (negrita en WhatsApp) y separado por " - ".
-  const caseLabel = district ? `${caseAbbr} - *${district}*` : caseAbbr;
+  const caseLabel = district ? `${casePlaza}${casePlaza ? " - " : ""}*${district}*` : casePlaza;
   const ticketLine = caseLabel
     ? `Ticket: ${it.vendorTicket} | CASE ${caseLabel}`
     : `Ticket: ${it.vendorTicket}`;
