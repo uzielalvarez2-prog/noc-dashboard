@@ -410,12 +410,12 @@ export function SisaView() {
             className={cn(
               "flex items-center gap-2 rounded-lg border px-3 py-1.5 text-xs font-medium transition-all",
               selectedStatus === null
-                ? "border-violet-400 bg-violet-500/15 text-violet-200 ring-2 ring-violet-400 shadow-[0_0_10px_2px_rgba(139,92,246,0.4)]"
-                : "border-violet-500/40 bg-violet-500/5 text-violet-300 hover:border-violet-400"
+                ? isLight ? "border-violet-400 bg-violet-100 text-violet-800 ring-2 ring-violet-400" : "border-violet-400 bg-violet-500/15 text-violet-200 ring-2 ring-violet-400 shadow-[0_0_10px_2px_rgba(139,92,246,0.4)]"
+                : isLight ? "border-violet-300 bg-violet-50 text-violet-700 hover:bg-violet-100" : "border-violet-500/40 bg-violet-500/5 text-violet-300 hover:border-violet-400"
             )}
           >
             <span>Tickets SISA</span>
-            <span className="rounded-full bg-violet-500/20 px-1.5 py-0.5 font-mono text-[10px] text-violet-200">
+            <span className={cn("rounded-full px-1.5 py-0.5 font-mono text-[10px]", isLight ? "bg-violet-100 text-violet-800" : "bg-violet-500/20 text-violet-200")}>
               {baseQ.length}
             </span>
           </button>
@@ -460,12 +460,12 @@ export function SisaView() {
                   className={cn(
                     "flex items-center gap-2 rounded-lg border px-3 py-1.5 text-xs font-medium transition-all",
                     isSel
-                      ? "border-violet-400 bg-violet-500/10 text-violet-200 ring-2 ring-violet-400 shadow-[0_0_10px_2px_rgba(139,92,246,0.4)]"
+                      ? isLight ? "border-violet-400 bg-violet-100 text-violet-800 ring-2 ring-violet-400" : "border-violet-400 bg-violet-500/10 text-violet-200 ring-2 ring-violet-400 shadow-[0_0_10px_2px_rgba(139,92,246,0.4)]"
                       : "border-border/60 bg-surface/60 text-text-primary hover:border-violet-400/60"
                   )}
                 >
                   <span className="max-w-[14rem] truncate">{name}</span>
-                  <span className="rounded-full bg-violet-500/20 px-1.5 py-0.5 font-mono text-[10px] text-violet-200">
+                  <span className={cn("rounded-full px-1.5 py-0.5 font-mono text-[10px]", isLight ? "bg-violet-100 text-violet-800" : "bg-violet-500/20 text-violet-200")}>
                     {count}
                   </span>
                 </button>
@@ -496,7 +496,7 @@ export function SisaView() {
             onClick={() => void handleRefreshManto()}
             disabled={arrancandoManto || progreso?.enCurso}
             title="Consultar en el portal Manto el estatus de los folios cuyo IM esté en Pending Vendor, Work in Progress o Pending Other (~18 s por folio; corre en segundo plano y la tabla se va poblando)"
-            className="flex items-center gap-1.5 rounded-md border border-cyan-500/50 bg-cyan-500/10 px-2.5 py-2 text-xs font-medium text-cyan-300 hover:bg-cyan-500/20 disabled:opacity-60"
+            className={cn("flex items-center gap-1.5 rounded-md border px-2.5 py-2 text-xs font-medium disabled:opacity-60", isLight ? "border-cyan-400 bg-cyan-50 text-cyan-800 hover:bg-cyan-100" : "border-cyan-500/50 bg-cyan-500/10 text-cyan-300 hover:bg-cyan-500/20")}
           >
             {arrancandoManto || progreso?.enCurso ? (
               <Loader2 className="h-3.5 w-3.5 animate-spin" />
@@ -532,14 +532,14 @@ export function SisaView() {
         </div>
 
         {progreso?.enCurso && (
-          <div className="border-b border-border/60 bg-cyan-500/5 px-3 py-2">
-            <div className="flex items-center justify-between gap-2 text-xs text-cyan-200">
+          <div className={cn("border-b border-border/60 px-3 py-2", isLight ? "bg-cyan-50" : "bg-cyan-500/5")}>
+            <div className={cn("flex items-center justify-between gap-2 text-xs", isLight ? "text-cyan-800" : "text-cyan-200")}>
               <span>
                 Consultando Manto: {progreso.consultados} de {progreso.total} folios
                 {progreso.encontrados > 0 && ` · ${progreso.encontrados} con estatus`}
               </span>
               {/* ~18 s por folio es la medida real del portal. */}
-              <span className="font-mono text-[11px] text-cyan-300/70">
+              <span className={cn("font-mono text-[11px]", isLight ? "text-cyan-700" : "text-cyan-300/70")}>
                 ~{Math.max(1, Math.round(((progreso.total - progreso.consultados) * 18) / 60))} min restantes
               </span>
             </div>

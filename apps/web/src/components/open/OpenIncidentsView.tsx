@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
+import { useTheme } from "@/components/layout/ThemeProvider";
 import type { OpenStats } from "@/types/open";
 import { OpenKpis } from "./OpenKpis";
 import { StatusBreakdown, ALL_STATUS } from "./StatusBreakdown";
@@ -36,6 +37,8 @@ async function fetchStats(group: string, maxAgeHours?: number): Promise<OpenStat
 
 // Vista estándar para grupos PEXA y CECOR: KPIs + tarjetas + TOP charts
 function PexaCecorView({ group }: { group: "PEXA" | "CECOR" }) {
+  const { theme } = useTheme();
+  const isLight = theme === "light";
   const [sortDir, setSortDir] = useState<SortDir>("desc");
   const [recentOnly, setRecentOnly] = useState(true);
   const [selectedStatus, setSelectedStatus] = useState<string | null>(null);
@@ -63,7 +66,9 @@ function PexaCecorView({ group }: { group: "PEXA" | "CECOR" }) {
   const subTabBtn = (active: boolean) =>
     cn(
       "rounded-md px-3 py-1.5 text-xs font-semibold transition-colors",
-      active ? "bg-violet-500/20 text-violet-200 ring-1 ring-violet-500" : "border border-border text-text-muted hover:text-text-primary"
+      active
+        ? isLight ? "bg-violet-100 text-violet-800 ring-1 ring-violet-400" : "bg-violet-500/20 text-violet-200 ring-1 ring-violet-500"
+        : "border border-border text-text-muted hover:text-text-primary"
     );
 
   if (group === "CECOR" && subTab === "sisa") {
@@ -187,27 +192,33 @@ function PexaCecorView({ group }: { group: "PEXA" | "CECOR" }) {
 // Orden visual: EDC, PEXA, CECOR, SISA.
 const GROUP_ORDER: Group[] = ["EDC", "PEXA", "CECOR", "SISA"];
 
-// Estilo "neon pill" (igual criterio que los botones de War Room): borde y
-// fondo del color siempre visibles, atenuados por opacity cuando no está
-// activo, con ring + glow al seleccionar.
-const GROUP_STYLE: Record<Group, { border: string; bg: string; text: string; ring: string; glow: string }> = {
-  EDC: { border: "border-red-500/50", bg: "bg-red-500/10", text: "text-red-400", ring: "ring-red-500", glow: "shadow-[0_0_10px_2px_rgba(239,68,68,0.4)]" },
-  PEXA: { border: "border-blue-400/50", bg: "bg-blue-500/10", text: "text-blue-300", ring: "ring-blue-400", glow: "shadow-[0_0_10px_2px_rgba(96,165,250,0.4)]" },
-  CECOR: { border: "border-blue-400/50", bg: "bg-blue-500/10", text: "text-blue-300", ring: "ring-blue-400", glow: "shadow-[0_0_10px_2px_rgba(96,165,250,0.4)]" },
-  SISA: { border: "border-violet-500/50", bg: "bg-violet-500/10", text: "text-violet-300", ring: "ring-violet-500", glow: "shadow-[0_0_10px_2px_rgba(139,92,246,0.4)]" },
-};
+type GroupStyle = { border: string; bg: string; text: string; ring: string; glow: string };
+
+function getGroupStyle(isLight: boolean): Record<Group, GroupStyle> {
+  return isLight ? {
+    EDC:   { border: "border-red-400",    bg: "bg-red-50",    text: "text-red-700",    ring: "ring-red-400",    glow: "" },
+    PEXA:  { border: "border-blue-400",   bg: "bg-blue-50",   text: "text-blue-700",   ring: "ring-blue-400",   glow: "" },
+    CECOR: { border: "border-blue-400",   bg: "bg-blue-50",   text: "text-blue-700",   ring: "ring-blue-400",   glow: "" },
+    SISA:  { border: "border-violet-400", bg: "bg-violet-50", text: "text-violet-700", ring: "ring-violet-400", glow: "" },
+  } : {
+    EDC:   { border: "border-red-500/50",    bg: "bg-red-500/10",    text: "text-red-400",    ring: "ring-red-500",    glow: "shadow-[0_0_10px_2px_rgba(239,68,68,0.4)]" },
+    PEXA:  { border: "border-blue-400/50",   bg: "bg-blue-500/10",   text: "text-blue-300",   ring: "ring-blue-400",   glow: "shadow-[0_0_10px_2px_rgba(96,165,250,0.4)]" },
+    CECOR: { border: "border-blue-400/50",   bg: "bg-blue-500/10",   text: "text-blue-300",   ring: "ring-blue-400",   glow: "shadow-[0_0_10px_2px_rgba(96,165,250,0.4)]" },
+    SISA:  { border: "border-violet-500/50", bg: "bg-violet-500/10", text: "text-violet-300", ring: "ring-violet-500", glow: "shadow-[0_0_10px_2px_rgba(139,92,246,0.4)]" },
+  };
+}
 
 export function OpenIncidentsView() {
+  const { theme } = useTheme();
+  const isLight = theme === "light";
   const [group, setGroup] = useState<Group>("PEXA");
 
   const groupBtn = (g: Group) => {
-    const s = GROUP_STYLE[g];
+    const s = getGroupStyle(isLight)[g];
     const active = group === g;
     return cn(
       "rounded-lg border px-3 py-2 text-sm font-semibold transition-all",
-      s.border,
-      s.bg,
-      s.text,
+      s.border, s.bg, s.text,
       active ? cn("ring-2", s.ring, s.glow) : "opacity-60 hover:opacity-100"
     );
   };

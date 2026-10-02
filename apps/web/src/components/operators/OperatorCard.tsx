@@ -5,20 +5,49 @@ import { cn } from "@/lib/utils";
 import { User, Copy, Check } from "lucide-react";
 import type { OperatorStats } from "@/lib/queries/operators";
 import { copyElementAsImage } from "@/lib/copyImage";
+import { useTheme } from "@/components/layout/ThemeProvider";
 
-// Paleta vibrante por estatus. Primero por palabra clave (semántica), luego un
-// hash estable para que cualquier estatus nuevo tenga siempre el mismo color.
-const KEYWORD_STYLES: { kw: string; bg: string; text: string; dot: string }[] = [
-  { kw: "PROGRESS", bg: "bg-amber-500/15", text: "text-amber-300", dot: "bg-amber-400" },
-  { kw: "PENDING VENDOR", bg: "bg-violet-500/15", text: "text-violet-300", dot: "bg-violet-400" },
-  { kw: "PENDING CUSTOMER", bg: "bg-sky-500/15", text: "text-sky-300", dot: "bg-sky-400" },
-  { kw: "PENDING", bg: "bg-blue-500/15", text: "text-blue-300", dot: "bg-blue-400" },
-  { kw: "ASSIGNED", bg: "bg-cyan-500/15", text: "text-cyan-300", dot: "bg-cyan-400" },
-  { kw: "ACCEPTED", bg: "bg-teal-500/15", text: "text-teal-300", dot: "bg-teal-400" },
-  { kw: "REOPEN", bg: "bg-rose-500/15", text: "text-rose-300", dot: "bg-rose-400" },
-  { kw: "RESOLVED", bg: "bg-emerald-500/15", text: "text-emerald-300", dot: "bg-emerald-400" },
-  { kw: "WORK", bg: "bg-orange-500/15", text: "text-orange-300", dot: "bg-orange-400" },
-];
+type PillStyle = { kw: string; bg: string; text: string; dot: string };
+
+function getKeywordStyles(isLight: boolean): PillStyle[] {
+  return isLight ? [
+    { kw: "PROGRESS",         bg: "bg-amber-100",   text: "text-amber-800",   dot: "bg-amber-500" },
+    { kw: "PENDING VENDOR",   bg: "bg-violet-100",  text: "text-violet-800",  dot: "bg-violet-500" },
+    { kw: "PENDING CUSTOMER", bg: "bg-sky-100",      text: "text-sky-800",     dot: "bg-sky-500" },
+    { kw: "PENDING",          bg: "bg-blue-100",    text: "text-blue-800",    dot: "bg-blue-500" },
+    { kw: "ASSIGNED",         bg: "bg-cyan-100",    text: "text-cyan-800",    dot: "bg-cyan-600" },
+    { kw: "ACCEPTED",         bg: "bg-teal-100",    text: "text-teal-800",    dot: "bg-teal-500" },
+    { kw: "REOPEN",           bg: "bg-rose-100",    text: "text-rose-800",    dot: "bg-rose-500" },
+    { kw: "RESOLVED",         bg: "bg-emerald-100", text: "text-emerald-800", dot: "bg-emerald-500" },
+    { kw: "WORK",             bg: "bg-orange-100",  text: "text-orange-800",  dot: "bg-orange-500" },
+    { kw: "CATEGORIZE",       bg: "bg-lime-100",    text: "text-lime-800",    dot: "bg-lime-500" },
+  ] : [
+    { kw: "PROGRESS",         bg: "bg-amber-500/15",   text: "text-amber-300",   dot: "bg-amber-400" },
+    { kw: "PENDING VENDOR",   bg: "bg-violet-500/15",  text: "text-violet-300",  dot: "bg-violet-400" },
+    { kw: "PENDING CUSTOMER", bg: "bg-sky-500/15",     text: "text-sky-300",     dot: "bg-sky-400" },
+    { kw: "PENDING",          bg: "bg-blue-500/15",    text: "text-blue-300",    dot: "bg-blue-400" },
+    { kw: "ASSIGNED",         bg: "bg-cyan-500/15",    text: "text-cyan-300",    dot: "bg-cyan-400" },
+    { kw: "ACCEPTED",         bg: "bg-teal-500/15",    text: "text-teal-300",    dot: "bg-teal-400" },
+    { kw: "REOPEN",           bg: "bg-rose-500/15",    text: "text-rose-300",    dot: "bg-rose-400" },
+    { kw: "RESOLVED",         bg: "bg-emerald-500/15", text: "text-emerald-300", dot: "bg-emerald-400" },
+    { kw: "WORK",             bg: "bg-orange-500/15",  text: "text-orange-300",  dot: "bg-orange-400" },
+    { kw: "CATEGORIZE",       bg: "bg-lime-500/15",    text: "text-lime-300",    dot: "bg-lime-400" },
+  ];
+}
+
+function getFallback(isLight: boolean) {
+  return isLight ? [
+    { bg: "bg-fuchsia-100", text: "text-fuchsia-800", dot: "bg-fuchsia-500" },
+    { bg: "bg-lime-100",    text: "text-lime-800",    dot: "bg-lime-500" },
+    { bg: "bg-indigo-100",  text: "text-indigo-800",  dot: "bg-indigo-500" },
+    { bg: "bg-pink-100",    text: "text-pink-800",    dot: "bg-pink-500" },
+  ] : [
+    { bg: "bg-fuchsia-500/15", text: "text-fuchsia-300", dot: "bg-fuchsia-400" },
+    { bg: "bg-lime-500/15",    text: "text-lime-300",    dot: "bg-lime-400" },
+    { bg: "bg-indigo-500/15",  text: "text-indigo-300",  dot: "bg-indigo-400" },
+    { bg: "bg-pink-500/15",    text: "text-pink-300",    dot: "bg-pink-400" },
+  ];
+}
 
 const GROUP_BADGE: Record<string, string> = {
   PEXA: "bg-accent/15 text-accent",
@@ -26,19 +55,12 @@ const GROUP_BADGE: Record<string, string> = {
   Bot: "bg-fuchsia-500/15 text-fuchsia-300",
 };
 
-const FALLBACK = [
-  { bg: "bg-fuchsia-500/15", text: "text-fuchsia-300", dot: "bg-fuchsia-400" },
-  { bg: "bg-lime-500/15", text: "text-lime-300", dot: "bg-lime-400" },
-  { bg: "bg-indigo-500/15", text: "text-indigo-300", dot: "bg-indigo-400" },
-  { bg: "bg-pink-500/15", text: "text-pink-300", dot: "bg-pink-400" },
-];
-
-function statusStyle(status: string) {
+function statusStyle(status: string, isLight: boolean) {
   const s = status.toUpperCase();
-  for (const k of KEYWORD_STYLES) if (s.includes(k.kw)) return k;
+  for (const k of getKeywordStyles(isLight)) if (s.includes(k.kw)) return k;
   let hash = 0;
   for (let i = 0; i < s.length; i++) hash = (hash * 31 + s.charCodeAt(i)) >>> 0;
-  return FALLBACK[hash % FALLBACK.length];
+  return getFallback(isLight)[hash % 4];
 }
 
 // Estatus por el que se está filtrando la vista (si hay uno activo), para
@@ -50,6 +72,8 @@ export function OperatorCard({
   op: OperatorStats;
   activeStatus?: string | null;
 }) {
+  const { theme } = useTheme();
+  const isLight = theme === "light";
   const cardRef = useRef<HTMLDivElement>(null);
   const [copyState, setCopyState] = useState<"idle" | "copying" | "done">("idle");
 
@@ -68,7 +92,7 @@ export function OperatorCard({
   const activeCount = activeStatus
     ? op.statuses.find((s) => s.status === activeStatus)?.count ?? 0
     : null;
-  const activeStyle = activeStatus ? statusStyle(activeStatus) : null;
+  const activeStyle = activeStatus ? statusStyle(activeStatus, isLight) : null;
 
   return (
     <div
@@ -148,7 +172,7 @@ export function OperatorCard({
       ) : (
         <div className="flex flex-wrap gap-1.5">
           {op.statuses.map((s) => {
-            const st = statusStyle(s.status);
+            const st = statusStyle(s.status, isLight);
             return (
               <span
                 key={s.status}
