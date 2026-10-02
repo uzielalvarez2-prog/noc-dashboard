@@ -92,35 +92,22 @@ function statusCat(status: string): Cat {
   return "other";
 }
 
-const NEON: Record<Cat, { badge: string; idle: string; active: string; count: string }> = {
-  vendor: {
-    badge: "text-red-400",
-    idle: "border-red-500/40 bg-red-500/5 text-red-300 hover:border-red-500",
-    active: "border-red-500 bg-red-500/15 text-red-200 ring-2 ring-red-500 shadow-[0_0_10px_2px_rgba(239,68,68,0.4)]",
-    count: "bg-red-500/20 text-red-200",
-  },
-  resolved: {
-    badge: "text-emerald-400",
-    idle: "border-emerald-500/40 bg-emerald-500/5 text-emerald-300 hover:border-emerald-500",
-    active: "border-emerald-500 bg-emerald-500/15 text-emerald-200 ring-2 ring-emerald-500 shadow-[0_0_10px_2px_rgba(16,185,129,0.4)]",
-    count: "bg-emerald-500/20 text-emerald-200",
-  },
-  customer: {
-    badge: "text-blue-400",
-    idle: "border-blue-400/40 bg-blue-500/5 text-blue-300 hover:border-blue-400",
-    active: "border-blue-400 bg-blue-500/15 text-blue-200 ring-2 ring-blue-400 shadow-[0_0_10px_2px_rgba(96,165,250,0.4)]",
-    count: "bg-blue-500/20 text-blue-200",
-  },
-  other: {
-    badge: "text-amber-400",
-    idle: "border-amber-500/40 bg-amber-500/5 text-amber-300 hover:border-amber-500",
-    active: "border-amber-500 bg-amber-500/15 text-amber-200 ring-2 ring-amber-500 shadow-[0_0_10px_2px_rgba(245,158,11,0.4)]",
-    count: "bg-amber-500/20 text-amber-200",
-  },
-};
+function getNeon(isLight: boolean): Record<Cat, { badge: string; idle: string; active: string; count: string }> {
+  return isLight ? {
+    vendor:   { badge: "text-red-700",     idle: "border-red-400 bg-red-50 text-red-700 hover:bg-red-100",         active: "border-red-600 bg-red-100 text-red-800 ring-2 ring-red-400",         count: "bg-red-100 text-red-800" },
+    resolved: { badge: "text-emerald-700", idle: "border-emerald-400 bg-emerald-50 text-emerald-700 hover:bg-emerald-100", active: "border-emerald-600 bg-emerald-100 text-emerald-800 ring-2 ring-emerald-400", count: "bg-emerald-100 text-emerald-800" },
+    customer: { badge: "text-blue-700",    idle: "border-blue-400 bg-blue-50 text-blue-700 hover:bg-blue-100",     active: "border-blue-600 bg-blue-100 text-blue-800 ring-2 ring-blue-400",     count: "bg-blue-100 text-blue-800" },
+    other:    { badge: "text-amber-700",   idle: "border-amber-400 bg-amber-50 text-amber-700 hover:bg-amber-100", active: "border-amber-600 bg-amber-100 text-amber-800 ring-2 ring-amber-400", count: "bg-amber-100 text-amber-800" },
+  } : {
+    vendor:   { badge: "text-red-400",     idle: "border-red-500/40 bg-red-500/5 text-red-300 hover:border-red-500",         active: "border-red-500 bg-red-500/15 text-red-200 ring-2 ring-red-500 shadow-[0_0_10px_2px_rgba(239,68,68,0.4)]",         count: "bg-red-500/20 text-red-200" },
+    resolved: { badge: "text-emerald-400", idle: "border-emerald-500/40 bg-emerald-500/5 text-emerald-300 hover:border-emerald-500", active: "border-emerald-500 bg-emerald-500/15 text-emerald-200 ring-2 ring-emerald-500 shadow-[0_0_10px_2px_rgba(16,185,129,0.4)]", count: "bg-emerald-500/20 text-emerald-200" },
+    customer: { badge: "text-blue-400",    idle: "border-blue-400/40 bg-blue-500/5 text-blue-300 hover:border-blue-400",     active: "border-blue-400 bg-blue-500/15 text-blue-200 ring-2 ring-blue-400 shadow-[0_0_10px_2px_rgba(96,165,250,0.4)]",     count: "bg-blue-500/20 text-blue-200" },
+    other:    { badge: "text-amber-400",   idle: "border-amber-500/40 bg-amber-500/5 text-amber-300 hover:border-amber-500", active: "border-amber-500 bg-amber-500/15 text-amber-200 ring-2 ring-amber-500 shadow-[0_0_10px_2px_rgba(245,158,11,0.4)]", count: "bg-amber-500/20 text-amber-200" },
+  };
+}
 
-function StatusBadge({ status }: { status: string }) {
-  return <span className={cn("font-medium", NEON[statusCat(status)].badge)}>{status || "—"}</span>;
+function StatusBadge({ status, isLight }: { status: string; isLight: boolean }) {
+  return <span className={cn("font-medium", getNeon(isLight)[statusCat(status)].badge)}>{status || "—"}</span>;
 }
 
 const EXPORT_COLS = ["Incidente", "Apertura", "Empresa", "Servicio", "Distrito", "CASE", "SISA", "Asignado", "Estatus"];
@@ -444,11 +431,11 @@ export function SisaView() {
                 title={`Filtrar por estatus "${status}"`}
                 className={cn(
                   "flex items-center gap-2 rounded-lg border px-3 py-1.5 text-xs font-medium transition-all",
-                  isSel ? NEON[cat].active : NEON[cat].idle
+                  isSel ? getNeon(isLight)[cat].active : getNeon(isLight)[cat].idle
                 )}
               >
                 <span className="max-w-[14rem] truncate">{status || "—"}</span>
-                <span className={cn("rounded-full px-1.5 py-0.5 font-mono text-[10px]", NEON[cat].count)}>
+                <span className={cn("rounded-full px-1.5 py-0.5 font-mono text-[10px]", getNeon(isLight)[cat].count)}>
                   {count}
                 </span>
               </button>
@@ -743,7 +730,7 @@ export function SisaView() {
                     <td className="px-3 py-2 font-mono text-xs text-accent">{it.vendorTicket || "—"}</td>
                     <td className="px-3 py-2 font-mono text-xs text-text-muted">{it.assignee ?? "—"}</td>
                     <td className="px-3 py-2 text-xs">
-                      <StatusBadge status={it.status} />
+                      <StatusBadge status={it.status} isLight={isLight} />
                     </td>
                     <td className="px-3 py-2">
                       <button
