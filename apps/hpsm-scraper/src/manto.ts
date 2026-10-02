@@ -200,37 +200,6 @@ async function consultarFolio(page: Page, folio: string): Promise<MantoEstatusRe
   return { folio, found: true, notasEfa };
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// NOTAS DEL EFA (VentanaZoom.jsp?tipo=EFA) — alimentan la línea "Estatus:" del
-// formato EDC.
-//
-// Manto guarda TODO el historial del folio en un solo <textarea> sin
-// estructura: observaciones del contacto, diagnósticos, reasignaciones de
-// técnico y volcados completos de pruebas GPON, concatenados y sin orden
-// cronológico fiable. Copiar el textarea entero no sirve: en folios reales son
-// 2000+ caracteres, la mayoría datos de equipo (potencias ópticas, VLANs,
-// tráfico por interfaz) que no aportan al aviso de WhatsApp.
-//
-// Se arma un resumen con lo que el equipo sí reporta, en este orden:
-//   1. Observaciones del Contacto (falla, cliente, caso, contacto, horarios)
-//   2. Última línea RMA:        — quién atiende / última reasignación
-//   3. DIAGNOSTICO:             — solo si trae valor en la misma línea
-//   4. PISA:<dígitos>           — solo folios PISA reales
-// ─────────────────────────────────────────────────────────────────────────────
-
-const MARCA_OBSERVACIONES = "******** Observaciones del Contacto ********";
-
-// Inicio del bloque técnico: corta las Observaciones. "CASxxx :" son las
-// entidades (CASPUE, CASGDL...) que preceden a una reasignación automática.
-const INICIO_BLOQUE_TECNICO =
-  /^(RMA\s*:|DIAGNOSTICO\s*:|RESULTADOS DE LA PRUEBA|Re-Asignaci|CAS[A-Z]{2,4}\s*:|Informaci.n del Equipo|Consultar\b|Id Contrato\b)/i;
-
-// Líneas de las Observaciones que NO van al EDC porque ya están arriba en el
-// propio formato (Cliente, Incidente) o son del área que reporta, no del sitio:
-// el EDC ya trae "Cliente:" y "*Incidente crítico*:" en sus primeras líneas.
-const OBSERVACION_REDUNDANTE =
-  /^(CLIENTE\s*:|CASO(\s+UNINET)?\s*:|INCIDENTE\s*:|IDS\s+CARE\s*:|TELEFONO\s*:|REPORTA\s*:)/i;
-
 /** Entidades HTML + acentos rotos de iso-8859-1, y \r sueltos → saltos de línea. */
 function decodificarTextoManto(raw: string): string {
   return raw
@@ -253,61 +222,28 @@ export function extraerNotasEfa(htmlZoom: string): string | undefined {
   if (!m) return undefined;
 
   const texto = decodificarTextoManto(m[1]);
-  const lineas = texto.split(/[\r\n]+/).map((l) => l.trim()).filter(Boolean);
-  if (lineas.length === 0) return undefined;
+  if (!texto.trim()) return undefined;
 
-  // 1. Observaciones: desde la ÚLTIMA marca (es la vigente cuando hay varias),
-  //    hasta que empieza el bloque técnico.
-  const idxMarca = texto.lastIndexOf(MARCA_OBSERVACIONES);
-  const desdeMarca = idxMarca >= 0 ? texto.slice(idxMarca + MARCA_OBSERVACIONES.length) : texto;
-  const observaciones: string[] = [];
-  for (const l of desdeMarca.split(/[\r\n]+/).map((x) => x.trim()).filter(Boolean)) {
-    if (INICIO_BLOQUE_TECNICO.test(l)) break;
-    if (OBSERVACION_REDUNDANTE.test(l)) continue; // ya va arriba en el EDC
-    observaciones.push(l);
-  }
+  // Partir el texto en párrafos: grupos de líneas separados por una o más
+  // líneas en blanco. Cada párrafo se limpia internamente (trim por línea).
+  const parrafos = texto
+    .split(/\n{2,}|\r\n(\r\n)+/)   // 2+ saltos de línea = separador de párrafo
+    .map((bloque) =>
+      bloque
+        .split(/[\r\n]+/)
+        .map((l) => l.trim())
+        .filter(Boolean)
+        .join("\n"),
+    )
+    .filter(Boolean);              // descartar párrafos vacíos
 
-  // El contacto de sitio se mueve al FINAL (después de RMA/DIAGNOSTICO/PISA):
-  // es dato de referencia, no el avance del folio. Arrastra solo las líneas que
-  // son parte del mismo dato (teléfono, horario, notas de acceso) — NO los
-  // avisos "## ... ###", que van con la descripción de la falla.
-  const contacto: string[] = [];
-  const idxContacto = observaciones.findIndex((l) => /^(CONTACTO|RESPONSABLE EN SITIO)\s*:/i.test(l));
-  if (idxContacto >= 0) {
-    let fin = idxContacto + 1;
-    while (
-      fin < observaciones.length &&
-      /^(tel\.?|tel[ée]fono|cel\.?|horario|acceso|acc\b|nota)\b/i.test(observaciones[fin])
-    ) {
-      fin++;
-    }
-    contacto.push(...observaciones.splice(idxContacto, fin - idxContacto));
-  }
+  if (parrafos.length === 0) return undefined;
 
-  const partes = [...observaciones];
+  // Tomar los últimos 4 párrafos (los más recientes — Manto acumula de más
+  // antiguo a más nuevo, de arriba a abajo).
+  const ultimos = parrafos.slice(-4);
 
-  // 2. Última RMA: la más reciente (reasignación o quién atiende; ambas traen fecha).
-  const rma = lineas.filter((l) => /^RMA\s*:/i.test(l)).pop();
-  if (rma) partes.push(rma);
-
-  // 3. DIAGNOSTICO: solo si trae valor pegado en la misma línea. Cuando Manto lo
-  //    deja vacío, el texto real queda en la línea siguiente mezclado con el
-  //    volcado técnico — se omite antes que arriesgar arrastrar ruido.
-  const diag = lineas
-    .filter((l) => /^DIAGNOSTICO\s*:/i.test(l) && l.replace(/^DIAGNOSTICO\s*:/i, "").trim().length > 0)
-    .pop();
-  if (diag) partes.push(diag);
-
-  // 4. PISA: exige dígitos — descarta cosas como "FinPISA:  9/05/2026" (una
-  //    fecha) y "Reporte exitoso en PISA:" (etiqueta sin folio).
-  const pisaMatch = [...texto.matchAll(/\bPISA\s*:\s*(\d{4,})\b/gi)].pop();
-  if (pisaMatch) partes.push(`PISA: ${pisaMatch[1]}`);
-
-  // 5. Contacto de sitio, al final.
-  partes.push(...contacto);
-
-  const out = partes.join("\n").trim();
-  return out.length > 0 ? out : undefined;
+  return ultimos.join("\n\n").trim();
 }
 
 /**
