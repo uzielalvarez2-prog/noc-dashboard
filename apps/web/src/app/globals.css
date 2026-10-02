@@ -99,14 +99,20 @@ html[data-theme="light"] .badge-low {
   color: #334155;
   border-color: #cbd5e1;
 }
-/* Colores neón de estado (StatusCardsTable, SisaView, CaseSanJuan) —
+/* Colores neón de estado (StatusCardsTable, SisaView, CaseSanJuan, banners) —
    versiones más oscuras para mantener contraste sobre fondos claros. */
+html[data-theme="light"] .text-red-200    { color: #991b1b !important; }
 html[data-theme="light"] .text-red-400    { color: #dc2626 !important; }
 html[data-theme="light"] .text-red-500    { color: #b91c1c !important; }
 html[data-theme="light"] .text-green-400  { color: #15803d !important; }
+html[data-theme="light"] .text-amber-200  { color: #92400e !important; }
+html[data-theme="light"] .text-amber-300  { color: #78350f !important; }
 html[data-theme="light"] .text-amber-400  { color: #b45309 !important; }
 html[data-theme="light"] .text-blue-400   { color: #1d4ed8 !important; }
+html[data-theme="light"] .text-violet-200 { color: #5b21b6 !important; }
 html[data-theme="light"] .text-violet-300 { color: #6d28d9 !important; }
+html[data-theme="light"] .text-cyan-200   { color: #0e7490 !important; }
+html[data-theme="light"] .text-cyan-300   { color: #0e7490 !important; }
 /* Quitar drop-shadow neón en modo día (no aportan contraste sobre blanco) */
 html[data-theme="light"] [class*="drop-shadow"] { filter: none !important; }
 
