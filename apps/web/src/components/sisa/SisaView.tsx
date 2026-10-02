@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { useTheme } from "@/components/layout/ThemeProvider";
 import { useQuery } from "@tanstack/react-query";
 import { Search, Download, RefreshCw, Loader2, Copy, Check, X, ArrowDownWideNarrow, ArrowUpNarrowWide, ArrowUp, ArrowDown, ArrowUpDown } from "lucide-react";
 import { cn, formatHpsm } from "@/lib/utils";
@@ -126,6 +127,8 @@ const EXPORT_COLS = ["Incidente", "Apertura", "Empresa", "Servicio", "Distrito",
 const COLUMNS = ["Incidente", "Apertura", "Empresa", "Servicio", "Distrito", "CASE", "SISA", "Asignado", "Estatus", "EDC"];
 
 export function SisaView() {
+  const { theme } = useTheme();
+  const isLight = theme === "light";
   const [q, setQ] = useState("");
   const [sortDir, setSortDir] = useState<SortDir>("desc");
   const [selectedStatus, setSelectedStatus] = useState<string | null>(null);
@@ -568,9 +571,9 @@ export function SisaView() {
           <div
             className={cn(
               "flex items-start justify-between gap-2 border-b border-border/60 px-3 py-2 text-xs",
-              mantoMsg.tone === "ok" && "bg-cyan-500/10 text-cyan-200",
-              mantoMsg.tone === "err" && "bg-red-500/10 text-red-200",
-              mantoMsg.tone === "caido" && "bg-amber-500/10 text-amber-200"
+              mantoMsg.tone === "ok" && (isLight ? "bg-cyan-50 text-cyan-800" : "bg-cyan-500/10 text-cyan-200"),
+              mantoMsg.tone === "err" && (isLight ? "bg-red-50 text-red-800" : "bg-red-500/10 text-red-200"),
+              mantoMsg.tone === "caido" && (isLight ? "bg-amber-50 text-amber-800" : "bg-amber-500/10 text-amber-200")
             )}
           >
             <span className={cn(mantoMsg.tone === "caido" && "font-medium")}>{mantoMsg.text}</span>
@@ -590,9 +593,9 @@ export function SisaView() {
             manualmente. El usuario puede cerrarla; reaparece si una nueva
             corrida arroja folios con error distintos. */}
         {foliosConError.length > 0 && !erroresOculto && (
-          <div className="border-b border-amber-500/30 bg-amber-500/[0.06] px-3 py-3">
+          <div className={cn("border-b px-3 py-3", isLight ? "border-amber-300 bg-amber-50" : "border-amber-500/30 bg-amber-500/[0.06]")}>
             <div className="mb-2 flex items-center justify-between gap-2">
-              <span className="text-xs font-medium text-amber-200">
+              <span className={cn("text-xs font-medium", isLight ? "text-amber-800" : "text-amber-200")}>
                 ⚠ {foliosConError.length} folio{foliosConError.length === 1 ? "" : "s"} que Manto no dejó consultar — revisar manualmente
               </span>
               <div className="flex shrink-0 items-center gap-1.5">
@@ -604,7 +607,9 @@ export function SisaView() {
                     "flex items-center gap-1 rounded-md border px-2 py-1 text-[11px] font-medium transition-colors",
                     erroresCopiados
                       ? "border-success/50 bg-success/10 text-success"
-                      : "border-amber-500/40 bg-amber-500/10 text-amber-200 hover:bg-amber-500/20"
+                      : isLight
+                        ? "border-amber-400 bg-amber-100 text-amber-800 hover:bg-amber-200"
+                        : "border-amber-500/40 bg-amber-500/10 text-amber-200 hover:bg-amber-500/20"
                   )}
                 >
                   {erroresCopiados ? (
@@ -621,20 +626,20 @@ export function SisaView() {
                   type="button"
                   onClick={() => setErroresOculto(true)}
                   title="Cerrar — se ocultará esta lista"
-                  className="rounded-md p-1 text-amber-200/70 transition-colors hover:bg-amber-500/15 hover:text-amber-200"
+                  className={cn("rounded-md p-1 transition-colors", isLight ? "text-amber-700 hover:bg-amber-100" : "text-amber-200/70 hover:bg-amber-500/15 hover:text-amber-200")}
                 >
                   <X className="h-3.5 w-3.5" />
                 </button>
               </div>
             </div>
-            <div className="max-h-48 overflow-auto rounded-md border border-amber-500/20">
+            <div className={cn("max-h-48 overflow-auto rounded-md border", isLight ? "border-amber-300" : "border-amber-500/20")}>
               <table className="w-full border-collapse text-xs">
-                <thead className="sticky top-0 bg-amber-500/10">
+                <thead className={cn("sticky top-0", isLight ? "bg-amber-100" : "bg-amber-500/10")}>
                   <tr>
                     {["SISA", "Incidente", "Empresa"].map((h) => (
                       <th
                         key={h}
-                        className="border-b border-amber-500/20 px-2.5 py-1.5 text-left font-medium uppercase tracking-wider text-amber-200/80"
+                        className={cn("border-b px-2.5 py-1.5 text-left font-medium uppercase tracking-wider", isLight ? "border-amber-300 text-amber-800" : "border-amber-500/20 text-amber-200/80")}
                       >
                         {h}
                       </th>
