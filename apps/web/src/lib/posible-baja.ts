@@ -19,6 +19,7 @@ function buildPosibleBajaMessage(data: {
   incidentId: string;
   serviceRef: string;
   company: string;
+  siteName: string;
   note: string;
 }): string {
   const lines = [
@@ -26,9 +27,9 @@ function buildPosibleBajaMessage(data: {
     data.incidentId,
     `REF: ${data.serviceRef}`,
     `Company: ${data.company}`,
-    "",
-    data.note.trim() || DEFAULT_NOTE,
   ];
+  if (data.siteName) lines.push(`Site Name: ${data.siteName}`);
+  lines.push("", data.note.trim() || DEFAULT_NOTE);
   return lines.join("\n");
 }
 
@@ -78,6 +79,7 @@ export async function syncPosibleBajaNotify(records: OpenRecordLite[]): Promise<
         incidentId: inc.incidentId,
         serviceRef: inc.serviceId,
         company: inc.company,
+        siteName: inc.siteName,
         note: flag.note,
       });
 

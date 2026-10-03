@@ -24,6 +24,7 @@ export interface OpenRecordLite {
   serviceId: string;
   state: string;
   district: string;
+  siteName: string;
   assignee: string | null;
   group: string;
 }
