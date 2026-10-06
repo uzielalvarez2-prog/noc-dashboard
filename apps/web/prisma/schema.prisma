@@ -331,6 +331,11 @@ model WhatsappGroup {
   // Grupos de cliente (ej. TIENDAS 3B) reciben el template "Incidente/Sitio/
   // Referencia" de la alerta de servicio activo en vez del genérico interno.
   isClientGroup Boolean  @default(false)
+  // Suspendido: ningún aviso automático se entrega a este grupo (apertura,
+  // ACTIVO, posible baja, programados) aunque siga configurado como destino.
+  // Se activa/desactiva desde /reglas-notificacion (reemplaza la env var
+  // WA_CHATS_SUSPENDIDOS, que se sigue respetando como respaldo).
+  suspendido    Boolean  @default(false)
   note          String?
   createdBy     String   @default("") // "" cuando lo descubrió el listener
   createdAt     DateTime @default(now())

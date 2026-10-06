@@ -38,9 +38,9 @@ export async function runScheduledWhatsappCycle(): Promise<void> {
     let anyOk = false;
     let firstError: string | null = null;
     for (const chatId of item.notifyChatIds) {
-      const suspendido = isChatSuspendido(chatId);
+      const suspendido = await isChatSuspendido(chatId);
       const sent = suspendido
-        ? { ok: false as const, error: "chat suspendido (WA_CHATS_SUSPENDIDOS)" }
+        ? { ok: false as const, error: "chat suspendido" }
         : await sendWhatsappViaListener(chatId, item.text);
       if (sent.ok) anyOk = true;
       else {

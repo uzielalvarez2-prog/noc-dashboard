@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import { getServerSession } from "@/lib/auth-session";
 import { canAccessMonitoring } from "@/lib/permissions";
 import { AperturaReglasPanel } from "@/components/monitoring/AperturaReglasPanel";
+import { GruposSuspendidosPanel } from "@/components/monitoring/GruposSuspendidosPanel";
 
 export const dynamic = "force-dynamic";
 
@@ -23,6 +24,8 @@ export default async function ReglasNotificacionPage() {
       </div>
 
       <AperturaReglasPanel />
+
+      <GruposSuspendidosPanel />
     </div>
   );
 }

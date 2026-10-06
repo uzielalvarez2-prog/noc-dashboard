@@ -96,7 +96,7 @@ async function sendAlert(monitor: ActiveMonitor): Promise<void> {
     if (!monitoredIp.notifyEnabled) break;
     // Grupo suspendido: se omite SIN marcar fallo. Cuenta como entregado para
     // que la alerta no quede en reintento eterno cuando es el único destino.
-    if (isChatSuspendido(chatId)) {
+    if (await isChatSuspendido(chatId)) {
       delivered = true;
       continue;
     }

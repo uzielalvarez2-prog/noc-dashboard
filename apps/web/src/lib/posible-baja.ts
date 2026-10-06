@@ -86,9 +86,9 @@ export async function syncPosibleBajaNotify(records: OpenRecordLite[]): Promise<
       let anyOk = false;
       let firstError: string | null = null;
       for (const chatId of chatIds) {
-        const suspendido = isChatSuspendido(chatId);
+        const suspendido = await isChatSuspendido(chatId);
         const sent = suspendido
-          ? { ok: false as const, status: 0, error: "chat suspendido (WA_CHATS_SUSPENDIDOS)" }
+          ? { ok: false as const, status: 0, error: "chat suspendido" }
           : await sendWhatsappViaListener(chatId, text);
         if (sent.ok) anyOk = true;
         else {

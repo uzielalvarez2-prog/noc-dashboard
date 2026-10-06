@@ -198,8 +198,8 @@ export async function syncAperturaNotify(records: OpenRecordLite[]): Promise<num
         // al reanudar.
         const motivo = pausado
           ? "pausado (interruptor global de /reglas-notificacion)"
-          : isChatSuspendido(chatId)
-            ? "chat suspendido (WA_CHATS_SUSPENDIDOS)"
+          : (await isChatSuspendido(chatId))
+            ? "chat suspendido"
             : null;
         const sent = motivo
           ? { ok: false as const, status: 0, error: motivo }
