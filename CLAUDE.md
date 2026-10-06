@@ -100,8 +100,8 @@ En Tailwind: `bg-background`, `bg-surface`, `text-text-primary`, `text-critical`
 | `HPSM_DATABASE` | Nombre de la DB en HPSM |
 | `REDIS_URL` | Upstash Redis URL |
 | `RESEND_API_KEY` | API key de Resend para emails |
-| `APERTURA_SERVICIOS` | Códigos de Servicio (prefijo antes del guion en serviceId) que disparan alerta de apertura por WhatsApp |
-| `APERTURA_CHAT_ID_MATUTINO` | chatId (`xxxx@g.us`) de PEXA Matutino — alerta de apertura 06:00–15:00 CDMX |
+| `APERTURA_SERVICIOS` | OBSOLETA (2026-10-06): las reglas de la alerta de apertura viven en la tabla `AperturaRegla` (panel ADMIN `/reglas-notificacion`); ya no se lee |
+| `APERTURA_CHAT_ID_MATUTINO` | chatId (`xxxx@g.us`) de PEXA Matutino — destino de reglas "Según turno" 06:00–15:00 CDMX |
 | `APERTURA_CHAT_ID_VESPERTINO` | chatId (`xxxx@g.us`) de PEXA Vespertino — alerta de apertura 15:00–23:15 CDMX (y fuera de ambas ventanas cae a Matutino) |
 
 ## Reglas No Negociables

@@ -360,13 +360,15 @@ model AgentContact {
 
 // ─────────────────────────────────────────────────────────────────────────────
 // WHATSAPP — APERTURA DE INCIDENTE: control de "ya avisé este" para la alerta de
-// apertura (Servicio en {C00,C20,C25,C50,C1G,G2B,G4B} → PEXA Matutino/Vespertino
-// con @mención al asignado). OpenIncident es un snapshot que se recarga completo
+// apertura (incidente que cumple alguna AperturaRegla → grupos de la regla con
+// @mención al asignado). OpenIncident es un snapshot que se recarga completo
 // cada ~5 min, así que "nuevo" = primera vez que el incidentId aparece aquí.
+// Una fila por (incidente, chat): un incidente puede cumplir varias reglas con
+// grupos distintos. chatId "" = marcado sin envío (ya abierto al activar regla).
 // ─────────────────────────────────────────────────────────────────────────────
 model AperturaNotificada {
   id         String   @id @default(cuid())
-  incidentId String   @unique
+  incidentId String
   serviceId  String
   notifiedAt DateTime @default(now())
   // Resultado del envío a wa-listener. La fila se crea aunque el envío falle
@@ -375,6 +377,41 @@ model AperturaNotificada {
   chatId     String   @default("")
   ok         Boolean  @default(false)
   error      String?
+  regla      String   @default("") // nombre(s) de la AperturaRegla que disparó el aviso
+
+  @@unique([incidentId, chatId])
+  @@index([incidentId])
+}
+
+// Reglas de la alerta de apertura, administradas por ADMIN en
+// /reglas-notificacion. Un incidente cumple la regla si cumple TODOS los
+// criterios no vacíos (Y). Dentro de servicePrefixes / imPrefixes, la coma es
+// un O ("C20,C25"). companyContains es UN solo fragmento (los nombres de
+// empresa traen comas), comparado sin mayúsculas ni acentos.
+model AperturaRegla {
+  id              String   @id @default(cuid())
+  nombre          String
+  servicePrefixes String   @default("") // prefijo antes del guion de serviceId, ej. "C20,C25"
+  imPrefixes      String   @default("") // inicio del incidentId, ej. "IMSMAG"
+  companyContains String   @default("") // fragmento del nombre de empresa
+  porTurno        Boolean  @default(false) // true = PEXA Matutino/Vespertino según la hora
+  notifyChatIds   String[] @default([]) // grupos fijos (WhatsappGroup.chatId)
+  enabled         Boolean  @default(true)
+  createdBy       String   @default("")
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([enabled])
+}
+
+// Interruptor global de la alerta de apertura (fila única id="global").
+// Pausada: no se envía nada, pero los incidentes nuevos SÍ se marcan en
+// AperturaNotificada para que al reanudar no llegue una ráfaga de atrasados.
+model AperturaConfig {
+  id        String   @id @default("global")
+  pausado   Boolean  @default(false)
+  updatedBy String   @default("")
+  updatedAt DateTime @updatedAt
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
