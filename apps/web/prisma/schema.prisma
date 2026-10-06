@@ -395,6 +395,7 @@ model AperturaRegla {
   imPrefixes      String   @default("") // inicio del incidentId, ej. "IMSMAG"
   companyContains String   @default("") // fragmento del nombre de empresa
   porTurno        Boolean  @default(false) // true = PEXA Matutino/Vespertino según la hora
+  mostrarSitio    Boolean  @default(false) // mensaje con "Sitio:" (Site Name) en vez de "Company:" — para chats de cliente
   notifyChatIds   String[] @default([]) // grupos fijos (WhatsappGroup.chatId)
   enabled         Boolean  @default(true)
   createdBy       String   @default("")

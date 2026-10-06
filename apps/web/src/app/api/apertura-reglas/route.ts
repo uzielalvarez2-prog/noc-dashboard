@@ -38,6 +38,7 @@ export async function POST(req: NextRequest) {
       imPrefixes: (body.imPrefixes ?? "").trim(),
       companyContains: (body.companyContains ?? "").trim(),
       porTurno: body.porTurno === true,
+      mostrarSitio: body.mostrarSitio === true,
       notifyChatIds: Array.isArray(body.notifyChatIds)
         ? body.notifyChatIds.filter((c) => typeof c === "string" && c.trim())
         : [],

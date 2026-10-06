@@ -10,6 +10,7 @@ export interface ReglaFormState {
   imPrefixes: string;
   companyContains: string;
   porTurno: boolean;
+  mostrarSitio: boolean;
   notifyChatIds: string[];
 }
 
@@ -19,6 +20,7 @@ export const EMPTY_REGLA: ReglaFormState = {
   imPrefixes: "",
   companyContains: "",
   porTurno: false,
+  mostrarSitio: false,
   notifyChatIds: [],
 };
 
@@ -95,6 +97,11 @@ export function AperturaReglaForm({ value, onChange, groups, frequent, busy, onS
           frequent={frequent}
         />
       </div>
+
+      <label className="flex items-center gap-2 text-xs text-text-primary">
+        <input type="checkbox" checked={value.mostrarSitio} onChange={(e) => set({ mostrarSitio: e.target.checked })} />
+        Mostrar <b>Sitio</b> en lugar de Empresa en el mensaje (para chats de cliente)
+      </label>
 
       <div className="flex justify-end gap-2">
         <Button size="sm" variant="ghost" onClick={onCancel} className="h-8 gap-1.5 text-xs text-text-muted">

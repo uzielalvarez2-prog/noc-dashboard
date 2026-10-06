@@ -59,17 +59,33 @@ function buildAperturaMessage(data: {
   incidentId: string;
   serviceRef: string;
   company: string;
+  /** Si viene (regla con mostrarSitio), reemplaza la línea "Company:". */
+  sitio: string | null;
   assigneePhone: string;
 }): string {
   const header = data.siglasIm || data.incidentId;
-  const lines = [
-    "🚨 *INCIDENTE*",
-    header,
-    `REF: ${data.serviceRef}`,
-    `Company: ${data.company}`,
-  ];
+  const lines = ["🚨 *INCIDENTE*", header, `REF: ${data.serviceRef}`];
+  if (data.sitio === null) lines.push(`Company: ${data.company}`);
+  else if (data.sitio) lines.push(`Sitio: ${data.sitio}`);
   if (data.assigneePhone) lines.push("", `@${data.assigneePhone}`);
   return lines.join("\n");
+}
+
+/**
+ * Sitio(s) del incidente para el mensaje de cliente: Site Name; si viene
+ * vacío, "municipio, estado". Lo normal es un sitio por IM; si un IM abarca
+ * varios (masivo), primer sitio + conteo para no mandar un mensaje kilométrico.
+ */
+function describirSitio(filas: OpenRecordLite[]): string {
+  const sitios = [
+    ...new Set(
+      filas
+        .map((f) => f.siteName.trim() || [f.district, f.state].map((x) => x.trim()).filter(Boolean).join(", "))
+        .filter(Boolean),
+    ),
+  ];
+  if (sitios.length <= 1) return sitios[0] ?? "";
+  return `${sitios[0]} (+${sitios.length - 1} sitios)`;
 }
 
 /** Teléfono del asignado vía AgentContact; "" si no hay asignado o no está mapeado. */
@@ -84,26 +100,37 @@ async function resolveAssigneePhone(assignee: string | null): Promise<string> {
 interface Envio {
   chatId: string;
   reglas: string[];
+  mostrarSitio: boolean;
 }
 
 /** Agrupa por chat las reglas que cumple el incidente: un solo mensaje por grupo. */
 function destinosDe(
   inc: OpenRecordLite,
-  reglas: { nombre: string; servicePrefixes: string; imPrefixes: string; companyContains: string; porTurno: boolean; notifyChatIds: string[] }[],
+  reglas: {
+    nombre: string;
+    servicePrefixes: string;
+    imPrefixes: string;
+    companyContains: string;
+    porTurno: boolean;
+    mostrarSitio: boolean;
+    notifyChatIds: string[];
+  }[],
   now: Date,
 ): Envio[] {
-  const porChat = new Map<string, string[]>();
+  const porChat = new Map<string, Envio>();
   for (const r of reglas) {
     if (!cumpleRegla(r, inc)) continue;
     const chats = [...r.notifyChatIds];
     if (r.porTurno) chats.push(resolveNotifyChatId(now));
     for (const chatId of chats.map((c) => c.trim()).filter(Boolean)) {
-      const lista = porChat.get(chatId) ?? [];
-      if (!lista.includes(r.nombre)) lista.push(r.nombre);
-      porChat.set(chatId, lista);
+      const envio = porChat.get(chatId) ?? { chatId, reglas: [], mostrarSitio: false };
+      if (!envio.reglas.includes(r.nombre)) envio.reglas.push(r.nombre);
+      // Si alguna regla que manda a este chat pide Sitio, el chat recibe Sitio.
+      envio.mostrarSitio ||= r.mostrarSitio;
+      porChat.set(chatId, envio);
     }
   }
-  return [...porChat.entries()].map(([chatId, nombres]) => ({ chatId, reglas: nombres }));
+  return [...porChat.values()];
 }
 
 /**
@@ -115,9 +142,15 @@ export async function syncAperturaNotify(records: OpenRecordLite[]): Promise<num
   const reglas = await db.aperturaRegla.findMany({ where: { enabled: true } });
   if (reglas.length === 0) return 0;
 
-  // Una fila por incidente (puede abarcar varios sitios).
+  // Una fila por incidente (puede abarcar varios sitios); todas sus filas para el Sitio.
   const byId = new Map<string, OpenRecordLite>();
-  for (const r of records) if (!byId.has(r.incidentId)) byId.set(r.incidentId, r);
+  const filasPorId = new Map<string, OpenRecordLite[]>();
+  for (const r of records) {
+    if (!byId.has(r.incidentId)) byId.set(r.incidentId, r);
+    const filas = filasPorId.get(r.incidentId);
+    if (filas) filas.push(r);
+    else filasPorId.set(r.incidentId, [r]);
+  }
 
   const now = new Date();
   const candidates = [...byId.values()]
@@ -146,18 +179,20 @@ export async function syncAperturaNotify(records: OpenRecordLite[]): Promise<num
             return "";
           });
 
-      const text = buildAperturaMessage({
+      const base = {
         siglasIm: inc.incidentId,
         incidentId: inc.incidentId,
         serviceRef: inc.serviceId,
         company: inc.company,
         assigneePhone,
-      });
+      };
+      const sitio = describirSitio(filasPorId.get(inc.incidentId) ?? [inc]);
       // Si el asignado no está en el chat, wa-listener descarta la línea "@..."
       // y manda el resto igual — la alerta nunca se pierde por la mención.
       const mentions = assigneePhone ? [phoneToJid(assigneePhone)] : [];
 
-      for (const { chatId, reglas: nombres } of envios) {
+      for (const { chatId, reglas: nombres, mostrarSitio } of envios) {
+        const text = buildAperturaMessage({ ...base, sitio: mostrarSitio ? sitio : null });
         // Pausa global o grupo suspendido: no se envía, pero SÍ se marca en
         // AperturaNotificada (con ok=false y el motivo) para no re-avisar
         // al reanudar.

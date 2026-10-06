@@ -25,6 +25,7 @@ export async function PATCH(req: NextRequest, ctx: { params: Promise<{ id: strin
       imPrefixes: typeof body.imPrefixes === "string" ? body.imPrefixes.trim() : actual.imPrefixes,
       companyContains: typeof body.companyContains === "string" ? body.companyContains.trim() : actual.companyContains,
       porTurno: typeof body.porTurno === "boolean" ? body.porTurno : actual.porTurno,
+      mostrarSitio: typeof body.mostrarSitio === "boolean" ? body.mostrarSitio : actual.mostrarSitio,
       notifyChatIds: Array.isArray(body.notifyChatIds)
         ? body.notifyChatIds.filter((c) => typeof c === "string" && c.trim())
         : actual.notifyChatIds,

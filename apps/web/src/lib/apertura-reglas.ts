@@ -25,6 +25,7 @@ export interface ReglaBody {
   imPrefixes?: string;
   companyContains?: string;
   porTurno?: boolean;
+  mostrarSitio?: boolean;
   notifyChatIds?: string[];
   enabled?: boolean;
 }
