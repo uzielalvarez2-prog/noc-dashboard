@@ -2,7 +2,7 @@
 
 import { useMemo, useState, useEffect } from "react";
 import { useQuery, useQueryClient, useMutation } from "@tanstack/react-query";
-import { Plus, Search, X, Star, Trash2, AlertTriangle, Loader2 } from "lucide-react";
+import { Plus, Search, X, Star, Trash2, AlertTriangle, Loader2, Pencil, Check } from "lucide-react";
 import { useTheme } from "@/components/layout/ThemeProvider";
 import { cn } from "@/lib/utils";
 import { OpenIncidentTable } from "./OpenIncidentTable";
@@ -49,6 +49,26 @@ export function ClienteTopView() {
       qc.invalidateQueries({ queryKey: ["clientes-top-stats"] });
       setSelected(null);
     },
+  });
+
+  // PUT reemplaza el registro completo, así que siempre se manda company/siglasIm/
+  // serviceRef actuales junto con el note (alias) nuevo — si solo mandáramos note,
+  // el endpoint pisaría company con "" y el cliente dejaría de matchear.
+  const renameMutation = useMutation({
+    mutationFn: async ({ cliente, alias }: { cliente: ClienteTopStat; alias: string }) => {
+      const res = await fetch(`/api/clientes-top/${cliente.id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          company: cliente.company,
+          siglasIm: cliente.siglasIm,
+          serviceRef: cliente.serviceRef,
+          note: alias,
+        }),
+      });
+      if (!res.ok) throw new Error("No se pudo actualizar");
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["clientes-top-stats"] }),
   });
 
   const cardCls = (critical: boolean) =>
@@ -147,6 +167,8 @@ export function ClienteTopView() {
           onClose={() => setSelected(null)}
           onRemove={() => removeMutation.mutate(selected.id)}
           removing={removeMutation.isPending}
+          onRename={(alias) => renameMutation.mutate({ cliente: selected, alias })}
+          renaming={renameMutation.isPending}
         />
       )}
 
@@ -173,21 +195,80 @@ function ClienteDetail({
   onClose,
   onRemove,
   removing,
+  onRename,
+  renaming,
 }: {
   cliente: ClienteTopStat;
   onClose: () => void;
   onRemove: () => void;
   removing: boolean;
+  onRename: (alias: string) => void;
+  renaming: boolean;
 }) {
   const [sortDir, setSortDir] = useState<SortDir>("desc");
   void sortDir; // sin control de orden en este panel por ahora; la tabla lo acepta igual
 
+  const [editing, setEditing] = useState(false);
+  const [alias, setAlias] = useState(cliente.note ?? "");
+
+  function saveAlias() {
+    onRename(alias.trim());
+    setEditing(false);
+  }
+
   return (
     <div className="space-y-2">
-      <div className="flex items-center gap-2">
-        <h2 className="text-sm font-semibold text-text-primary">
-          Incidentes abiertos — <span className="text-accent">{cliente.displayName}</span>
-        </h2>
+      <div className="flex flex-wrap items-center gap-2">
+        {editing ? (
+          <div className="flex items-center gap-1.5">
+            <input
+              autoFocus
+              value={alias}
+              onChange={(e) => setAlias(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") saveAlias();
+                if (e.key === "Escape") setEditing(false);
+              }}
+              placeholder={cliente.company}
+              maxLength={60}
+              className="h-7 rounded-md border border-border bg-background/60 px-2 text-sm text-text-primary placeholder:text-text-muted/60 focus:border-accent focus:outline-none"
+            />
+            <button
+              type="button"
+              onClick={saveAlias}
+              disabled={renaming}
+              title="Guardar"
+              className="rounded p-1 text-success hover:bg-success-dim disabled:opacity-50"
+            >
+              {renaming ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Check className="h-3.5 w-3.5" />}
+            </button>
+            <button
+              type="button"
+              onClick={() => setEditing(false)}
+              title="Cancelar"
+              className="rounded p-1 text-text-muted hover:text-text-primary"
+            >
+              <X className="h-3.5 w-3.5" />
+            </button>
+          </div>
+        ) : (
+          <h2 className="text-sm font-semibold text-text-primary">
+            Incidentes abiertos — <span className="text-accent">{cliente.displayName}</span>
+          </h2>
+        )}
+        {!editing && (
+          <button
+            type="button"
+            onClick={() => {
+              setAlias(cliente.note ?? "");
+              setEditing(true);
+            }}
+            title="Editar nombre abreviado"
+            className="rounded p-1 text-text-muted hover:text-text-primary"
+          >
+            <Pencil className="h-3.5 w-3.5" />
+          </button>
+        )}
         <button
           type="button"
           onClick={onClose}
