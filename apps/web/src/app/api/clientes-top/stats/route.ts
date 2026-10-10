@@ -6,12 +6,13 @@ import { isResolvedStatus } from "@/lib/war-room";
 export const dynamic = "force-dynamic";
 
 // ─────────────────────────────────────────────────────────────────────────────
-// GET — conteo de incidentes ABIERTOS por Cliente TOP, para las tarjetas del
-// tablero. Lee de WarRoomIncident (ya mantenido al día por syncWarRoom en cada
-// upload del scraper) en vez de recalcular contra OpenIncident: WarRoomIncident
-// ya trae matchedBy y resolvedAt resueltos, así que aquí solo se agrupa.
-// Mismo criterio de match que syncWarRoom (company / serviceRef / siglasIm por
-// prefijo del incidentId), reimplementado como lectura en memoria.
+// GET — conteo de incidentes ABIERTOS AHORA por Cliente TOP, para las tarjetas
+// del tablero. Lee de OpenIncident (el snapshot que el scraper reemplaza por
+// completo cada 5 min) y NO de WarRoomIncident: esa tabla persiste 7 días de
+// historial y "resolvedAt IS NULL" ahí no equivale a "sigue abierto hoy" (un
+// incidente que salió del snapshot sin pasar por RESOLVED se queda ahí para
+// siempre). Mismo criterio de match que syncWarRoom (company / serviceRef /
+// siglasIm por prefijo del incidentId), reimplementado como lectura en memoria.
 // ─────────────────────────────────────────────────────────────────────────────
 
 function norm(s: string | null | undefined): string {
@@ -30,10 +31,17 @@ export async function GET(req: NextRequest) {
   if (!session) return NextResponse.json({ error: "No autorizado" }, { status: 401 });
 
   try {
-    const [clientes, abiertos] = await Promise.all([
+    const [clientes, rows] = await Promise.all([
       db.clienteTop.findMany({ orderBy: [{ company: "asc" }] }),
-      db.warRoomIncident.findMany({ where: { resolvedAt: null } }),
+      db.openIncident.findMany({
+        select: { incidentId: true, openTime: true, status: true, company: true, serviceId: true },
+      }),
     ]);
+
+    // 1 fila por incidente (un IM puede abarcar varios sitios en OpenIncident).
+    const byIncident = new Map<string, (typeof rows)[number]>();
+    for (const r of rows) if (!byIncident.has(r.incidentId)) byIncident.set(r.incidentId, r);
+    const abiertos = [...byIncident.values()];
 
     const now = Date.now();
     const stats = clientes.map((c) => {
