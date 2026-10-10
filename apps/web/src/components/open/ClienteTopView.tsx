@@ -78,7 +78,7 @@ export function ClienteTopView() {
     onSuccess: () => qc.invalidateQueries({ queryKey: ["clientes-top-stats"] }),
   });
 
-  const cardCls = (critical: boolean) =>
+  const cardCls = (critical: boolean, active: boolean) =>
     cn(
       "group relative w-full rounded-xl border p-4 text-left transition-all hover:-translate-y-0.5",
       critical
@@ -88,6 +88,9 @@ export function ClienteTopView() {
         : isLight
           ? "border-amber-300 bg-amber-50 hover:shadow-md"
           : "border-amber-500/40 bg-amber-500/10 hover:shadow-[0_0_16px_-4px_rgba(245,158,11,0.4)]",
+      // Tarjeta en consulta: anillo de acento bien visible, por encima del estilo
+      // crítico/normal, para que quede claro cuál detalle está abierto ahora.
+      active && (isLight ? "ring-2 ring-accent -translate-y-0.5" : "ring-2 ring-accent shadow-[0_0_14px_1px_rgba(59,130,246,0.5)] -translate-y-0.5"),
     );
 
   return (
@@ -144,8 +147,14 @@ export function ClienteTopView() {
                 key={c.id}
                 type="button"
                 onClick={() => setSelected(isSelected ? null : c)}
-                className={cardCls(c.criticalCount > 0)}
+                className={cardCls(c.criticalCount > 0, isSelected)}
               >
+                {isSelected && (
+                  <span className="absolute left-3 top-2.5 flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wide text-accent">
+                    <span className="h-1.5 w-1.5 rounded-full bg-accent animate-pulse" />
+                    En consulta
+                  </span>
+                )}
                 {isSelected ? (
                   <span
                     role="button"
@@ -165,7 +174,10 @@ export function ClienteTopView() {
                   )
                 )}
                 <p
-                  className="truncate pr-5 text-sm font-semibold text-text-primary"
+                  className={cn(
+                    "truncate pr-5 text-sm font-semibold text-text-primary",
+                    isSelected && "mt-3.5",
+                  )}
                   title={c.displayName !== c.company ? `${c.displayName} — ${c.company}` : c.company}
                 >
                   {c.displayName}
