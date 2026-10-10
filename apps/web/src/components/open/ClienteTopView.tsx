@@ -93,6 +93,86 @@ export function ClienteTopView() {
       active && (isLight ? "ring-2 ring-accent -translate-y-0.5" : "ring-2 ring-accent shadow-[0_0_14px_1px_rgba(59,130,246,0.5)] -translate-y-0.5"),
     );
 
+  function renderCard(c: ClienteTopStat, isSelected: boolean) {
+    return (
+      <button
+        key={c.id}
+        type="button"
+        onClick={() => setSelected(isSelected ? null : c)}
+        className={cardCls(c.criticalCount > 0, isSelected)}
+      >
+        {isSelected && (
+          <span className="absolute left-3 top-2.5 flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wide text-accent">
+            <span className="h-1.5 w-1.5 rounded-full bg-accent animate-pulse" />
+            En consulta
+          </span>
+        )}
+        {isSelected ? (
+          <span
+            role="button"
+            tabIndex={0}
+            onClick={(e) => {
+              e.stopPropagation();
+              setSelected(null);
+            }}
+            title="Cerrar vista de incidentes"
+            className="absolute right-2 top-2 rounded p-1 text-text-muted hover:bg-black/10 hover:text-text-primary"
+          >
+            <X className="h-3.5 w-3.5" />
+          </span>
+        ) : (
+          c.criticalCount > 0 && (
+            <AlertTriangle className="absolute right-3 top-3 h-4 w-4 text-critical" />
+          )
+        )}
+        <p
+          className={cn(
+            "truncate pr-5 text-sm font-semibold text-text-primary",
+            isSelected && "mt-3.5",
+          )}
+          title={c.displayName !== c.company ? `${c.displayName} — ${c.company}` : c.company}
+        >
+          {c.displayName}
+        </p>
+        <p className="mt-3 text-3xl font-bold text-text-primary">{c.openCount}</p>
+        <p className="text-xs text-text-muted">
+          {c.openCount === 1 ? "incidente abierto" : "incidentes abiertos"}
+        </p>
+        {c.criticalCount > 0 && (
+          <p className="mt-1 text-xs font-medium text-critical">
+            {c.criticalCount} crítico{c.criticalCount === 1 ? "" : "s"} (&gt;4h)
+          </p>
+        )}
+      </button>
+    );
+  }
+
+  // Con un cliente seleccionado, se oculta el grid completo: solo queda esa
+  // tarjeta arriba y su detalle debajo (lo que pidió el usuario — nada de la
+  // lista general distrae mientras consulta un cliente puntual).
+  if (selected) {
+    return (
+      <div className="space-y-5">
+        <button
+          type="button"
+          onClick={() => setSelected(null)}
+          className="text-xs font-medium text-accent hover:underline"
+        >
+          ← Ver todos los clientes
+        </button>
+        <div className="max-w-xs">{renderCard(selected, true)}</div>
+        <ClienteDetail
+          cliente={selected}
+          onClose={() => setSelected(null)}
+          onRemove={() => removeMutation.mutate(selected.id)}
+          removing={removeMutation.isPending}
+          onRename={(alias) => renameMutation.mutate({ cliente: selected, alias })}
+          renaming={renameMutation.isPending}
+        />
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-5">
       <div className="flex flex-wrap items-center justify-between gap-3">
@@ -140,72 +220,8 @@ export function ClienteTopView() {
         </p>
       ) : (
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
-          {visibleClientes.map((c) => {
-            const isSelected = selected?.id === c.id;
-            return (
-              <button
-                key={c.id}
-                type="button"
-                onClick={() => setSelected(isSelected ? null : c)}
-                className={cardCls(c.criticalCount > 0, isSelected)}
-              >
-                {isSelected && (
-                  <span className="absolute left-3 top-2.5 flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wide text-accent">
-                    <span className="h-1.5 w-1.5 rounded-full bg-accent animate-pulse" />
-                    En consulta
-                  </span>
-                )}
-                {isSelected ? (
-                  <span
-                    role="button"
-                    tabIndex={0}
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      setSelected(null);
-                    }}
-                    title="Cerrar vista de incidentes"
-                    className="absolute right-2 top-2 rounded p-1 text-text-muted hover:bg-black/10 hover:text-text-primary"
-                  >
-                    <X className="h-3.5 w-3.5" />
-                  </span>
-                ) : (
-                  c.criticalCount > 0 && (
-                    <AlertTriangle className="absolute right-3 top-3 h-4 w-4 text-critical" />
-                  )
-                )}
-                <p
-                  className={cn(
-                    "truncate pr-5 text-sm font-semibold text-text-primary",
-                    isSelected && "mt-3.5",
-                  )}
-                  title={c.displayName !== c.company ? `${c.displayName} — ${c.company}` : c.company}
-                >
-                  {c.displayName}
-                </p>
-                <p className="mt-3 text-3xl font-bold text-text-primary">{c.openCount}</p>
-                <p className="text-xs text-text-muted">
-                  {c.openCount === 1 ? "incidente abierto" : "incidentes abiertos"}
-                </p>
-                {c.criticalCount > 0 && (
-                  <p className="mt-1 text-xs font-medium text-critical">
-                    {c.criticalCount} crítico{c.criticalCount === 1 ? "" : "s"} (&gt;4h)
-                  </p>
-                )}
-              </button>
-            );
-          })}
+          {visibleClientes.map((c) => renderCard(c, false))}
         </div>
-      )}
-
-      {selected && (
-        <ClienteDetail
-          cliente={selected}
-          onClose={() => setSelected(null)}
-          onRemove={() => removeMutation.mutate(selected.id)}
-          removing={removeMutation.isPending}
-          onRename={(alias) => renameMutation.mutate({ cliente: selected, alias })}
-          renaming={renameMutation.isPending}
-        />
       )}
 
       {addOpen && (
