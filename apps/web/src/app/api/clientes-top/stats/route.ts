@@ -66,6 +66,7 @@ export async function GET(req: NextRequest) {
       return {
         id: c.id,
         company: c.company,
+        displayName: c.note?.trim() || c.company,
         siglasIm: c.siglasIm,
         serviceRef: c.serviceRef,
         note: c.note,
