@@ -159,12 +159,14 @@ export function ClienteTopView() {
         >
           {c.displayName}
         </p>
-        <p className="mt-3 text-3xl font-bold text-text-primary">{c.openCount}</p>
-        <p className="text-xs text-text-muted">IM&apos;s en gestión</p>
+        <p className="mt-3 flex items-baseline gap-1.5">
+          <span className="text-3xl font-bold text-text-primary">{c.openCount}</span>
+          <span className="text-xs text-text-muted">IM&apos;s en gestión</span>
+        </p>
         {c.delayedMs.length > 0 && (
-          <div className="mt-1 space-y-0.5">
+          <div className="mt-1.5 space-y-0.5">
             {describirDilaciones(c.delayedMs).map((linea) => (
-              <p key={linea} className="text-xs font-medium text-critical">
+              <p key={linea} className="text-sm font-medium text-amber-500/80">
                 {linea}
               </p>
             ))}
