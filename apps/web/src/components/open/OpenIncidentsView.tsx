@@ -9,6 +9,7 @@ import { StatusBreakdown, ALL_STATUS } from "./StatusBreakdown";
 import { TopByDimension } from "./TopByDimension";
 import { OpenIncidentTable } from "./OpenIncidentTable";
 import { EdcTabs } from "./EdcTabs";
+import { ClienteTopView } from "./ClienteTopView";
 import { SisaView } from "@/components/sisa/SisaView";
 import { SisaCecorView } from "./SisaCecorView";
 import type { SortDir } from "@/lib/exportOpenIncidents";
@@ -17,9 +18,10 @@ import { RefreshCw } from "lucide-react";
 
 const POLL_MS = 240_000;
 
-type Group = "PEXA" | "CECOR" | "EDC" | "SISA";
+type Group = "CLIENTE_TOP" | "PEXA" | "CECOR" | "EDC" | "SISA";
 
 const GROUP_LABELS: Record<Group, string> = {
+  CLIENTE_TOP: "Cliente TOP - PEXA",
   PEXA: "PEXA",
   CECOR: "CECOR",
   EDC: "EDC",
@@ -189,18 +191,20 @@ function PexaCecorView({ group }: { group: "PEXA" | "CECOR" }) {
   );
 }
 
-// Orden visual: EDC, PEXA, CECOR, SISA.
-const GROUP_ORDER: Group[] = ["EDC", "PEXA", "CECOR", "SISA"];
+// Orden visual: Cliente TOP, EDC, PEXA, CECOR, SISA.
+const GROUP_ORDER: Group[] = ["CLIENTE_TOP", "EDC", "PEXA", "CECOR", "SISA"];
 
 type GroupStyle = { border: string; bg: string; text: string; ring: string; glow: string };
 
 function getGroupStyle(isLight: boolean): Record<Group, GroupStyle> {
   return isLight ? {
+    CLIENTE_TOP: { border: "border-amber-400",  bg: "bg-amber-50",  text: "text-amber-700",  ring: "ring-amber-400",  glow: "" },
     EDC:   { border: "border-red-400",    bg: "bg-red-50",    text: "text-red-700",    ring: "ring-red-400",    glow: "" },
     PEXA:  { border: "border-blue-400",   bg: "bg-blue-50",   text: "text-blue-700",   ring: "ring-blue-400",   glow: "" },
     CECOR: { border: "border-blue-400",   bg: "bg-blue-50",   text: "text-blue-700",   ring: "ring-blue-400",   glow: "" },
     SISA:  { border: "border-violet-400", bg: "bg-violet-50", text: "text-violet-700", ring: "ring-violet-400", glow: "" },
   } : {
+    CLIENTE_TOP: { border: "border-amber-500/50", bg: "bg-amber-500/10", text: "text-amber-300", ring: "ring-amber-500", glow: "shadow-[0_0_10px_2px_rgba(245,158,11,0.4)]" },
     EDC:   { border: "border-red-500/50",    bg: "bg-red-500/10",    text: "text-red-400",    ring: "ring-red-500",    glow: "shadow-[0_0_10px_2px_rgba(239,68,68,0.4)]" },
     PEXA:  { border: "border-blue-400/50",   bg: "bg-blue-500/10",   text: "text-blue-300",   ring: "ring-blue-400",   glow: "shadow-[0_0_10px_2px_rgba(96,165,250,0.4)]" },
     CECOR: { border: "border-blue-400/50",   bg: "bg-blue-500/10",   text: "text-blue-300",   ring: "ring-blue-400",   glow: "shadow-[0_0_10px_2px_rgba(96,165,250,0.4)]" },
@@ -211,7 +215,7 @@ function getGroupStyle(isLight: boolean): Record<Group, GroupStyle> {
 export function OpenIncidentsView() {
   const { theme } = useTheme();
   const isLight = theme === "light";
-  const [group, setGroup] = useState<Group>("PEXA");
+  const [group, setGroup] = useState<Group>("CLIENTE_TOP");
 
   const groupBtn = (g: Group) => {
     const s = getGroupStyle(isLight)[g];
@@ -232,6 +236,8 @@ export function OpenIncidentsView() {
           </button>
         ))}
       </div>
+
+      {group === "CLIENTE_TOP" && <ClienteTopView />}
 
       {(group === "PEXA" || group === "CECOR") && (
         <PexaCecorView key={group} group={group} />

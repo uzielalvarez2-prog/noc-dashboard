@@ -11,6 +11,7 @@ export async function GET(req: NextRequest) {
     const result = await getOpenIncidents({
       q: sp.get("q") ?? undefined,
       group: sp.get("group") ?? undefined,
+      company: sp.get("company") ?? undefined,
       state: sp.get("state") ?? undefined,
       district: sp.get("district") ?? undefined,
       assignee: sp.get("assignee") ?? undefined,

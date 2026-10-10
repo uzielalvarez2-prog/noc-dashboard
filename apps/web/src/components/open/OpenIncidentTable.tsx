@@ -64,10 +64,13 @@ export function OpenIncidentTable({
   group,
   sortDir,
   statusFilter,
+  companyFilter,
 }: {
   group: string;
   sortDir: SortDir;
   statusFilter?: string;
+  /** Match EXACTO por empresa (distinto de la búsqueda libre `q`). Usado por Cliente TOP. */
+  companyFilter?: string;
 }) {
   const [search, setSearch] = useState("");
   const [q, setQ] = useState("");
@@ -118,12 +121,13 @@ export function OpenIncidentTable({
 
   useEffect(() => {
     setPage(1);
-  }, [group, statusFilter, sortDir]);
+  }, [group, statusFilter, companyFilter, sortDir]);
 
   const params = new URLSearchParams();
   if (q) params.set("q", q);
   if (group !== "ALL") params.set("group", group);
   if (statusFilter) params.set("status", statusFilter);
+  if (companyFilter) params.set("company", companyFilter);
   // Mismo orden que el Excel: los botones "Reciente/Antiguo" ordenan la tabla.
   params.set("order", sortDir);
   // 1 fila por incidente (collapse default): un IM que toca varios sitios se

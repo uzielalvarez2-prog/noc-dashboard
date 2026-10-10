@@ -4,6 +4,7 @@ import type { Prisma } from "@prisma/client";
 export interface OpenFilters {
   q?: string;
   group?: string; // PEXA | CECOR | ALL
+  company?: string; // match EXACTO (insensitive) — distinto de `q`, que usa contains
   state?: string;
   district?: string;
   assignee?: string;
@@ -52,6 +53,7 @@ function hpsmCutoff(maxAgeHours: number): Date {
 export function buildOpenWhere(f: OpenFilters): Prisma.OpenIncidentWhereInput {
   const and: Prisma.OpenIncidentWhereInput[] = [];
   if (f.group && f.group !== "ALL") and.push({ group: f.group });
+  if (f.company) and.push({ company: { equals: f.company, mode: "insensitive" } });
   if (f.state) and.push({ state: { equals: f.state, mode: "insensitive" } });
   if (f.district) and.push({ district: { equals: f.district, mode: "insensitive" } });
   if (f.assignee) and.push({ assignee: { contains: f.assignee, mode: "insensitive" } });
