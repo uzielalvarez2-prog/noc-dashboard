@@ -46,6 +46,20 @@ function describirDilaciones(delayedMs: number[]): string[] {
     .map(([label, { count }]) => `${count} con dilación de ${label}`);
 }
 
+// Dilación máxima del cliente (0 si no tiene ninguno vencido) — para ordenar y
+// colorear la franja de la lista por gravedad.
+function maxDilacion(c: ClienteTopStat): number {
+  return c.delayedMs.length > 0 ? Math.max(...c.delayedMs) : 0;
+}
+
+// Franja de color de la fila: rojo si tiene IM's vencidos (>4h), ámbar si tiene
+// incidentes abiertos pero ninguno vencido aún, gris si está sin nada abierto.
+function sevColor(c: ClienteTopStat): string {
+  if (c.delayedMs.length > 0) return "bg-critical";
+  if (c.openCount > 0) return "bg-warning";
+  return "bg-text-muted/40";
+}
+
 async function fetchClienteTopStats(): Promise<{ clientes: ClienteTopStat[] }> {
   const res = await fetch("/api/clientes-top/stats");
   if (!res.ok) throw new Error("Error al cargar Cliente TOP");
@@ -71,7 +85,18 @@ export function ClienteTopView() {
   // mano), no vale la pena un endpoint de búsqueda aparte. Busca por alias y por
   // nombre completo, sin acentos ni mayúsculas.
   const q = norm(search.trim());
-  const visibleClientes = q ? clientes.filter((c) => norm(c.displayName).includes(q) || norm(c.company).includes(q)) : clientes;
+  const visibleClientes = (q
+    ? clientes.filter((c) => norm(c.displayName).includes(q) || norm(c.company).includes(q))
+    : clientes
+  )
+    .slice()
+    // Más grave primero: mayor dilación, luego más IM's abiertos, luego alfabético.
+    .sort(
+      (a, b) =>
+        maxDilacion(b) - maxDilacion(a) ||
+        b.openCount - a.openCount ||
+        a.displayName.localeCompare(b.displayName, "es"),
+    );
 
   const removeMutation = useMutation({
     mutationFn: async (id: string) => {
@@ -248,8 +273,35 @@ export function ClienteTopView() {
           Sin coincidencias para "{search}".
         </p>
       ) : (
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
-          {visibleClientes.map((c) => renderCard(c, false))}
+        <div className="overflow-hidden rounded-xl border border-border bg-surface">
+          <div className="max-h-[60vh] overflow-y-auto">
+            {visibleClientes.map((c) => {
+              const dils = describirDilaciones(c.delayedMs);
+              return (
+                <button
+                  key={c.id}
+                  type="button"
+                  onClick={() => setSelected(c)}
+                  className="flex w-full items-center gap-3 border-b border-border/50 px-4 py-2.5 text-left transition-colors last:border-b-0 hover:bg-surface-elevated"
+                >
+                  <span className={cn("h-2 w-2 shrink-0 rounded-full", sevColor(c))} />
+                  <span
+                    className="min-w-0 flex-1 truncate text-sm font-semibold text-text-primary"
+                    title={c.displayName !== c.company ? `${c.displayName} — ${c.company}` : c.company}
+                  >
+                    {c.displayName}
+                  </span>
+                  <span className="shrink-0 text-right tabular-nums">
+                    <span className="text-base font-bold text-text-primary">{c.openCount}</span>
+                    <span className="ml-1 text-xs text-text-muted">IM&apos;s</span>
+                  </span>
+                  <span className="hidden w-48 shrink-0 truncate text-right text-xs font-medium text-amber-500/80 sm:block">
+                    {dils.length > 0 ? dils.join(" · ") : ""}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
         </div>
       )}
 
