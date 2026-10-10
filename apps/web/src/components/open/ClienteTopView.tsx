@@ -19,6 +19,31 @@ interface ClienteTopStat {
   note: string | null;
   openCount: number;
   criticalCount: number;
+  /** Edad en ms de cada incidente que ya superó el SLA de 4h, sin resolver. */
+  delayedMs: number[];
+}
+
+/** "1d 4h" / "4h" — se trunca a horas (no se baja a minutos: el SLA es de 4h). */
+function formatDilacion(ms: number): string {
+  const totalHours = Math.floor(ms / 3_600_000);
+  const days = Math.floor(totalHours / 24);
+  const hours = totalHours % 24;
+  if (days > 0) return hours > 0 ? `${days}d ${hours}h` : `${days}d`;
+  return `${hours}h`;
+}
+
+/** Agrupa las dilaciones iguales: "1 con dilación de 1d 4h", "1 con dilación de 4h". */
+function describirDilaciones(delayedMs: number[]): string[] {
+  const counts = new Map<string, { count: number; ms: number }>();
+  for (const ms of delayedMs) {
+    const label = formatDilacion(ms);
+    const prev = counts.get(label);
+    counts.set(label, { count: (prev?.count ?? 0) + 1, ms });
+  }
+  // Dilación más grave (mayor) primero.
+  return [...counts.entries()]
+    .sort((a, b) => b[1].ms - a[1].ms)
+    .map(([label, { count }]) => `${count} con dilación de ${label}`);
 }
 
 async function fetchClienteTopStats(): Promise<{ clientes: ClienteTopStat[] }> {
@@ -135,13 +160,15 @@ export function ClienteTopView() {
           {c.displayName}
         </p>
         <p className="mt-3 text-3xl font-bold text-text-primary">{c.openCount}</p>
-        <p className="text-xs text-text-muted">
-          {c.openCount === 1 ? "incidente abierto" : "incidentes abiertos"}
-        </p>
-        {c.criticalCount > 0 && (
-          <p className="mt-1 text-xs font-medium text-critical">
-            {c.criticalCount} crítico{c.criticalCount === 1 ? "" : "s"} (&gt;4h)
-          </p>
+        <p className="text-xs text-text-muted">IM&apos;s en gestión</p>
+        {c.delayedMs.length > 0 && (
+          <div className="mt-1 space-y-0.5">
+            {describirDilaciones(c.delayedMs).map((linea) => (
+              <p key={linea} className="text-xs font-medium text-critical">
+                {linea}
+              </p>
+            ))}
+          </div>
         )}
       </button>
     );
@@ -160,7 +187,7 @@ export function ClienteTopView() {
         >
           ← Ver todos los clientes
         </button>
-        <div className="max-w-xs">{renderCard(selected, true)}</div>
+        <div className="mx-auto w-full max-w-xs">{renderCard(selected, true)}</div>
         <ClienteDetail
           cliente={selected}
           onClose={() => setSelected(null)}

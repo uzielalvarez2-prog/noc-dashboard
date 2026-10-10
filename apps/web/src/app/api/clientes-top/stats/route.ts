@@ -59,9 +59,11 @@ export async function GET(req: NextRequest) {
         return companyMatch || serviceMatch || siglasMatch;
       });
 
-      const criticalCount = matches.filter(
-        (inc) => !isResolvedStatus(inc.status) && now - inc.openTime.getTime() > CRITICAL_AGE_MS,
-      ).length;
+      // Edad (ms) de cada incidente que ya superó el SLA de 4h, sin resolver —
+      // el frontend los agrupa por dilación exacta ("1 con dilación de 1d 4h").
+      const delayedMs = matches
+        .filter((inc) => !isResolvedStatus(inc.status) && now - inc.openTime.getTime() > CRITICAL_AGE_MS)
+        .map((inc) => now - inc.openTime.getTime());
 
       return {
         id: c.id,
@@ -71,7 +73,8 @@ export async function GET(req: NextRequest) {
         serviceRef: c.serviceRef,
         note: c.note,
         openCount: matches.length,
-        criticalCount,
+        criticalCount: delayedMs.length,
+        delayedMs,
       };
     });
 

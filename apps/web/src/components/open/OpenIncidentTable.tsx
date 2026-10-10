@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient, keepPreviousData } from "@tanstack/react-query";
-import { Search, ChevronLeft, ChevronRight, RefreshCw, Star, Download } from "lucide-react";
+import { Search, ChevronLeft, ChevronRight, RefreshCw, Star, Download, Copy, Check } from "lucide-react";
 import type { OpenListResponse } from "@/types/open";
 import { fetchEscalated, type EscalatedResponse } from "@/components/dashboard/EscalatedPanel";
 import { cn, formatDate, formatHpsm } from "@/lib/utils";
@@ -11,6 +11,7 @@ import { exportOpenIncidents, type SortDir } from "@/lib/exportOpenIncidents";
 import { canAccessMonitoring } from "@/lib/permissions";
 import { IpMonitorCell } from "./IpMonitorCell";
 import { fetchMonitoredIpMatches, fetchActiveMonitors, pickIpMatchForRow } from "@/lib/ipMonitoring";
+import { buildIncidenteTemplate } from "@/lib/incidenteTemplate";
 
 const COLUMNS = [
   { key: "incidentId", label: "Incident ID" },
@@ -90,6 +91,26 @@ export function OpenIncidentTable({
   // IP/Monitoreo (esa columna es específica de PEXA).
   const showSummary = group === "CECOR";
   const showMonitoring = !showSummary && canAccessMonitoring(role);
+  // Columna F.TXT (plantilla de WhatsApp por incidente): solo en el detalle de
+  // Cliente TOP, no en las demás vistas que reusan esta misma tabla.
+  const showFtxt = Boolean(companyFilter);
+  const [copiedId, setCopiedId] = useState<string | null>(null);
+
+  async function handleCopyFtxt(row: { incidentId: string; siteName: string; serviceId: string; status: string }) {
+    const text = buildIncidenteTemplate(row);
+    try {
+      await navigator.clipboard.writeText(text);
+    } catch {
+      const ta = document.createElement("textarea");
+      ta.value = text;
+      document.body.appendChild(ta);
+      ta.select();
+      document.execCommand("copy");
+      document.body.removeChild(ta);
+    }
+    setCopiedId(row.incidentId);
+    setTimeout(() => setCopiedId((cur) => (cur === row.incidentId ? null : cur)), 1800);
+  }
 
   // Marcas de atención especial (escalados) — compartidas con el panel del Overview
   const { data: escalated } = useQuery<EscalatedResponse>({
@@ -181,7 +202,7 @@ export function OpenIncidentTable({
     refetchInterval: 20_000,
   });
   const monitorByIncident = new Map((activeMonitors ?? []).map((m) => [m.incidentId, m]));
-  const colCount = COLUMNS.length + 1 + (showMonitoring || showSummary ? 1 : 0);
+  const colCount = COLUMNS.length + 1 + (showMonitoring || showSummary ? 1 : 0) + (showFtxt ? 1 : 0);
 
   return (
     <div className="overflow-hidden rounded-xl border border-border/60 bg-surface/40 backdrop-blur-md">
@@ -252,6 +273,11 @@ export function OpenIncidentTable({
               {showMonitoring && (
                 <th className="border-b border-border/60 px-3 py-2 text-left text-xs font-medium uppercase tracking-wider text-text-muted">
                   IP / Monitoreo
+                </th>
+              )}
+              {showFtxt && (
+                <th className="border-b border-border/60 px-3 py-2 text-left text-xs font-medium uppercase tracking-wider text-text-muted">
+                  F.TXT
                 </th>
               )}
             </tr>
@@ -345,6 +371,28 @@ export function OpenIncidentTable({
                         match={pickIpMatchForRow(ipMatches, r.company, r.serviceId)}
                         monitor={monitorByIncident.get(r.incidentId)}
                       />
+                    </td>
+                  )}
+                  {showFtxt && (
+                    <td className="px-3 py-2">
+                      <button
+                        type="button"
+                        onClick={() => handleCopyFtxt(r)}
+                        title="Copiar plantilla de WhatsApp de este incidente"
+                        className={cn(
+                          "flex items-center gap-1 rounded-md border px-2 py-1 text-[11px] font-medium transition-colors",
+                          copiedId === r.incidentId
+                            ? "border-success/40 bg-success-dim text-success"
+                            : "border-border text-text-muted hover:text-text-primary",
+                        )}
+                      >
+                        {copiedId === r.incidentId ? (
+                          <Check className="h-3 w-3" />
+                        ) : (
+                          <Copy className="h-3 w-3" />
+                        )}
+                        {copiedId === r.incidentId ? "Copiado" : "F.TXT"}
+                      </button>
                     </td>
                   )}
                 </tr>
