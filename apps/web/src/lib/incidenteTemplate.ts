@@ -1,4 +1,10 @@
-import { isResolvedStatus } from "@/lib/war-room";
+// No se importa isResolvedStatus de "@/lib/war-room": ese módulo importa "@/lib/db"
+// (pg/Prisma), y este archivo lo usa un Client Component (OpenIncidentTable) —
+// arrastrar esa cadena al bundle del navegador rompe el build ("Module not found:
+// net/tls", pg necesita APIs de Node). Se replica la misma regex aquí, server-free.
+function isResolvedStatus(status: string | null | undefined): boolean {
+  return /resolv|resuelt/i.test(status ?? "");
+}
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Plantilla de WhatsApp "F.TXT" para un incidente individual (botón por fila en
