@@ -292,16 +292,21 @@ export function ClienteTopView() {
                 >
                   <span className={cn("h-2 w-2 shrink-0 rounded-full", sevColor(c))} />
                   <span
-                    className="min-w-0 max-w-[16rem] flex-1 truncate text-sm font-semibold text-text-primary sm:flex-none"
+                    className="min-w-0 flex-1 truncate text-sm font-semibold text-text-primary sm:w-72 sm:flex-none"
                     title={c.displayName !== c.company ? `${c.displayName} — ${c.company}` : c.company}
                   >
                     {c.displayName}
                   </span>
-                  <span className="shrink-0 tabular-nums">
+                  <span className="hidden w-20 shrink-0 text-right tabular-nums sm:block">
                     <span className="text-base font-bold text-text-primary">{c.openCount}</span>
                     <span className="ml-1 text-xs text-text-muted">IM&apos;s</span>
                   </span>
-                  <span className="hidden min-w-0 flex-1 truncate pl-28 text-xs font-medium text-amber-500/80 sm:block">
+                  {/* En móvil el número va aquí (sin columna fija); en ≥sm lo toma el bloque de arriba. */}
+                  <span className="shrink-0 tabular-nums sm:hidden">
+                    <span className="text-base font-bold text-text-primary">{c.openCount}</span>
+                    <span className="ml-1 text-xs text-text-muted">IM&apos;s</span>
+                  </span>
+                  <span className="hidden min-w-0 flex-1 truncate pl-8 text-xs font-medium text-amber-500/80 sm:block">
                     {dils.length > 0 ? dils.join(" · ") : ""}
                   </span>
                 </button>
