@@ -59,6 +59,11 @@ export async function GET(req: NextRequest) {
         return companyMatch || serviceMatch || siglasMatch;
       });
 
+      // IM's activos = aún no resueltos (HPSM mantiene los RESOLVED en el snapshot
+      // hasta el cierre). Sirve para el semáforo: ámbar/verde dependen de si queda
+      // algo sin resolver, no solo de cuántos hay en total.
+      const activeCount = matches.filter((inc) => !isResolvedStatus(inc.status)).length;
+
       // Edad (ms) de cada incidente que ya superó el SLA de 4h, sin resolver —
       // el frontend los agrupa por dilación exacta ("1 con dilación de 1d 4h").
       const delayedMs = matches
@@ -73,6 +78,7 @@ export async function GET(req: NextRequest) {
         serviceRef: c.serviceRef,
         note: c.note,
         openCount: matches.length,
+        activeCount,
         criticalCount: delayedMs.length,
         delayedMs,
       };

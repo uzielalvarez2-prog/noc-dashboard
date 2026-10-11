@@ -18,6 +18,8 @@ interface ClienteTopStat {
   serviceRef: string;
   note: string | null;
   openCount: number;
+  /** IM's aún no resueltos (los RESOLVED siguen en el snapshot hasta el cierre). */
+  activeCount: number;
   criticalCount: number;
   /** Edad en ms de cada incidente que ya superó el SLA de 4h, sin resolver. */
   delayedMs: number[];
@@ -52,11 +54,15 @@ function maxDilacion(c: ClienteTopStat): number {
   return c.delayedMs.length > 0 ? Math.max(...c.delayedMs) : 0;
 }
 
-// Franja de color de la fila: rojo si tiene IM's vencidos (>4h), ámbar si tiene
-// incidentes abiertos pero ninguno vencido aún, gris si está sin nada abierto.
+// Semáforo de la fila:
+//   rojo   = al menos 1 IM activo con dilación >4h
+//   ámbar  = tiene IM's activos (sin resolver) pero ninguno pasó las 4h
+//   verde  = tiene IM's pero TODOS están en RESOLVED (nada en gestión)
+//   gris   = no tiene ningún IM en el snapshot
 function sevColor(c: ClienteTopStat): string {
   if (c.delayedMs.length > 0) return "bg-critical";
-  if (c.openCount > 0) return "bg-warning";
+  if (c.activeCount > 0) return "bg-warning";
+  if (c.openCount > 0) return "bg-success";
   return "bg-text-muted/40";
 }
 
@@ -286,16 +292,16 @@ export function ClienteTopView() {
                 >
                   <span className={cn("h-2 w-2 shrink-0 rounded-full", sevColor(c))} />
                   <span
-                    className="min-w-0 flex-1 truncate text-sm font-semibold text-text-primary"
+                    className="min-w-0 max-w-[16rem] flex-1 truncate text-sm font-semibold text-text-primary sm:flex-none"
                     title={c.displayName !== c.company ? `${c.displayName} — ${c.company}` : c.company}
                   >
                     {c.displayName}
                   </span>
-                  <span className="shrink-0 text-right tabular-nums">
+                  <span className="shrink-0 tabular-nums">
                     <span className="text-base font-bold text-text-primary">{c.openCount}</span>
                     <span className="ml-1 text-xs text-text-muted">IM&apos;s</span>
                   </span>
-                  <span className="hidden w-48 shrink-0 truncate text-right text-xs font-medium text-amber-500/80 sm:block">
+                  <span className="hidden min-w-0 flex-1 truncate text-xs font-medium text-amber-500/80 sm:block">
                     {dils.length > 0 ? dils.join(" · ") : ""}
                   </span>
                 </button>
