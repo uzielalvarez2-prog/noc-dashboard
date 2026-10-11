@@ -301,7 +301,7 @@ export function ClienteTopView() {
                     <span className="text-base font-bold text-text-primary">{c.openCount}</span>
                     <span className="ml-1 text-xs text-text-muted">IM&apos;s</span>
                   </span>
-                  <span className="hidden min-w-0 flex-1 truncate text-xs font-medium text-amber-500/80 sm:block">
+                  <span className="hidden min-w-0 flex-1 truncate pl-12 text-xs font-medium text-amber-500/80 sm:block">
                     {dils.length > 0 ? dils.join(" · ") : ""}
                   </span>
                 </button>
