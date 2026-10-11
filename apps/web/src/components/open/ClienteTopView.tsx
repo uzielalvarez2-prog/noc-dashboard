@@ -292,7 +292,7 @@ export function ClienteTopView() {
                 >
                   <span className={cn("h-2 w-2 shrink-0 rounded-full", sevColor(c))} />
                   <span
-                    className="min-w-0 flex-1 truncate text-sm font-semibold text-text-primary sm:w-72 sm:flex-none"
+                    className="min-w-0 flex-1 truncate text-sm font-semibold text-text-primary sm:w-[29rem] sm:flex-none"
                     title={c.displayName !== c.company ? `${c.displayName} — ${c.company}` : c.company}
                   >
                     {c.displayName}
