@@ -39,6 +39,8 @@ export async function POST(req: NextRequest) {
       companyContains: (body.companyContains ?? "").trim(),
       porTurno: body.porTurno === true,
       mostrarSitio: body.mostrarSitio === true,
+      ignorarSuspension: body.ignorarSuspension === true,
+      notaExtra: (body.notaExtra ?? "").trim(),
       notifyChatIds: Array.isArray(body.notifyChatIds)
         ? body.notifyChatIds.filter((c) => typeof c === "string" && c.trim())
         : [],

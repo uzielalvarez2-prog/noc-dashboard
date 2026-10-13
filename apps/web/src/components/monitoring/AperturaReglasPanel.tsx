@@ -211,6 +211,8 @@ export function AperturaReglasPanel() {
                       {r.imPrefixes && <Chip label="IM empieza" value={r.imPrefixes} />}
                       {r.companyContains && <Chip label="Empresa ∋" value={r.companyContains} />}
                       {r.mostrarSitio && <Chip label="Mensaje" value="con Sitio" />}
+                      {r.ignorarSuspension && <Chip label="Entrega" value="ignora suspensión" />}
+                      {r.notaExtra && <Chip label="Nota" value={r.notaExtra} />}
                     </div>
                   </td>
                   <td className="max-w-[220px] truncate px-4 py-3 text-xs text-text-muted" title={destino(r)}>

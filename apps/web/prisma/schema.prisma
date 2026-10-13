@@ -401,6 +401,11 @@ model AperturaRegla {
   companyContains String   @default("") // fragmento del nombre de empresa
   porTurno        Boolean  @default(false) // true = PEXA Matutino/Vespertino según la hora
   mostrarSitio    Boolean  @default(false) // mensaje con "Sitio:" (Site Name) en vez de "Company:" — para chats de cliente
+  // true = esta regla entrega a sus grupos AUNQUE estén suspendidos
+  // (WhatsappGroup.suspendido). Para clientes específicos que deben llegar a un
+  // grupo que por lo demás está callado (ej. SADER → PEXA Vespertino suspendido).
+  ignorarSuspension Boolean @default(false)
+  notaExtra       String   @default("") // línea extra al final del mensaje de apertura de esta regla
   notifyChatIds   String[] @default([]) // grupos fijos (WhatsappGroup.chatId)
   enabled         Boolean  @default(true)
   createdBy       String   @default("")

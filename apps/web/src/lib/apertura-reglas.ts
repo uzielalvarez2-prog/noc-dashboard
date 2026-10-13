@@ -26,6 +26,8 @@ export interface ReglaBody {
   companyContains?: string;
   porTurno?: boolean;
   mostrarSitio?: boolean;
+  ignorarSuspension?: boolean;
+  notaExtra?: string;
   notifyChatIds?: string[];
   enabled?: boolean;
 }

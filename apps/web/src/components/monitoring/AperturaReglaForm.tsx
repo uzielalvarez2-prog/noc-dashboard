@@ -11,6 +11,8 @@ export interface ReglaFormState {
   companyContains: string;
   porTurno: boolean;
   mostrarSitio: boolean;
+  ignorarSuspension: boolean;
+  notaExtra: string;
   notifyChatIds: string[];
 }
 
@@ -21,6 +23,8 @@ export const EMPTY_REGLA: ReglaFormState = {
   companyContains: "",
   porTurno: false,
   mostrarSitio: false,
+  ignorarSuspension: false,
+  notaExtra: "",
   notifyChatIds: [],
 };
 
@@ -96,12 +100,36 @@ export function AperturaReglaForm({ value, onChange, groups, frequent, busy, onS
           groups={groups}
           frequent={frequent}
         />
+        <label className="flex items-start gap-2 text-xs text-text-primary">
+          <input
+            type="checkbox"
+            className="mt-0.5"
+            checked={value.ignorarSuspension}
+            onChange={(e) => set({ ignorarSuspension: e.target.checked })}
+          />
+          <span>
+            Entregar aunque el grupo esté <b>suspendido</b>
+            <span className="block text-[11px] text-text-muted">
+              Esta regla llega a sus grupos aunque estén suspendidos. Para clientes que sí deben avisarse a un grupo
+              que por lo demás está callado (ej. SADER → PEXA Vespertino). La pausa global sigue aplicando.
+            </span>
+          </span>
+        </label>
       </div>
 
       <label className="flex items-center gap-2 text-xs text-text-primary">
         <input type="checkbox" checked={value.mostrarSitio} onChange={(e) => set({ mostrarSitio: e.target.checked })} />
         Mostrar <b>Sitio</b> en lugar de Empresa en el mensaje (para chats de cliente)
       </label>
+
+      <Campo label="Nota extra (opcional)" hint="Se agrega como última línea del mensaje de esta regla, antes de la @mención. Vacío = sin nota.">
+        <input
+          value={value.notaExtra}
+          onChange={(e) => set({ notaExtra: e.target.value })}
+          placeholder="Ej. Escalar a NOC-2 si pasa de 30 min"
+          className={inputCls}
+        />
+      </Campo>
 
       <div className="flex justify-end gap-2">
         <Button size="sm" variant="ghost" onClick={onCancel} className="h-8 gap-1.5 text-xs text-text-muted">
