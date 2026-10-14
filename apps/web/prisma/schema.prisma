@@ -406,6 +406,10 @@ model AperturaRegla {
   // grupo que por lo demás está callado (ej. SADER → PEXA Vespertino suspendido).
   ignorarSuspension Boolean @default(false)
   notaExtra       String   @default("") // línea extra al final del mensaje de apertura de esta regla
+  // true = plantilla enriquecida SADER: cruza el REF del incidente contra
+  // SaderContacto.referencia; con match agrega Sitio (col C), correos (default +
+  // col I) y Contacto/teléfono (col F/G); sin match solo el correo default.
+  plantillaSader  Boolean  @default(false)
   notifyChatIds   String[] @default([]) // grupos fijos (WhatsappGroup.chatId)
   enabled         Boolean  @default(true)
   createdBy       String   @default("")
@@ -423,6 +427,21 @@ model AperturaConfig {
   pausado   Boolean  @default(false)
   updatedBy String   @default("")
   updatedAt DateTime @updatedAt
+}
+
+// Contactos SADER (oficinas remotas). Fuente de verdad: el Excel
+// "SADER OFICINAS REMOTAS - CONTACTOS.xlsx" en G:\Mi unidad\CARE\Clientes_CARE,
+// sincronizado a la DB con scripts/importar-sader.ts (manual, desde la PC).
+// La plantilla enriquecida de apertura (AperturaRegla.plantillaSader) cruza el
+// REF del incidente contra `referencia` (col B). Columnas del Excel:
+// B=referencia, C=sitio, F=contacto, G=telefono, I=correos (uno o varios).
+model SaderContacto {
+  referencia String   @id // col B — llave de cruce con el REF (serviceId) del incidente
+  sitio      String   @default("") // col C
+  contacto   String   @default("") // col F (puede traer varios nombres)
+  telefono   String   @default("") // col G
+  correos    String[] @default([]) // col I, ya separada en correos individuales
+  updatedAt  DateTime @updatedAt
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

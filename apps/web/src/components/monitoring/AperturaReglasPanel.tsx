@@ -211,6 +211,7 @@ export function AperturaReglasPanel() {
                       {r.imPrefixes && <Chip label="IM empieza" value={r.imPrefixes} />}
                       {r.companyContains && <Chip label="Empresa ∋" value={r.companyContains} />}
                       {r.mostrarSitio && <Chip label="Mensaje" value="con Sitio" />}
+                      {r.plantillaSader && <Chip label="Plantilla" value="SADER" />}
                       {r.ignorarSuspension && <Chip label="Entrega" value="ignora suspensión" />}
                       {r.notaExtra && <Chip label="Nota" value={r.notaExtra} />}
                     </div>

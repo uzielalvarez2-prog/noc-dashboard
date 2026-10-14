@@ -41,6 +41,7 @@ export async function POST(req: NextRequest) {
       mostrarSitio: body.mostrarSitio === true,
       ignorarSuspension: body.ignorarSuspension === true,
       notaExtra: (body.notaExtra ?? "").trim(),
+      plantillaSader: body.plantillaSader === true,
       notifyChatIds: Array.isArray(body.notifyChatIds)
         ? body.notifyChatIds.filter((c) => typeof c === "string" && c.trim())
         : [],

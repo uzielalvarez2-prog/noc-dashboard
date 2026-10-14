@@ -13,6 +13,7 @@ export interface ReglaFormState {
   mostrarSitio: boolean;
   ignorarSuspension: boolean;
   notaExtra: string;
+  plantillaSader: boolean;
   notifyChatIds: string[];
 }
 
@@ -25,6 +26,7 @@ export const EMPTY_REGLA: ReglaFormState = {
   mostrarSitio: false,
   ignorarSuspension: false,
   notaExtra: "",
+  plantillaSader: false,
   notifyChatIds: [],
 };
 
@@ -120,6 +122,23 @@ export function AperturaReglaForm({ value, onChange, groups, frequent, busy, onS
       <label className="flex items-center gap-2 text-xs text-text-primary">
         <input type="checkbox" checked={value.mostrarSitio} onChange={(e) => set({ mostrarSitio: e.target.checked })} />
         Mostrar <b>Sitio</b> en lugar de Empresa en el mensaje (para chats de cliente)
+      </label>
+
+      <label className="flex items-start gap-2 text-xs text-text-primary">
+        <input
+          type="checkbox"
+          className="mt-0.5"
+          checked={value.plantillaSader}
+          onChange={(e) => set({ plantillaSader: e.target.checked })}
+        />
+        <span>
+          Plantilla <b>SADER</b> (cliente + correos + contacto)
+          <span className="block text-[11px] text-text-muted">
+            Cruza el REF del incidente contra el directorio SADER. Con coincidencia agrega Sitio, correos
+            (default + los del directorio) y Contacto/teléfono; sin coincidencia, solo el correo default.
+            Reemplaza el formato normal y la @mención de esta regla.
+          </span>
+        </span>
       </label>
 
       <Campo label="Nota extra (opcional)" hint="Se agrega como última línea del mensaje de esta regla, antes de la @mención. Vacío = sin nota.">

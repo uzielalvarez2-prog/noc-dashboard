@@ -28,6 +28,7 @@ export async function PATCH(req: NextRequest, ctx: { params: Promise<{ id: strin
       mostrarSitio: typeof body.mostrarSitio === "boolean" ? body.mostrarSitio : actual.mostrarSitio,
       ignorarSuspension: typeof body.ignorarSuspension === "boolean" ? body.ignorarSuspension : actual.ignorarSuspension,
       notaExtra: typeof body.notaExtra === "string" ? body.notaExtra.trim() : actual.notaExtra,
+      plantillaSader: typeof body.plantillaSader === "boolean" ? body.plantillaSader : actual.plantillaSader,
       notifyChatIds: Array.isArray(body.notifyChatIds)
         ? body.notifyChatIds.filter((c) => typeof c === "string" && c.trim())
         : actual.notifyChatIds,

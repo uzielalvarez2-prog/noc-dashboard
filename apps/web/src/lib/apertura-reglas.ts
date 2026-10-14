@@ -28,6 +28,7 @@ export interface ReglaBody {
   mostrarSitio?: boolean;
   ignorarSuspension?: boolean;
   notaExtra?: string;
+  plantillaSader?: boolean;
   notifyChatIds?: string[];
   enabled?: boolean;
 }

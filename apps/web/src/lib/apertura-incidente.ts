@@ -3,6 +3,12 @@ import { sendWhatsappViaListener } from "@/lib/whatsapp";
 import { isResolvedStatus, type OpenRecordLite } from "@/lib/war-room";
 import { isChatSuspendido } from "@/lib/wa-suspendidos";
 import { cumpleRegla, isAperturaPausada } from "@/lib/apertura-reglas";
+import {
+  buscarContactoSader,
+  correosPara,
+  SADER_CORREO_CC,
+  type SaderContactoLite,
+} from "@/lib/sader-contactos";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // ALERTA DE APERTURA: cuando un incidente nuevo cumple alguna AperturaRegla
@@ -75,6 +81,44 @@ function buildAperturaMessage(data: {
 }
 
 /**
+ * Plantilla enriquecida SADER. Con match en el Excel (por REF): Company como
+ * encabezado, Sitio de la col C, correos (default + col I sin duplicar) + CC,
+ * y Contacto/teléfono de la col F/G. Sin match: solo el correo default + CC y
+ * el Sitio que trae el incidente. No lleva @mención.
+ */
+function buildSaderMessage(data: {
+  company: string;
+  incidentId: string;
+  serviceRef: string;
+  /** Sitio del incidente (fallback cuando no hay match en el Excel). */
+  sitioIncidente: string;
+  contacto: SaderContactoLite | null;
+  notas: string[];
+}): string {
+  const lines = ["🚨 *INCIDENTE*"];
+  if (data.company.trim()) lines.push(`*${data.company.trim()}*`);
+  lines.push(data.incidentId, `REF: ${data.serviceRef}`);
+
+  const sitio = data.contacto?.sitio.trim() || data.sitioIncidente.trim();
+  if (sitio) lines.push(`Sitio: ${sitio}`);
+
+  const correos = correosPara(data.contacto);
+  lines.push(`Enviar correo a: ${correos.join("; ")}`);
+  lines.push(`CC: ${SADER_CORREO_CC}`);
+
+  if (data.contacto) {
+    const contacto = data.contacto.contacto.trim().replace(/\s*\n\s*/g, " / ");
+    const tel = data.contacto.telefono.trim();
+    if (contacto || tel) {
+      lines.push(`Contacto: ${contacto}${contacto && tel ? "  " : ""}${tel ? `tel. ${tel}` : ""}`);
+    }
+  }
+
+  for (const nota of data.notas) lines.push(nota);
+  return lines.join("\n");
+}
+
+/**
  * Sitio(s) del incidente para el mensaje de cliente: Site Name; si viene
  * vacío, "municipio, estado". Lo normal es un sitio por IM; si un IM abarca
  * varios (masivo), primer sitio + conteo para no mandar un mensaje kilométrico.
@@ -108,6 +152,8 @@ interface Envio {
   ignorarSuspension: boolean;
   // Notas extra de las reglas que mandan a este chat (una línea por nota, sin repetir).
   notas: string[];
+  // true si alguna regla que manda a este chat usa la plantilla enriquecida SADER.
+  plantillaSader: boolean;
 }
 
 /** Agrupa por chat las reglas que cumple el incidente: un solo mensaje por grupo. */
@@ -122,6 +168,7 @@ function destinosDe(
     mostrarSitio: boolean;
     ignorarSuspension: boolean;
     notaExtra: string;
+    plantillaSader: boolean;
     notifyChatIds: string[];
   }[],
   now: Date,
@@ -132,12 +179,16 @@ function destinosDe(
     const chats = [...r.notifyChatIds];
     if (r.porTurno) chats.push(resolveNotifyChatId(now));
     for (const chatId of chats.map((c) => c.trim()).filter(Boolean)) {
-      const envio = porChat.get(chatId) ?? { chatId, reglas: [], mostrarSitio: false, ignorarSuspension: false, notas: [] };
+      const envio =
+        porChat.get(chatId) ??
+        { chatId, reglas: [], mostrarSitio: false, ignorarSuspension: false, notas: [], plantillaSader: false };
       if (!envio.reglas.includes(r.nombre)) envio.reglas.push(r.nombre);
       // Si alguna regla que manda a este chat pide Sitio, el chat recibe Sitio.
       envio.mostrarSitio ||= r.mostrarSitio;
       // Si alguna regla que manda a este chat ignora la suspensión, el chat la recibe.
       envio.ignorarSuspension ||= r.ignorarSuspension;
+      // Si alguna regla que manda a este chat usa la plantilla SADER, el chat la usa.
+      envio.plantillaSader ||= r.plantillaSader;
       const nota = r.notaExtra.trim();
       if (nota && !envio.notas.includes(nota)) envio.notas.push(nota);
       porChat.set(chatId, envio);
@@ -204,8 +255,27 @@ export async function syncAperturaNotify(records: OpenRecordLite[]): Promise<num
       // y manda el resto igual — la alerta nunca se pierde por la mención.
       const mentions = assigneePhone ? [phoneToJid(assigneePhone)] : [];
 
-      for (const { chatId, reglas: nombres, mostrarSitio, ignorarSuspension, notas } of envios) {
-        const text = buildAperturaMessage({ ...base, sitio: mostrarSitio ? sitio : null, notas });
+      // Contacto SADER: se busca una sola vez por incidente, y solo si algún
+      // envío usa la plantilla SADER (evita la consulta en el 99% de casos).
+      const usaSader = envios.some((e) => e.plantillaSader);
+      const contactoSader = usaSader
+        ? await buscarContactoSader(inc.serviceId).catch((err) => {
+            console.error("[apertura] Error buscando contacto SADER", err);
+            return null;
+          })
+        : null;
+
+      for (const { chatId, reglas: nombres, mostrarSitio, ignorarSuspension, notas, plantillaSader } of envios) {
+        const text = plantillaSader
+          ? buildSaderMessage({
+              company: inc.company,
+              incidentId: inc.incidentId,
+              serviceRef: inc.serviceId,
+              sitioIncidente: sitio,
+              contacto: contactoSader,
+              notas,
+            })
+          : buildAperturaMessage({ ...base, sitio: mostrarSitio ? sitio : null, notas });
         // Pausa global o grupo suspendido: no se envía, pero SÍ se marca en
         // AperturaNotificada (con ok=false y el motivo) para no re-avisar
         // al reanudar. Una regla con ignorarSuspension entrega aunque el grupo
@@ -215,9 +285,10 @@ export async function syncAperturaNotify(records: OpenRecordLite[]): Promise<num
           : !ignorarSuspension && (await isChatSuspendido(chatId))
             ? "chat suspendido"
             : null;
+        // La plantilla SADER no lleva línea "@asignado", así que no se mencionan.
         const sent = motivo
           ? { ok: false as const, status: 0, error: motivo }
-          : await sendWhatsappViaListener(chatId, text, mentions);
+          : await sendWhatsappViaListener(chatId, text, plantillaSader ? [] : mentions);
         if (!sent.ok && !motivo) {
           console.error("[apertura] Falló envío de alerta de apertura", chatId, sent.error);
         }
