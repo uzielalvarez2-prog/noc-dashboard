@@ -401,6 +401,9 @@ model AperturaRegla {
   companyContains String   @default("") // fragmento del nombre de empresa
   porTurno        Boolean  @default(false) // true = PEXA Matutino/Vespertino según la hora
   mostrarSitio    Boolean  @default(false) // mensaje con "Sitio:" (Site Name) en vez de "Company:" — para chats de cliente
+  // true = empresa como encabezado (2ª línea, estilo SADER) + línea "Sitio:"
+  // (se omite si no hay sitio). Para clientes sin formato de correo.
+  mostrarEmpresaSitio Boolean @default(false)
   // true = esta regla entrega a sus grupos AUNQUE estén suspendidos
   // (WhatsappGroup.suspendido). Para clientes específicos que deben llegar a un
   // grupo que por lo demás está callado (ej. SADER → PEXA Vespertino suspendido).

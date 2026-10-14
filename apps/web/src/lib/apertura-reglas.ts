@@ -26,6 +26,7 @@ export interface ReglaBody {
   companyContains?: string;
   porTurno?: boolean;
   mostrarSitio?: boolean;
+  mostrarEmpresaSitio?: boolean;
   ignorarSuspension?: boolean;
   notaExtra?: string;
   plantillaSader?: boolean;

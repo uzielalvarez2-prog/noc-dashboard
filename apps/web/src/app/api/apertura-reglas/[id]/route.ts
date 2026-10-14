@@ -26,6 +26,7 @@ export async function PATCH(req: NextRequest, ctx: { params: Promise<{ id: strin
       companyContains: typeof body.companyContains === "string" ? body.companyContains.trim() : actual.companyContains,
       porTurno: typeof body.porTurno === "boolean" ? body.porTurno : actual.porTurno,
       mostrarSitio: typeof body.mostrarSitio === "boolean" ? body.mostrarSitio : actual.mostrarSitio,
+      mostrarEmpresaSitio: typeof body.mostrarEmpresaSitio === "boolean" ? body.mostrarEmpresaSitio : actual.mostrarEmpresaSitio,
       ignorarSuspension: typeof body.ignorarSuspension === "boolean" ? body.ignorarSuspension : actual.ignorarSuspension,
       notaExtra: typeof body.notaExtra === "string" ? body.notaExtra.trim() : actual.notaExtra,
       plantillaSader: typeof body.plantillaSader === "boolean" ? body.plantillaSader : actual.plantillaSader,

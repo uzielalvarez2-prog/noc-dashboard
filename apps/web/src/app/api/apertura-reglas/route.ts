@@ -39,6 +39,7 @@ export async function POST(req: NextRequest) {
       companyContains: (body.companyContains ?? "").trim(),
       porTurno: body.porTurno === true,
       mostrarSitio: body.mostrarSitio === true,
+      mostrarEmpresaSitio: body.mostrarEmpresaSitio === true,
       ignorarSuspension: body.ignorarSuspension === true,
       notaExtra: (body.notaExtra ?? "").trim(),
       plantillaSader: body.plantillaSader === true,

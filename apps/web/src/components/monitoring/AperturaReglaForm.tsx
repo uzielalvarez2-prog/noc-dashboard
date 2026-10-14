@@ -11,6 +11,7 @@ export interface ReglaFormState {
   companyContains: string;
   porTurno: boolean;
   mostrarSitio: boolean;
+  mostrarEmpresaSitio: boolean;
   ignorarSuspension: boolean;
   notaExtra: string;
   plantillaSader: boolean;
@@ -24,6 +25,7 @@ export const EMPTY_REGLA: ReglaFormState = {
   companyContains: "",
   porTurno: false,
   mostrarSitio: false,
+  mostrarEmpresaSitio: false,
   ignorarSuspension: false,
   notaExtra: "",
   plantillaSader: false,
@@ -122,6 +124,22 @@ export function AperturaReglaForm({ value, onChange, groups, frequent, busy, onS
       <label className="flex items-center gap-2 text-xs text-text-primary">
         <input type="checkbox" checked={value.mostrarSitio} onChange={(e) => set({ mostrarSitio: e.target.checked })} />
         Mostrar <b>Sitio</b> en lugar de Empresa en el mensaje (para chats de cliente)
+      </label>
+
+      <label className="flex items-start gap-2 text-xs text-text-primary">
+        <input
+          type="checkbox"
+          className="mt-0.5"
+          checked={value.mostrarEmpresaSitio}
+          onChange={(e) => set({ mostrarEmpresaSitio: e.target.checked })}
+        />
+        <span>
+          Mostrar <b>Empresa y Sitio</b> en el mensaje (para clientes sin formato de correo)
+          <span className="block text-[11px] text-text-muted">
+            La empresa va como encabezado (debajo de 🚨 INCIDENTE) y el Sitio en su línea. Ej. TIENDAS TRES B.
+            La línea Sitio se omite si el incidente no trae sitio.
+          </span>
+        </span>
       </label>
 
       <label className="flex items-start gap-2 text-xs text-text-primary">

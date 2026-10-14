@@ -60,21 +60,35 @@ function phoneToJid(phone: string): string {
   return `${phone}@c.us`;
 }
 
+/**
+ * Formato de la línea de ubicación del mensaje de apertura:
+ *  - "company": línea "Company: <empresa>" (default interno).
+ *  - "sitio":   línea "Sitio: <site name>" en vez de Company (chats de cliente).
+ *  - "empresaYsitio": empresa como *encabezado* (2ª línea, estilo SADER) + línea
+ *    "Sitio: <site name>"; la línea Sitio se omite si no hay sitio.
+ */
+type ModoUbicacion = "company" | "sitio" | "empresaYsitio";
+
 function buildAperturaMessage(data: {
   siglasIm: string;
   incidentId: string;
   serviceRef: string;
   company: string;
-  /** Si viene (regla con mostrarSitio), reemplaza la línea "Company:". */
-  sitio: string | null;
+  sitio: string;
+  modo: ModoUbicacion;
   /** Notas extra de las reglas (notaExtra); cada una va como línea al final. */
   notas: string[];
   assigneePhone: string;
 }): string {
   const header = data.siglasIm || data.incidentId;
-  const lines = ["🚨 *INCIDENTE*", header, `REF: ${data.serviceRef}`];
-  if (data.sitio === null) lines.push(`Company: ${data.company}`);
-  else if (data.sitio) lines.push(`Sitio: ${data.sitio}`);
+  const lines = ["🚨 *INCIDENTE*"];
+  // Empresa como encabezado (2ª línea) solo en modo empresaYsitio.
+  if (data.modo === "empresaYsitio" && data.company.trim()) lines.push(`*${data.company.trim()}*`);
+  lines.push(header, `REF: ${data.serviceRef}`);
+
+  if (data.modo === "company") lines.push(`Company: ${data.company}`);
+  else if (data.sitio) lines.push(`Sitio: ${data.sitio}`); // "sitio" y "empresaYsitio": omite si no hay sitio
+
   for (const nota of data.notas) lines.push(nota);
   if (data.assigneePhone) lines.push("", `@${data.assigneePhone}`);
   return lines.join("\n");
@@ -148,6 +162,8 @@ interface Envio {
   chatId: string;
   reglas: string[];
   mostrarSitio: boolean;
+  // true si alguna regla que manda a este chat pide empresa (encabezado) + Sitio.
+  mostrarEmpresaSitio: boolean;
   // true si alguna regla que manda a este chat pide entregar aunque esté suspendido.
   ignorarSuspension: boolean;
   // Notas extra de las reglas que mandan a este chat (una línea por nota, sin repetir).
@@ -166,6 +182,7 @@ function destinosDe(
     companyContains: string;
     porTurno: boolean;
     mostrarSitio: boolean;
+    mostrarEmpresaSitio: boolean;
     ignorarSuspension: boolean;
     notaExtra: string;
     plantillaSader: boolean;
@@ -181,10 +198,12 @@ function destinosDe(
     for (const chatId of chats.map((c) => c.trim()).filter(Boolean)) {
       const envio =
         porChat.get(chatId) ??
-        { chatId, reglas: [], mostrarSitio: false, ignorarSuspension: false, notas: [], plantillaSader: false };
+        { chatId, reglas: [], mostrarSitio: false, mostrarEmpresaSitio: false, ignorarSuspension: false, notas: [], plantillaSader: false };
       if (!envio.reglas.includes(r.nombre)) envio.reglas.push(r.nombre);
       // Si alguna regla que manda a este chat pide Sitio, el chat recibe Sitio.
       envio.mostrarSitio ||= r.mostrarSitio;
+      // Si alguna regla que manda a este chat pide Empresa+Sitio, el chat lo recibe.
+      envio.mostrarEmpresaSitio ||= r.mostrarEmpresaSitio;
       // Si alguna regla que manda a este chat ignora la suspensión, el chat la recibe.
       envio.ignorarSuspension ||= r.ignorarSuspension;
       // Si alguna regla que manda a este chat usa la plantilla SADER, el chat la usa.
@@ -265,7 +284,10 @@ export async function syncAperturaNotify(records: OpenRecordLite[]): Promise<num
           })
         : null;
 
-      for (const { chatId, reglas: nombres, mostrarSitio, ignorarSuspension, notas, plantillaSader } of envios) {
+      for (const { chatId, reglas: nombres, mostrarSitio, mostrarEmpresaSitio, ignorarSuspension, notas, plantillaSader } of envios) {
+        // Modo de ubicación: empresaYsitio (empresa encabezado + sitio) tiene
+        // prioridad sobre "sitio"; si ninguno, el formato interno "company".
+        const modo: ModoUbicacion = mostrarEmpresaSitio ? "empresaYsitio" : mostrarSitio ? "sitio" : "company";
         const text = plantillaSader
           ? buildSaderMessage({
               company: inc.company,
@@ -275,7 +297,7 @@ export async function syncAperturaNotify(records: OpenRecordLite[]): Promise<num
               contacto: contactoSader,
               notas,
             })
-          : buildAperturaMessage({ ...base, sitio: mostrarSitio ? sitio : null, notas });
+          : buildAperturaMessage({ ...base, sitio, modo, notas });
         // Pausa global o grupo suspendido: no se envía, pero SÍ se marca en
         // AperturaNotificada (con ok=false y el motivo) para no re-avisar
         // al reanudar. Una regla con ignorarSuspension entrega aunque el grupo
