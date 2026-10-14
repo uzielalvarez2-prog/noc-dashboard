@@ -1,15 +1,16 @@
 // Importa el directorio de contactos SADER a la tabla SaderContacto.
 //
-// Fuente: el Excel "SADER OFICINAS REMOTAS - CONTACTOS.xlsx".
-// Ejecutar desde apps/web:  node scripts/importar-sader.js
+// Fuente: el Excel "Informaticos SADER COMPLETO_Ref-SiteID.xlsx", hoja
+// "DIRECTORIO GENERAL". Ejecutar desde apps/web:  node scripts/importar-sader.js
 // Ruta del Excel: variable SADER_XLSX o la ruta por defecto en G:\.
 //
-// Columnas (encabezados en la fila 3, datos desde la fila 4):
-//   B = Referencia (llave de cruce con el REF del incidente)
-//   C = Sitio
-//   F = Contacto (informático; puede traer varios nombres)
-//   G = Teléfono
-//   I = Correo(s) (uno o varios, separados por saltos de línea)
+// Columnas (encabezados en la fila 1, datos desde la fila 2):
+//   E = Referencia (llave de cruce con el REF del incidente)
+//   D = Sitio (NOMBRE DE SITIO)
+//   O = Contacto (INFORMATICO; puede traer varios nombres en saltos de línea)
+//   P = Teléfono (TELÉFONO INFORMATICO)
+//   Q = Extensión (Ext. Red AGRICULTURA) — se anexa como "ext. XXXX"
+//   R = Correo(s) (CORREO ELECTRÓNICO; uno o varios, separados por saltos de línea)
 //
 // Reemplaza TODA la tabla por lo que haya en el Excel (deleteMany + createMany):
 // el Excel es la fuente de verdad.
@@ -31,9 +32,10 @@ const db = new PrismaClient({ adapter: new PrismaPg({ connectionString: process.
 
 const XLSX_PATH =
   process.env.SADER_XLSX ||
-  "G:/Mi unidad/CARE/Clientes_CARE/SADER  OFICINAS REMOTAS - CONTACTOS.xlsx";
+  "G:/Mi unidad/CARE/Clientes_CARE/Informaticos SADER COMPLETO_Ref-SiteID.xlsx";
 
-const HEADER_ROW = 3; // fila de encabezados; los datos empiezan en la siguiente
+const SHEET_NAME = "DIRECTORIO GENERAL"; // hoja a leer (la 1ª si no existe por nombre)
+const HEADER_ROW = 1; // fila de encabezados; los datos empiezan en la siguiente
 
 /** Celda a texto limpio (exceljs puede devolver objetos para rich text / fórmulas). */
 function cellText(cell) {
@@ -70,7 +72,7 @@ function parseCorreos(raw) {
 
   const wb = new ExcelJS.Workbook();
   await wb.xlsx.readFile(XLSX_PATH);
-  const ws = wb.worksheets[0];
+  const ws = wb.getWorksheet(SHEET_NAME) || wb.worksheets[0];
   console.log(`Leyendo "${path.basename(XLSX_PATH)}" → hoja "${ws.name}" (${ws.rowCount} filas)`);
 
   const porRef = new Map();
@@ -78,19 +80,23 @@ function parseCorreos(raw) {
 
   for (let r = HEADER_ROW + 1; r <= ws.rowCount; r++) {
     const row = ws.getRow(r);
-    const referencia = soloDigitos(cellText(row.getCell("B")));
-    const sitio = cellText(row.getCell("C")).trim();
+    const referencia = soloDigitos(cellText(row.getCell("E")));
+    const sitio = cellText(row.getCell("D")).trim();
     if (!referencia && !sitio) continue; // fila vacía
     if (!referencia) {
       sinRef++;
-      continue; // sin llave de cruce: no sirve
+      continue; // sin llave de cruce: no sirve (cae al formato básico de HPSM)
     }
+    // Teléfono + extensión juntos: "55 3584 9879 ext. 40502".
+    const tel = cellText(row.getCell("P")).trim().replace(/\s+/g, " ");
+    const ext = cellText(row.getCell("Q")).trim();
+    const telefono = tel + (ext ? `${tel ? " " : ""}ext. ${ext}` : "");
     porRef.set(referencia, {
       referencia,
       sitio,
-      contacto: cellText(row.getCell("F")).trim(),
-      telefono: cellText(row.getCell("G")).trim(),
-      correos: parseCorreos(cellText(row.getCell("I"))),
+      contacto: cellText(row.getCell("O")).trim(),
+      telefono,
+      correos: parseCorreos(cellText(row.getCell("R"))),
     });
   }
 
