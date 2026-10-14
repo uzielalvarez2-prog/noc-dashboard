@@ -98,7 +98,7 @@ function buildAperturaMessage(data: {
  * Plantilla enriquecida SADER. Con match en el Excel (por REF): Company como
  * encabezado, Sitio de la col C, correos (default + col I sin duplicar) + CC,
  * y Contacto/teléfono de la col F/G. Sin match: solo el correo default + CC y
- * el Sitio que trae el incidente. No lleva @mención.
+ * el Sitio que trae el incidente. Lleva @mención al asignado al final.
  */
 function buildSaderMessage(data: {
   company: string;
@@ -108,6 +108,7 @@ function buildSaderMessage(data: {
   sitioIncidente: string;
   contacto: SaderContactoLite | null;
   notas: string[];
+  assigneePhone: string;
 }): string {
   const lines = ["🚨 *INCIDENTE*"];
   if (data.company.trim()) lines.push(`*${data.company.trim()}*`);
@@ -129,6 +130,7 @@ function buildSaderMessage(data: {
   }
 
   for (const nota of data.notas) lines.push(nota);
+  if (data.assigneePhone) lines.push("", `@${data.assigneePhone}`);
   return lines.join("\n");
 }
 
@@ -296,6 +298,7 @@ export async function syncAperturaNotify(records: OpenRecordLite[]): Promise<num
               sitioIncidente: sitio,
               contacto: contactoSader,
               notas,
+              assigneePhone,
             })
           : buildAperturaMessage({ ...base, sitio, modo, notas });
         // Pausa global o grupo suspendido: no se envía, pero SÍ se marca en
@@ -307,10 +310,9 @@ export async function syncAperturaNotify(records: OpenRecordLite[]): Promise<num
           : !ignorarSuspension && (await isChatSuspendido(chatId))
             ? "chat suspendido"
             : null;
-        // La plantilla SADER no lleva línea "@asignado", así que no se mencionan.
         const sent = motivo
           ? { ok: false as const, status: 0, error: motivo }
-          : await sendWhatsappViaListener(chatId, text, plantillaSader ? [] : mentions);
+          : await sendWhatsappViaListener(chatId, text, mentions);
         if (!sent.ok && !motivo) {
           console.error("[apertura] Falló envío de alerta de apertura", chatId, sent.error);
         }
