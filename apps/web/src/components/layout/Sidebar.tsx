@@ -38,7 +38,7 @@ const NAV_ITEMS = [
   { href: "/servicios-vigilados", label: "Servicios en posible baja", icon: AlertOctagon, monitoringOnly: true },
   { href: "/reglas-notificacion", label: "Alertas de apertura", icon: BellRing, monitoringOnly: true },
   { href: "/estatus-im", label: "Estatus IMs", icon: ListChecks, imEstatusOnly: true },
-  { href: "/case-san-juan", label: "Case San Juan", icon: NotebookPen, caseSanJuanOnly: true },
+  { href: "/case-san-juan", label: "CASE San Juan - PEXA", icon: NotebookPen, caseSanJuanOnly: true },
   { href: "/settings", label: "Configuración", icon: Settings, settingsOnly: true },
 ];
 

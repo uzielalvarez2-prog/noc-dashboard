@@ -14,7 +14,7 @@ export default async function CaseSanJuanPage() {
   return (
     <div className="mx-auto max-w-[1440px] space-y-6">
       <div>
-        <h1 className="text-2xl font-bold text-text-primary">Case San Juan</h1>
+        <h1 className="text-2xl font-bold text-text-primary">CASE San Juan - PEXA</h1>
         <p className="mt-1 text-sm text-text-muted">
           Incidentes abiertos con folio SISA del CASE SAN JUAN. Clic en un renglón para ver su bitácora
           de Estatus CASE y copiar las notas.
