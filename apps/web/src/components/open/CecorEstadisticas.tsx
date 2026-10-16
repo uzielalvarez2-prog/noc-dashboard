@@ -3,9 +3,37 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Loader2, TrendingUp } from "lucide-react";
+import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from "recharts";
 import type { ClosedStats } from "@/types/closed";
 import { ClosedRanking } from "@/components/closed/ClosedRanking";
 import { cn } from "@/lib/utils";
+
+// Paleta en tonos: azul → cian → verde → ámbar → naranja, un color por mes.
+const DONUT_COLORS = [
+  "#3b82f6", // azul
+  "#06b6d4", // cian
+  "#22c55e", // verde
+  "#a3e635", // lima
+  "#f59e0b", // ámbar
+  "#fb923c", // naranja
+  "#f472b6", // rosa
+  "#a78bfa", // violeta
+  "#38bdf8", // celeste
+  "#34d399", // esmeralda
+  "#fbbf24", // dorado
+  "#fb7185", // coral
+];
+
+const TOOLTIP_STYLE = {
+  contentStyle: {
+    background: "#0d1526",
+    border: "1px solid #1e3048",
+    borderRadius: "6px",
+    color: "#e2e8f0",
+    fontSize: "12px",
+  },
+  labelStyle: { color: "#64748b" },
+};
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Sub-pestaña "Estadísticas" de la vista CECOR (Incidentes abiertos → CECOR).
@@ -82,6 +110,7 @@ export function CecorEstadisticas({ group }: { group: "PEXA" | "CECOR" }) {
 
   const periods = stats?.byPeriod ?? [];
   const maxPeriod = Math.max(1, ...periods.map((p) => p.count));
+  const totalPeriods = periods.reduce((s, p) => s + p.count, 0);
 
   if (isLoading) {
     return (
@@ -122,8 +151,66 @@ export function CecorEstadisticas({ group }: { group: "PEXA" | "CECOR" }) {
 
         {periods.length === 0 ? (
           <p className="py-8 text-center text-xs text-text-muted">Sin datos. ¿Ya se cargó el histórico de cerrados?</p>
+        ) : bucket === "month" ? (
+          // Mes → dona con tonos (pocas porciones, se lee bien). El centro muestra
+          // el total; la leyenda lateral lista cada mes con su conteo y %.
+          <div className="flex flex-col items-center gap-4 sm:flex-row sm:items-center sm:justify-center">
+            <div className="relative h-52 w-52 shrink-0">
+              <ResponsiveContainer width="100%" height="100%">
+                <PieChart>
+                  <Pie
+                    data={periods}
+                    dataKey="count"
+                    nameKey="name"
+                    cx="50%"
+                    cy="50%"
+                    innerRadius={58}
+                    outerRadius={90}
+                    paddingAngle={2}
+                    stroke="none"
+                  >
+                    {periods.map((p, i) => (
+                      <Cell key={p.name} fill={DONUT_COLORS[i % DONUT_COLORS.length]} />
+                    ))}
+                  </Pie>
+                  <Tooltip
+                    {...TOOLTIP_STYLE}
+                    formatter={(value, _name, item) => {
+                      const n = typeof value === "number" ? value : Number(value) || 0;
+                      const pct = totalPeriods ? Math.round((n / totalPeriods) * 100) : 0;
+                      const key = String((item as { payload?: { name?: string } })?.payload?.name ?? "");
+                      return [`${n} incidentes (${pct}%)`, periodLabel(key, bucket)];
+                    }}
+                  />
+                </PieChart>
+              </ResponsiveContainer>
+              {/* Total al centro de la dona */}
+              <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center">
+                <span className="text-2xl font-bold text-text-primary">{totalPeriods.toLocaleString("es-MX")}</span>
+                <span className="text-[10px] uppercase tracking-wider text-text-muted">total</span>
+              </div>
+            </div>
+            {/* Leyenda */}
+            <div className="grid w-full max-w-xs grid-cols-1 gap-1.5">
+              {periods.map((p, i) => {
+                const pct = totalPeriods ? Math.round((p.count / totalPeriods) * 100) : 0;
+                return (
+                  <div key={p.name} className="flex items-center gap-2 text-xs">
+                    <span
+                      className="h-3 w-3 shrink-0 rounded-sm"
+                      style={{ backgroundColor: DONUT_COLORS[i % DONUT_COLORS.length] }}
+                    />
+                    <span className="flex-1 text-text-primary">{periodLabel(p.name, bucket)}</span>
+                    <span className="font-mono font-semibold text-text-primary">{p.count}</span>
+                    <span className="w-9 text-right font-mono text-text-muted">{pct}%</span>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
         ) : (
-          <div className={cn("space-y-1.5", bucket !== "month" && "max-h-72 overflow-y-auto pr-1")}>
+          // Semana/Día → muchas categorías: barras horizontales (la dona sería ilegible).
+          <div className="max-h-72 space-y-1.5 overflow-y-auto pr-1">
             {periods.map((p) => (
               <div key={p.name} className="flex items-center gap-2">
                 <span className="w-24 shrink-0 text-right text-xs text-text-muted" title={p.name}>
