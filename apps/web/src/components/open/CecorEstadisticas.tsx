@@ -35,6 +35,33 @@ function toDonut(rows: { name: string; count: number }[], labelFn?: (name: strin
   }));
 }
 
+// Para Semana/Día (muchas categorías): toma las `topN` mayores y agrupa el resto
+// en una rebanada "Otros", para que la dona sea legible sin perder el total. Las
+// filas vienen cronológicas; se ordenan por conteo para elegir las top.
+const OTROS_COLOR = "#64748b";
+function toDonutTop(
+  rows: { name: string; count: number }[],
+  labelFn: (name: string) => string,
+  topN = 12
+): DonutDatum[] {
+  const sorted = [...rows].sort((a, b) => b.count - a.count);
+  const top = sorted.slice(0, topN);
+  const resto = sorted.slice(topN);
+  const out: DonutDatum[] = top.map((r, i) => ({
+    name: labelFn(r.name),
+    value: r.count,
+    color: DONUT_COLORS[i % DONUT_COLORS.length],
+  }));
+  if (resto.length) {
+    out.push({
+      name: `Otros (${resto.length})`,
+      value: resto.reduce((s, r) => s + r.count, 0),
+      color: OTROS_COLOR,
+    });
+  }
+  return out;
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Sub-pestaña "Estadísticas" de la vista CECOR (Incidentes abiertos → CECOR).
 // Se alimenta del histórico de CERRADOS (ClosedIncident, que el scraper acumula
@@ -109,7 +136,6 @@ export function CecorEstadisticas({ group }: { group: "PEXA" | "CECOR" }) {
     );
 
   const periods = stats?.byPeriod ?? [];
-  const maxPeriod = Math.max(1, ...periods.map((p) => p.count));
 
   if (isLoading) {
     return (
@@ -150,36 +176,21 @@ export function CecorEstadisticas({ group }: { group: "PEXA" | "CECOR" }) {
 
         {periods.length === 0 ? (
           <p className="py-8 text-center text-xs text-text-muted">Sin datos. ¿Ya se cargó el histórico de cerrados?</p>
-        ) : bucket === "month" ? (
-          // Mes → dona con tonos (pocas porciones, se lee bien).
+        ) : (
+          // Dona siempre. Mes: todas las porciones (son pocas). Semana/Día: top 12
+          // + "Otros" para que no sea un arcoíris ilegible.
           <DonutChart
             title=""
             bare
-            data={toDonut(periods, (n) => periodLabel(n, "month"))}
+            data={
+              bucket === "month"
+                ? toDonut(periods, (n) => periodLabel(n, "month"))
+                : toDonutTop(periods, (n) => periodLabel(n, bucket))
+            }
             centerLabel="total"
             unitLabel="incidentes"
-            fileBase={`cecor-volumen-mes-${group.toLowerCase()}`}
+            fileBase={`cecor-volumen-${bucket}-${group.toLowerCase()}`}
           />
-        ) : (
-          // Semana/Día → muchas categorías: barras horizontales (la dona sería ilegible).
-          <div className="max-h-72 space-y-1.5 overflow-y-auto pr-1">
-            {periods.map((p) => (
-              <div key={p.name} className="flex items-center gap-2">
-                <span className="w-24 shrink-0 text-right text-xs text-text-muted" title={p.name}>
-                  {periodLabel(p.name, bucket)}
-                </span>
-                <div className="relative h-5 flex-1 overflow-hidden rounded bg-surface-elevated/60">
-                  <div
-                    className="absolute inset-y-0 left-0 rounded bg-accent/60 transition-all duration-500"
-                    style={{ width: `${(p.count / maxPeriod) * 100}%` }}
-                  />
-                </div>
-                <span className="w-12 shrink-0 text-right font-mono text-xs font-semibold text-text-primary">
-                  {p.count}
-                </span>
-              </div>
-            ))}
-          </div>
         )}
       </div>
 
