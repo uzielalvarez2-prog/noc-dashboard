@@ -28,7 +28,7 @@ export async function GET(req: NextRequest) {
     });
     const ids = tickets.map((t) => t.incidentId);
 
-    const [open, notas] = await Promise.all([
+    const [open, notas, edcReports] = await Promise.all([
       db.openIncident.findMany({
         where: { incidentId: { in: ids } },
         select: {
@@ -45,7 +45,14 @@ export async function GET(req: NextRequest) {
         orderBy: { createdAt: "desc" },
         select: { id: true, incidentId: true, texto: true, autor: true, createdAt: true },
       }),
+      // "Estar en la vista EDC" = tener un reporte del grupo STAFF SUPERVISIÓN
+      // (EdcReport). Con esto se marca cada item para la pestaña EDC.
+      db.edcReport.findMany({
+        where: { incidentId: { in: ids } },
+        select: { incidentId: true },
+      }),
     ]);
+    const enEdc = new Set(edcReports.map((r) => r.incidentId));
 
     // Un IM multi-distrito trae varias filas en Abiertos (mismo sitio): se toma
     // la primera, igual que la vista SISA.
@@ -73,6 +80,7 @@ export async function GET(req: NextRequest) {
           siteName: o.siteName,
           vendorTicket: t.vendorTicket,
           status: o.status,
+          enEdc: enEdc.has(t.incidentId),
           notas: notasById.get(t.incidentId) ?? [],
         };
       })

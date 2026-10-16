@@ -15,6 +15,7 @@ interface CaseItem {
   siteName: string;
   vendorTicket: string;
   status: string;
+  enEdc: boolean;
   notas: CaseNota[];
 }
 
@@ -43,12 +44,21 @@ function statusClass(status: string): string {
   return "text-amber-400";
 }
 
+type Tab = "total" | "edc";
+
 export function CaseSanJuanView() {
   const [q, setQ] = useState("");
   const [abierto, setAbierto] = useState<string | null>(null);
+  // Pestaña: "total" = todos los del CASE (vista de siempre). "edc" = solo los
+  // que están en la vista EDC del dashboard (tienen EdcReport) y con SISA.
+  const [tab, setTab] = useState<Tab>("total");
   // Orden por Estatus: clic en el encabezado cicla A→Z, Vendor primero y sin
   // orden (sin orden = por apertura, más viejo primero, como llega de la API).
   const [ordenEstatus, setOrdenEstatus] = useState<"asc" | "vendor" | null>(null);
+  // Orden por antigüedad (apertura): "asc" = más antiguo primero (default de la
+  // API), "desc" = más reciente primero. Es independiente del orden por estatus;
+  // cuando el usuario elige uno, el otro se desactiva.
+  const [ordenTiempo, setOrdenTiempo] = useState<"asc" | "desc">("asc");
 
   const { data, isLoading, error, refetch } = useQuery({
     queryKey: ["case-san-juan"],
@@ -61,32 +71,73 @@ export function CaseSanJuanView() {
   const abreHpsm = data?.abreHpsm ?? false;
 
   const filtrados = useMemo(() => {
+    // 1) Pestaña: EDC = solo los que están en la vista EDC (enEdc) y con SISA.
+    const base =
+      tab === "edc"
+        ? items.filter((it) => it.enEdc && it.vendorTicket.trim() !== "")
+        : items;
+
+    // 2) Búsqueda de texto.
     const needle = q.trim().toLowerCase();
     const lista = needle
-      ? items.filter((it) =>
+      ? base.filter((it) =>
           [it.vendorTicket, it.company, it.serviceId, it.siteName, it.incidentId, it.status]
             .join(" ")
             .toLowerCase()
             .includes(needle)
         )
-      : items;
-    if (!ordenEstatus) return lista;
-    const esVendor = (st: string) => ((st ?? "").toUpperCase().includes("VENDOR") ? 0 : 1);
-    // sort estable: dentro del mismo estatus se conserva el orden por apertura.
-    return [...lista].sort(
-      (a, b) =>
-        (ordenEstatus === "vendor" ? esVendor(a.status) - esVendor(b.status) : 0) ||
-        (a.status ?? "").localeCompare(b.status ?? "", "es")
-    );
-  }, [items, q, ordenEstatus]);
+      : base;
+
+    // 3) Orden. Si hay orden por estatus activo, manda ese (con desempate por
+    // apertura según ordenTiempo). Si no, ordena solo por apertura.
+    const porTiempo = (a: CaseItem, b: CaseItem) => {
+      const ta = new Date(a.openTime).getTime();
+      const tb = new Date(b.openTime).getTime();
+      return ordenTiempo === "asc" ? ta - tb : tb - ta;
+    };
+    if (ordenEstatus) {
+      const esVendor = (st: string) => ((st ?? "").toUpperCase().includes("VENDOR") ? 0 : 1);
+      return [...lista].sort(
+        (a, b) =>
+          (ordenEstatus === "vendor" ? esVendor(a.status) - esVendor(b.status) : 0) ||
+          (a.status ?? "").localeCompare(b.status ?? "", "es") ||
+          porTiempo(a, b)
+      );
+    }
+    return [...lista].sort(porTiempo);
+  }, [items, q, tab, ordenEstatus, ordenTiempo]);
 
   function ciclarOrdenEstatus() {
     setOrdenEstatus((o) => (o === null ? "asc" : o === "asc" ? "vendor" : null));
   }
 
+  function alternarOrdenTiempo() {
+    // Al ordenar por tiempo desde el botón, se desactiva el orden por estatus.
+    setOrdenEstatus(null);
+    setOrdenTiempo((o) => (o === "asc" ? "desc" : "asc"));
+  }
+
+  // Botón de pestaña: chico, para que la tabla tenga prioridad.
+  const tabBtn = (activo: boolean) =>
+    cn(
+      "rounded-md px-3 py-1 text-xs font-medium transition-colors",
+      activo ? "bg-accent text-white" : "border border-border text-text-muted hover:text-text-primary"
+    );
+
   return (
-    <div className="space-y-4">
-      <div className="flex items-center justify-between gap-3">
+    <div className="space-y-3">
+      {/* Botones EDC / Total — centrados y chicos. */}
+      <div className="flex items-center justify-center gap-1.5">
+        <button type="button" onClick={() => setTab("edc")} className={tabBtn(tab === "edc")}>
+          EDC
+        </button>
+        <button type="button" onClick={() => setTab("total")} className={tabBtn(tab === "total")}>
+          Total
+        </button>
+      </div>
+
+      {/* Buscador centrado + botón de orden por antigüedad. */}
+      <div className="flex items-center justify-center gap-2">
         <div className="relative w-full max-w-md">
           <Search className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-text-muted" />
           <input
@@ -96,8 +147,21 @@ export function CaseSanJuanView() {
             className="w-full rounded-md border border-border bg-surface py-1.5 pl-8 pr-3 text-xs text-text-primary"
           />
         </div>
-        <span className="shrink-0 text-xs text-text-muted">{filtrados.length} incidentes</span>
+        <button
+          type="button"
+          onClick={alternarOrdenTiempo}
+          title={ordenTiempo === "asc" ? "Más antiguo primero (clic: invertir)" : "Más reciente primero (clic: invertir)"}
+          className={cn(
+            "flex shrink-0 items-center gap-1 rounded-md border border-border px-2.5 py-1.5 text-xs transition-colors hover:text-text-primary",
+            !ordenEstatus ? "text-accent" : "text-text-muted"
+          )}
+        >
+          {ordenTiempo === "asc" ? <ArrowUp className="h-3.5 w-3.5" /> : <ArrowDown className="h-3.5 w-3.5" />}
+          {ordenTiempo === "asc" ? "Antiguo" : "Reciente"}
+        </button>
       </div>
+
+      <div className="text-center text-xs text-text-muted">{filtrados.length} incidentes</div>
 
       {error && <p className="text-xs text-critical">{(error as Error).message}</p>}
 
@@ -144,7 +208,11 @@ export function CaseSanJuanView() {
             ) : filtrados.length === 0 ? (
               <tr>
                 <td colSpan={COLUMNS.length} className="py-12 text-center text-sm text-text-muted">
-                  {q ? "Sin resultados para la búsqueda" : "No hay incidentes abiertos del CASE San Juan"}
+                  {q
+                    ? "Sin resultados para la búsqueda"
+                    : tab === "edc"
+                      ? "No hay incidentes del CASE San Juan en la vista EDC"
+                      : "No hay incidentes abiertos del CASE San Juan"}
                 </td>
               </tr>
             ) : (
