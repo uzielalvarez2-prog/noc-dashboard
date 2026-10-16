@@ -288,7 +288,7 @@ export function ClienteTopView() {
         {clientes.length > 0 && (
           <div className="order-last w-full sm:order-none sm:flex-1 sm:px-4">
             <div className="group relative mx-auto w-full max-w-md">
-              <Search className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-text-muted transition-colors group-focus-within:text-accent" />
+              <Search className="pointer-events-none absolute left-4 top-1/2 z-10 h-4 w-4 -translate-y-1/2 text-text-muted transition-colors group-focus-within:text-accent" />
               <input
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
