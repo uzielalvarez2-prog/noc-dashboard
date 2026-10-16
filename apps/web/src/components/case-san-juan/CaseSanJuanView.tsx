@@ -117,10 +117,10 @@ export function CaseSanJuanView() {
     setOrdenTiempo((o) => (o === "asc" ? "desc" : "asc"));
   }
 
-  // Botón de pestaña: chico, para que la tabla tenga prioridad.
+  // Botón de pestaña: compacto en alto pero un poco más ancho.
   const tabBtn = (activo: boolean) =>
     cn(
-      "rounded-md px-3 py-1 text-xs font-medium transition-colors",
+      "rounded-md px-8 py-1 text-xs font-medium transition-colors",
       activo ? "bg-accent text-white" : "border border-border text-text-muted hover:text-text-primary"
     );
 
@@ -161,7 +161,6 @@ export function CaseSanJuanView() {
         </button>
       </div>
 
-      <div className="text-center text-xs text-text-muted">{filtrados.length} incidentes</div>
 
       {error && <p className="text-xs text-critical">{(error as Error).message}</p>}
 
