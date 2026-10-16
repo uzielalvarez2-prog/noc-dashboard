@@ -10,10 +10,16 @@ export async function GET(req: NextRequest) {
 
   const sp = req.nextUrl.searchParams;
   try {
+    const bucketParam = sp.get("bucket");
+    const bucket =
+      bucketParam === "day" || bucketParam === "week" || bucketParam === "month"
+        ? bucketParam
+        : undefined;
     const stats = await getClosedStats({
       group: sp.get("group") ?? undefined,
       from: sp.get("from") ? new Date(sp.get("from")!) : undefined,
       to: sp.get("to") ? new Date(sp.get("to")!) : undefined,
+      bucket,
     });
     return NextResponse.json(stats);
   } catch (err) {

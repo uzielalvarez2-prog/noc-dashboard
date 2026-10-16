@@ -8,6 +8,7 @@ import { OpenKpis } from "./OpenKpis";
 import { StatusBreakdown, ALL_STATUS } from "./StatusBreakdown";
 import { TopByDimension } from "./TopByDimension";
 import { FallasMasivas } from "./FallasMasivas";
+import { CecorEstadisticas } from "./CecorEstadisticas";
 import { OpenIncidentTable } from "./OpenIncidentTable";
 import { EdcTabs } from "./EdcTabs";
 import { ClienteTopView } from "./ClienteTopView";
@@ -45,7 +46,7 @@ function PexaCecorView({ group }: { group: "PEXA" | "CECOR" }) {
   const [sortDir, setSortDir] = useState<SortDir>("desc");
   const [recentOnly, setRecentOnly] = useState(true);
   const [selectedStatus, setSelectedStatus] = useState<string | null>(null);
-  const [subTab, setSubTab] = useState<"abiertos" | "sisa">("abiertos");
+  const [subTab, setSubTab] = useState<"abiertos" | "sisa" | "estadisticas">("abiertos");
   const maxAgeHours = recentOnly ? 1 : undefined;
 
   const { data: stats, isFetching, refetch } = useQuery<OpenStats>({
@@ -74,34 +75,42 @@ function PexaCecorView({ group }: { group: "PEXA" | "CECOR" }) {
         : "border border-border text-text-muted hover:text-text-primary"
     );
 
+  // Barra de sub-pestañas de CECOR (Abiertos · SISA CECOR · Estadísticas).
+  const cecorSubTabs = group === "CECOR" && (
+    <div className="flex items-center gap-2">
+      <button type="button" onClick={() => setSubTab("abiertos")} className={subTabBtn(subTab === "abiertos")}>
+        Abiertos
+      </button>
+      <button type="button" onClick={() => setSubTab("sisa")} className={subTabBtn(subTab === "sisa")}>
+        SISA CECOR
+      </button>
+      <button type="button" onClick={() => setSubTab("estadisticas")} className={subTabBtn(subTab === "estadisticas")}>
+        Estadísticas
+      </button>
+    </div>
+  );
+
   if (group === "CECOR" && subTab === "sisa") {
     return (
       <div className="space-y-5">
-        <div className="flex items-center gap-2">
-          <button type="button" onClick={() => setSubTab("abiertos")} className={subTabBtn(false)}>
-            Abiertos
-          </button>
-          <button type="button" onClick={() => setSubTab("sisa")} className={subTabBtn(true)}>
-            SISA CECOR
-          </button>
-        </div>
+        {cecorSubTabs}
         <SisaCecorView />
+      </div>
+    );
+  }
+
+  if (group === "CECOR" && subTab === "estadisticas") {
+    return (
+      <div className="space-y-5">
+        {cecorSubTabs}
+        <CecorEstadisticas group={group} />
       </div>
     );
   }
 
   return (
     <div className="space-y-5">
-      {group === "CECOR" && (
-        <div className="flex items-center gap-2">
-          <button type="button" onClick={() => setSubTab("abiertos")} className={subTabBtn(true)}>
-            Abiertos
-          </button>
-          <button type="button" onClick={() => setSubTab("sisa")} className={subTabBtn(false)}>
-            SISA CECOR
-          </button>
-        </div>
-      )}
+      {cecorSubTabs}
       <div className="flex items-center justify-end gap-3">
         <button
           type="button"

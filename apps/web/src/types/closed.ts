@@ -12,6 +12,9 @@ export interface ClosedStats {
   vencidos: number;
   compliance: number;
   avgResolutionMins: number;
+  medianResolutionMins: number;
+  bucket: "day" | "week" | "month";
   byUser: ClosedRankRow[];
   byCause: ClosedRankRow[];
+  byPeriod: ClosedRankRow[];
 }
