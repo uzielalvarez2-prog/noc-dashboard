@@ -66,11 +66,11 @@ export function canConsultarEstatusIm(role: string | undefined): boolean {
 
 /**
  * Vista /case-san-juan (incidentes SISA del CASE SAN JUAN + bitácora "Estatus CASE").
- * EN PRUEBAS: solo ADMIN (y el rol CASE, que aún no tiene usuarios). Al aprobarse
- * se abre a IDS y SUPERVISOR en solo lectura.
+ * Abierta a ADMIN, al rol CASE y a SUPERVISOR (desde 2026-10-16). Los supervisores
+ * además pueden agregar notas (ver canEditarEstatusCase). IDS aún no la ve.
  */
 export function canVerCaseSanJuan(role: string | undefined): boolean {
-  return role === "ADMIN" || role === "CASE";
+  return role === "ADMIN" || role === "CASE" || role === "SUPERVISOR";
 }
 
 /** Agregar notas a la bitácora "Estatus CASE" — todos los roles (CASE y usuarios NOC). */
