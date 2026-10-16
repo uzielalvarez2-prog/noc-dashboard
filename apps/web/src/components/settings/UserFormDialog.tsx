@@ -25,6 +25,7 @@ const ROLES = [
   { value: "IDS",        label: "IDS — Ingeniero de Diagnóstico y Solución" },
   { value: "SUPERVISOR", label: "Supervisor" },
   { value: "ADMIN",      label: "Administrador" },
+  { value: "CASE",       label: "CASE San Juan — solo ve esa vista" },
 ];
 
 export function UserFormDialog({ open, onClose, onSuccess, user }: UserFormDialogProps) {

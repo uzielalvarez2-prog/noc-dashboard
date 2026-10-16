@@ -18,12 +18,14 @@ const ROLE_LABELS: Record<string, string> = {
   ADMIN:      "Admin",
   SUPERVISOR: "Supervisor",
   IDS:        "IDS",
+  CASE:       "CASE San Juan",
 };
 
 const ROLE_COLORS: Record<string, string> = {
   ADMIN:      "text-warning border-warning/30 bg-warning/10",
   SUPERVISOR: "text-success border-success/30 bg-success/10",
   IDS:        "text-accent border-accent/30 bg-accent/10",
+  CASE:       "text-info border-info/30 bg-info/10",
 };
 
 async function fetchUsers(): Promise<{ users: User[] }> {
