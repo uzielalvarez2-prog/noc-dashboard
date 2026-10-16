@@ -7,6 +7,7 @@ import type { OpenStats } from "@/types/open";
 import { OpenKpis } from "./OpenKpis";
 import { StatusBreakdown, ALL_STATUS } from "./StatusBreakdown";
 import { TopByDimension } from "./TopByDimension";
+import { FallasMasivas } from "./FallasMasivas";
 import { OpenIncidentTable } from "./OpenIncidentTable";
 import { EdcTabs } from "./EdcTabs";
 import { ClienteTopView } from "./ClienteTopView";
@@ -187,6 +188,10 @@ function PexaCecorView({ group }: { group: "PEXA" | "CECOR" }) {
           maxAgeHours={maxAgeHours}
         />
       </div>
+
+      {/* Detector de fallas masivas: agrupa aperturas cercanas en el tiempo por
+          zona (no respeta el filtro ≤1h de arriba; analiza todos los abiertos). */}
+      <FallasMasivas group={group} />
     </div>
   );
 }
