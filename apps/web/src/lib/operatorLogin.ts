@@ -56,10 +56,13 @@ const NAME_TO_LOGIN: Record<string, string> = {
 
 // Quita acentos y colapsa espacios para poder comparar "Núñez" == "Nunez"
 // sin depender de que el CSV traiga los acentos correctos (HPSM a veces los rompe).
+// También elimina puntos/separadores basura que HPSM a veces inserta en el nombre
+// (p.ej. "MORALES SOLANO .. LUIS ALFONSO"), para que el match no dependa de ellos.
 function normalizeName(raw: string): string {
   return raw
     .normalize("NFD")
     .replace(/[̀-ͯ]/g, "")
+    .replace(/[.,;:]+/g, " ") // puntos/comas sueltos → espacio
     .trim()
     .replace(/\s+/g, " ")
     .toLowerCase();
