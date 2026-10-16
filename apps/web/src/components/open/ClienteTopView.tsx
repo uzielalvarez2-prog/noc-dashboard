@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState, useEffect } from "react";
+import { useMemo, useState, useEffect, type ReactNode } from "react";
 import { useQuery, useQueryClient, useMutation } from "@tanstack/react-query";
 import { Plus, Search, X, Star, Trash2, AlertTriangle, Loader2, Pencil, Check } from "lucide-react";
 import { useTheme } from "@/components/layout/ThemeProvider";
@@ -59,11 +59,49 @@ function maxDilacion(c: ClienteTopStat): number {
 //   ámbar  = tiene IM's activos (sin resolver) pero ninguno pasó las 4h
 //   verde  = tiene IM's pero TODOS están en RESOLVED (nada en gestión)
 //   gris   = no tiene ningún IM en el snapshot
-function sevColor(c: ClienteTopStat): string {
-  if (c.delayedMs.length > 0) return "bg-critical";
-  if (c.activeCount > 0) return "bg-warning";
-  if (c.openCount > 0) return "bg-success";
-  return "bg-text-muted/40";
+type Severity = "critical" | "warning" | "success" | "muted";
+
+function severityOf(c: ClienteTopStat): Severity {
+  if (c.delayedMs.length > 0) return "critical";
+  if (c.activeCount > 0) return "warning";
+  if (c.openCount > 0) return "success";
+  return "muted";
+}
+
+// Clases por severidad para el "lollipop" (línea + punto con glow) de cada fila.
+const SEV: Record<Severity, { text: string; track: string; dot: string }> = {
+  critical: {
+    text: "text-critical",
+    track: "bg-critical/60",
+    dot: "bg-critical shadow-[0_0_8px_2px_rgba(239,68,68,0.55)]",
+  },
+  warning: {
+    text: "text-warning",
+    track: "bg-warning/60",
+    dot: "bg-warning shadow-[0_0_8px_2px_rgba(245,158,11,0.5)]",
+  },
+  success: {
+    text: "text-success",
+    track: "bg-success/60",
+    dot: "bg-success shadow-[0_0_7px_2px_rgba(34,197,94,0.45)]",
+  },
+  muted: {
+    text: "text-text-muted",
+    track: "bg-text-muted/20",
+    dot: "bg-text-muted/40",
+  },
+};
+
+// Resplandor ambiental muy sutil detrás de las tarjetas (look "glass"),
+// puramente decorativo — nunca intercepta clicks.
+function Glow({ children }: { children: ReactNode }) {
+  return (
+    <div className="relative">
+      <div className="pointer-events-none absolute -left-16 -top-24 h-72 w-72 rounded-full bg-accent/10 blur-3xl" />
+      <div className="pointer-events-none absolute -right-20 top-16 h-80 w-80 rounded-full bg-critical/[0.08] blur-3xl" />
+      <div className="relative">{children}</div>
+    </div>
+  );
 }
 
 async function fetchClienteTopStats(): Promise<{ clientes: ClienteTopStat[] }> {
@@ -136,7 +174,7 @@ export function ClienteTopView() {
 
   const cardCls = (critical: boolean, active: boolean) =>
     cn(
-      "group relative w-full rounded-xl border p-4 text-left transition-all hover:-translate-y-0.5",
+      "group relative w-full rounded-2xl border p-4 text-left transition-all hover:-translate-y-0.5",
       critical
         ? isLight
           ? "border-critical/50 bg-critical-dim/40 hover:shadow-md"
@@ -212,28 +250,33 @@ export function ClienteTopView() {
   // lista general distrae mientras consulta un cliente puntual).
   if (selected) {
     return (
-      <div className="space-y-5">
-        <button
-          type="button"
-          onClick={() => setSelected(null)}
-          className="text-xs font-medium text-accent hover:underline"
-        >
-          ← Ver todos los clientes
-        </button>
-        <div className="mx-auto w-full max-w-xs">{renderCard(selected, true)}</div>
-        <ClienteDetail
-          cliente={selected}
-          onClose={() => setSelected(null)}
-          onRemove={() => removeMutation.mutate(selected.id)}
-          removing={removeMutation.isPending}
-          onRename={(alias) => renameMutation.mutate({ cliente: selected, alias })}
-          renaming={renameMutation.isPending}
-        />
-      </div>
+      <Glow>
+        <div className="space-y-5">
+          <button
+            type="button"
+            onClick={() => setSelected(null)}
+            className="text-xs font-medium text-accent hover:underline"
+          >
+            ← Ver todos los clientes
+          </button>
+          <div className="mx-auto w-full max-w-xs">{renderCard(selected, true)}</div>
+          <ClienteDetail
+            cliente={selected}
+            onClose={() => setSelected(null)}
+            onRemove={() => removeMutation.mutate(selected.id)}
+            removing={removeMutation.isPending}
+            onRename={(alias) => renameMutation.mutate({ cliente: selected, alias })}
+            renaming={renameMutation.isPending}
+          />
+        </div>
+      </Glow>
     );
   }
 
+  const maxOpen = Math.max(1, ...clientes.map((c) => c.openCount));
+
   return (
+    <Glow>
     <div className="space-y-5">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <p className="text-sm text-text-muted">
@@ -267,7 +310,7 @@ export function ClienteTopView() {
       {isLoading ? (
         <p className="text-sm text-text-muted">Cargando…</p>
       ) : clientes.length === 0 ? (
-        <div className="rounded-xl border border-dashed border-border bg-surface/40 p-10 text-center">
+        <div className="rounded-2xl border border-dashed border-border bg-surface/40 p-10 text-center">
           <Star className="mx-auto h-6 w-6 text-text-muted" />
           <p className="mt-3 text-sm text-text-muted">
             Marca un cliente como TOP desde "Agregar cliente" y aquí verás sus incidentes
@@ -279,36 +322,51 @@ export function ClienteTopView() {
           Sin coincidencias para "{search}".
         </p>
       ) : (
-        <div className="overflow-hidden rounded-xl border border-border bg-surface">
+        <div className="overflow-hidden rounded-2xl border border-border/60 bg-surface/60 shadow-[0_20px_40px_-24px_rgba(0,0,0,0.6)] backdrop-blur-md">
           <div className="max-h-[60vh] overflow-y-auto">
             {visibleClientes.map((c) => {
               const dils = describirDilaciones(c.delayedMs);
+              const sev = SEV[severityOf(c)];
+              const pct = c.openCount === 0 ? 0 : Math.max(6, (c.openCount / maxOpen) * 100);
               return (
                 <button
                   key={c.id}
                   type="button"
                   onClick={() => setSelected(c)}
-                  className="flex w-full items-center gap-3 border-b border-border/50 px-4 py-2.5 text-left transition-colors last:border-b-0 hover:bg-surface-elevated"
+                  className="group flex w-full flex-col gap-2 border-b border-border/40 px-4 py-3 text-left transition-all last:border-0 hover:-translate-y-0.5 hover:bg-surface-elevated/50"
                 >
-                  <span className={cn("h-2 w-2 shrink-0 rounded-full", sevColor(c))} />
-                  <span
-                    className="min-w-0 flex-1 truncate text-sm font-semibold text-text-primary sm:w-[41rem] sm:flex-none"
-                    title={c.displayName !== c.company ? `${c.displayName} — ${c.company}` : c.company}
-                  >
-                    {c.displayName}
-                  </span>
-                  <span className="hidden w-20 shrink-0 text-right tabular-nums sm:block">
-                    <span className="text-base font-bold text-text-primary">{c.openCount}</span>
-                    <span className="ml-1 text-xs text-text-muted">IM&apos;s</span>
-                  </span>
-                  {/* En móvil el número va aquí (sin columna fija); en ≥sm lo toma el bloque de arriba. */}
-                  <span className="shrink-0 tabular-nums sm:hidden">
-                    <span className="text-base font-bold text-text-primary">{c.openCount}</span>
-                    <span className="ml-1 text-xs text-text-muted">IM&apos;s</span>
-                  </span>
-                  <span className="hidden min-w-0 flex-1 truncate pl-8 text-xs font-medium text-amber-500/80 sm:block">
-                    {dils.length > 0 ? dils.join(" · ") : ""}
-                  </span>
+                  <div className="flex items-baseline justify-between gap-3">
+                    <span
+                      className="min-w-0 flex-1 truncate text-sm font-semibold text-text-primary"
+                      title={c.displayName !== c.company ? `${c.displayName} — ${c.company}` : c.company}
+                    >
+                      {c.displayName}
+                    </span>
+                    <span className="flex shrink-0 items-baseline gap-3">
+                      {dils.length > 0 && (
+                        <span className="hidden max-w-[12rem] truncate text-xs font-medium text-warning/80 sm:inline">
+                          {dils.join(" · ")}
+                        </span>
+                      )}
+                      <span className={cn("text-sm font-bold tabular-nums", sev.text)}>
+                        {c.openCount}
+                        <span className="ml-1 text-[10px] font-medium text-text-muted">IM&apos;s</span>
+                      </span>
+                    </span>
+                  </div>
+                  <div className="relative h-1 w-full rounded-full bg-surface-elevated">
+                    <span
+                      className={cn("absolute inset-y-0 left-0 rounded-full transition-all", sev.track)}
+                      style={{ width: `${pct}%` }}
+                    />
+                    <span
+                      className={cn(
+                        "absolute top-1/2 h-2.5 w-2.5 -translate-x-1/2 -translate-y-1/2 rounded-full transition-all",
+                        sev.dot,
+                      )}
+                      style={{ left: `${pct}%` }}
+                    />
+                  </div>
                 </button>
               );
             })}
@@ -326,6 +384,7 @@ export function ClienteTopView() {
         />
       )}
     </div>
+    </Glow>
   );
 }
 
