@@ -16,6 +16,7 @@ interface CaseItem {
   vendorTicket: string;
   status: string;
   enEdc: boolean;
+  fromEdc: boolean;
   notas: CaseNota[];
 }
 
@@ -71,10 +72,12 @@ export function CaseSanJuanView() {
   const abreHpsm = data?.abreHpsm ?? false;
 
   const filtrados = useMemo(() => {
-    // 1) Pestaña: EDC = solo los que están en la vista EDC (enEdc) y con SISA.
+    // 1) Pestaña: EDC = los que están en la vista EDC (enEdc). Incluye tanto los
+    // que ya tienen folio SISA como los que EDC marca como San Juan sin tarea
+    // SISA todavía (fromEdc) — estos últimos no tienen vendorTicket.
     const base =
       tab === "edc"
-        ? items.filter((it) => it.enEdc && it.vendorTicket.trim() !== "")
+        ? items.filter((it) => it.enEdc && (it.vendorTicket.trim() !== "" || it.fromEdc))
         : items;
 
     // 2) Búsqueda de texto.
@@ -230,7 +233,23 @@ export function CaseSanJuanView() {
                       <td className="px-2 py-2 text-text-muted">
                         {expandido ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronRight className="h-3.5 w-3.5" />}
                       </td>
-                      <td className="px-3 py-2 font-mono text-xs text-accent">{it.vendorTicket || "—"}</td>
+                      <td className="px-3 py-2 font-mono text-xs text-accent">
+                        {it.vendorTicket ? (
+                          it.vendorTicket
+                        ) : it.fromEdc ? (
+                          // Está en EDC como San Juan pero el SISA aún no genera la
+                          // tarea: sin folio todavía. Se marca para no confundir con
+                          // un "—" de dato faltante.
+                          <span
+                            className="rounded bg-amber-500/10 px-1.5 py-0.5 text-[10px] font-medium text-amber-400"
+                            title="En EDC como CASE San Juan — sin folio SISA aún"
+                          >
+                            EDC · sin SISA
+                          </span>
+                        ) : (
+                          "—"
+                        )}
+                      </td>
                       <td className="px-3 py-2 text-xs text-text-primary">
                         <span className="block max-w-[14rem] truncate" title={it.company}>{it.company || "—"}</span>
                       </td>

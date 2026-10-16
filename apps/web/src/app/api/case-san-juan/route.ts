@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getSessionFromRequest } from "@/lib/auth-session";
 import { canVerCaseSanJuan, canEditarEstatusCase, isRolCase } from "@/lib/permissions";
 import { db } from "@/lib/db";
+import { getEdcSanJuanIncidentIds } from "@/lib/queries/caseSanJuanEdc";
 
 export const dynamic = "force-dynamic";
 
@@ -18,15 +19,31 @@ export async function GET(req: NextRequest) {
   if (!canVerCaseSanJuan(session.role)) return NextResponse.json({ error: "Sin permiso" }, { status: 403 });
 
   try {
-    const tickets = await db.sisaTicket.findMany({
-      where: { vendor: { equals: CASE_VENDOR, mode: "insensitive" } },
-      select: { incidentId: true, vendorTicket: true },
-      // Cruce interno (no se devuelve tal cual): la tabla guarda tickets viejos
-      // además de los abiertos; lo que sale al cliente son solo los abiertos.
-      orderBy: { uploadedAt: "desc" },
-      take: 1000,
-    });
-    const ids = tickets.map((t) => t.incidentId);
+    const [tickets, edcSanJuanIds] = await Promise.all([
+      db.sisaTicket.findMany({
+        where: { vendor: { equals: CASE_VENDOR, mode: "insensitive" } },
+        select: { incidentId: true, vendorTicket: true },
+        // Cruce interno (no se devuelve tal cual): la tabla guarda tickets viejos
+        // además de los abiertos; lo que sale al cliente son solo los abiertos.
+        orderBy: { uploadedAt: "desc" },
+        take: 1000,
+      }),
+      // IMs que EDC reporta como CASE San Juan en su línea "Ticket:" aunque el
+      // SISA todavía no haya generado la tarea (no tienen SisaTicket). El cruce
+      // los rescata para que no se caigan de la vista.
+      getEdcSanJuanIncidentIds(),
+    ]);
+
+    // vendorTicket (folio SISA) por IM: el más reciente gana (tickets viene
+    // ordenado por uploadedAt desc). Los que solo llegan por EDC no tienen folio.
+    const vendorTicketById = new Map<string, string>();
+    for (const t of tickets) {
+      if (!vendorTicketById.has(t.incidentId)) vendorTicketById.set(t.incidentId, t.vendorTicket);
+    }
+
+    // Universo de IMs: los que tienen tarea SISA del CASE + los que EDC marca
+    // como San Juan sin tarea. OpenIncident decide cuáles siguen abiertos.
+    const ids = [...new Set([...vendorTicketById.keys(), ...edcSanJuanIds])];
 
     const [open, notas, edcReports] = await Promise.all([
       db.openIncident.findMany({
@@ -66,22 +83,28 @@ export async function GET(req: NextRequest) {
       notasById.set(n.incidentId, lista);
     }
 
-    const items = tickets
+    const items = ids
+      // Solo los que siguen abiertos (de ahí salen empresa/servicio/sitio/estatus).
+      .filter((id) => openById.has(id))
       // Solo servicios numéricos (IDN, ej. 5521242661): los que empiezan con
       // letra (C00-…, A02-…) no los atiende el CASE San Juan.
-      .filter((t) => /^\d/.test((openById.get(t.incidentId)?.serviceId ?? "").trim()))
-      .map((t) => {
-        const o = openById.get(t.incidentId)!;
+      .filter((id) => /^\d/.test((openById.get(id)?.serviceId ?? "").trim()))
+      .map((id) => {
+        const o = openById.get(id)!;
+        // Los que entran solo por EDC (sin SisaTicket) no traen folio SISA; se
+        // muestran igual para poder bitacorearlos. fromEdc los distingue.
+        const fromEdc = !vendorTicketById.has(id) && edcSanJuanIds.has(id);
         return {
-          incidentId: t.incidentId,
+          incidentId: id,
           openTime: o.openTime,
           company: o.company,
           serviceId: o.serviceId,
           siteName: o.siteName,
-          vendorTicket: t.vendorTicket,
+          vendorTicket: vendorTicketById.get(id) ?? "",
           status: o.status,
-          enEdc: enEdc.has(t.incidentId),
-          notas: notasById.get(t.incidentId) ?? [],
+          enEdc: enEdc.has(id),
+          fromEdc,
+          notas: notasById.get(id) ?? [],
         };
       })
       .sort((a, b) => a.openTime.getTime() - b.openTime.getTime());
@@ -113,11 +136,19 @@ export async function POST(req: NextRequest) {
   }
 
   try {
+    // Es CASE San Juan si tiene la tarea SISA del vendor O si EDC lo reporta como
+    // tal en su línea "Ticket:" (estos últimos aún no tienen SisaTicket, pero ya
+    // salen en la vista y deben poder bitacorearse).
     const ticket = await db.sisaTicket.findFirst({
       where: { incidentId, vendor: { equals: CASE_VENDOR, mode: "insensitive" } },
       select: { incidentId: true },
     });
-    if (!ticket) return NextResponse.json({ error: "El incidente no es del CASE San Juan" }, { status: 404 });
+    if (!ticket) {
+      const edcSanJuanIds = await getEdcSanJuanIncidentIds();
+      if (!edcSanJuanIds.has(incidentId)) {
+        return NextResponse.json({ error: "El incidente no es del CASE San Juan" }, { status: 404 });
+      }
+    }
 
     const autor = session.name || session.email;
 
