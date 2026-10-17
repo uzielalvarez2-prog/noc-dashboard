@@ -73,7 +73,7 @@ export function OpenByDayChart({ initial }: Props) {
   async function copyAsImage() {
     if (!chartData.length) return;
     const SCALE = 2;
-    const W = 540;
+    const W = 500;
     const PAD = 18;
     const TITLE_H = 70;
     const CX = 126;
@@ -154,7 +154,7 @@ export function OpenByDayChart({ initial }: Props) {
     ctx.fillText("ABIERTOS", CX, CY + 16);
 
     // Tabla: Día | PEXA | CECOR | Total | %
-    const COL = { pexa: 372, cecor: 430, total: 484, pct: W - PAD };
+    const COL = { pexa: 396, cecor: W - PAD };
     ctx.font = "bold 10px Arial,sans-serif";
     ctx.textAlign = "left";
     ctx.fillStyle = pal.muted;
@@ -164,9 +164,6 @@ export function OpenByDayChart({ initial }: Props) {
     ctx.fillText("PEXA", COL.pexa, TITLE_H + 10);
     ctx.fillStyle = CECOR_COLOR;
     ctx.fillText("CECOR", COL.cecor, TITLE_H + 10);
-    ctx.fillStyle = pal.muted;
-    ctx.fillText("TOTAL", COL.total, TITLE_H + 10);
-    ctx.fillText("%", COL.pct, TITLE_H + 10);
     days.forEach((d, i) => {
       const y = TITLE_H + (i + 1) * LINE_H + 10;
       ctx.fillStyle = d.fill;
@@ -178,11 +175,6 @@ export function OpenByDayChart({ initial }: Props) {
       ctx.textAlign = "right";
       ctx.fillText(String(d.PEXA), COL.pexa, y);
       ctx.fillText(String(d.CECOR), COL.cecor, y);
-      ctx.font = "bold 11px Arial,sans-serif";
-      ctx.fillText(String(d.total), COL.total, y);
-      ctx.fillStyle = pal.muted;
-      ctx.font = "11px Arial,sans-serif";
-      ctx.fillText(`${pct(d.total)}%`, COL.pct, y);
     });
 
     canvas.toBlob(async (blob) => {
@@ -200,7 +192,7 @@ export function OpenByDayChart({ initial }: Props) {
     }, "image/png");
   }
 
-  const colGrid = "grid grid-cols-[1fr_2.5rem_3rem_2.5rem_2.5rem] items-center gap-x-2";
+  const colGrid = "grid grid-cols-[1fr_3rem_3.5rem] items-center gap-x-2";
 
   return (
     <div className="rounded-lg border border-border bg-surface p-5">
@@ -277,8 +269,6 @@ export function OpenByDayChart({ initial }: Props) {
               <span>Día</span>
               <span className="text-right" style={{ color: PEXA_COLOR }}>PEXA</span>
               <span className="text-right" style={{ color: CECOR_COLOR }}>CECOR</span>
-              <span className="text-right">Total</span>
-              <span className="text-right">%</span>
             </div>
             {days.map((d) => (
               <div key={d.day} className={`${colGrid} py-0.5`}>
@@ -288,8 +278,6 @@ export function OpenByDayChart({ initial }: Props) {
                 </span>
                 <span className="text-right font-mono text-text-primary">{d.PEXA}</span>
                 <span className="text-right font-mono text-text-primary">{d.CECOR}</span>
-                <span className="text-right font-mono font-semibold text-text-primary">{d.total}</span>
-                <span className="text-right font-mono text-text-muted">{pct(d.total)}%</span>
               </div>
             ))}
           </div>
