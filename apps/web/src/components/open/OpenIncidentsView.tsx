@@ -16,7 +16,6 @@ import { SisaView } from "@/components/sisa/SisaView";
 import { SisaCecorView } from "./SisaCecorView";
 import type { SortDir } from "@/lib/exportOpenIncidents";
 import { cn } from "@/lib/utils";
-import { RefreshCw } from "lucide-react";
 
 const POLL_MS = 240_000;
 
@@ -111,18 +110,6 @@ function PexaCecorView({ group }: { group: "PEXA" | "CECOR" }) {
   return (
     <div className="space-y-5">
       {cecorSubTabs}
-      <div className="flex items-center justify-end gap-3">
-        <button
-          type="button"
-          onClick={() => void refetch()}
-          disabled={isFetching}
-          title="Actualizar ahora"
-          className="flex items-center gap-1.5 rounded-md border border-border px-2.5 py-1.5 text-xs font-medium text-text-muted transition-colors hover:border-accent hover:text-accent disabled:opacity-40"
-        >
-          <RefreshCw className={cn("h-3.5 w-3.5", isFetching && "animate-spin")} />
-          Actualizar
-        </button>
-      </div>
 
       <OpenKpis stats={stats} group={group} />
 
@@ -133,6 +120,8 @@ function PexaCecorView({ group }: { group: "PEXA" | "CECOR" }) {
         onSortDirChange={setSortDir}
         selectedStatus={selectedStatus}
         onStatusSelect={setSelectedStatus}
+        onRefresh={() => void refetch()}
+        isFetching={isFetching}
       />
 
       {selectedStatus && (
