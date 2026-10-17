@@ -103,19 +103,25 @@ function periodLabel(key: string, bucket: Bucket): string {
   return key; // day
 }
 
+// KPI compacto, al estilo de las tarjetas de estatus de CECOR → Abiertos:
+// etiqueta y valor en la misma fila, padding chico, hint pequeño debajo.
 function Kpi({ label, value, hint, tone }: { label: string; value: string; hint?: string; tone?: "ok" | "bad" }) {
   return (
-    <div className="rounded-xl border border-border/60 bg-surface/60 p-4">
-      <p className="text-[11px] uppercase tracking-wider text-text-muted">{label}</p>
-      <p
-        className={cn(
-          "mt-1 text-2xl font-bold",
-          tone === "ok" ? "text-success" : tone === "bad" ? "text-critical" : "text-text-primary"
-        )}
-      >
-        {value}
-      </p>
-      {hint && <p className="mt-0.5 text-[11px] text-text-muted/70">{hint}</p>}
+    <div className="flex flex-col gap-1 rounded-lg border border-border/60 bg-surface/60 px-3 py-2 backdrop-blur-md">
+      <div className="flex items-center justify-between gap-2">
+        <p className="min-w-0 truncate text-[11px] font-medium uppercase tracking-wider text-text-muted" title={label}>
+          {label}
+        </p>
+        <span
+          className={cn(
+            "shrink-0 text-lg font-bold",
+            tone === "ok" ? "text-success" : tone === "bad" ? "text-critical" : "text-text-primary"
+          )}
+        >
+          {value}
+        </span>
+      </div>
+      {hint && <p className="truncate text-[10px] text-text-muted/70" title={hint}>{hint}</p>}
     </div>
   );
 }
