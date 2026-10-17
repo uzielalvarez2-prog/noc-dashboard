@@ -111,11 +111,11 @@ export function StatusBreakdown({
                   : "border-warning/50 bg-warning/5 ring-1 ring-warning/40 hover:border-warning"
               )}
             >
-              <div className="flex items-center justify-between gap-2">
-                <p className="truncate text-[11px] font-medium uppercase tracking-wider text-warning/90">
+              <div className="flex items-center gap-3">
+                <p className="min-w-0 truncate text-[11px] font-medium uppercase tracking-wider text-warning/90">
                   Abiertos
                 </p>
-                <span className="text-lg font-bold text-warning drop-shadow-[0_0_7px_rgba(245,158,11,0.8)]">
+                <span className="shrink-0 text-lg font-bold text-warning drop-shadow-[0_0_7px_rgba(245,158,11,0.8)]">
                   {stats?.totalIncidents ?? "—"}
                 </span>
               </div>
@@ -140,11 +140,11 @@ export function StatusBreakdown({
                     : "border-border/60 bg-surface/60 hover:border-accent/60"
                 )}
               >
-                <div className="flex items-center justify-between gap-2">
-                  <p className="truncate text-[11px] font-medium uppercase tracking-wider text-text-muted" title={status}>
+                <div className="flex items-center gap-3">
+                  <p className="min-w-0 truncate text-[11px] font-medium uppercase tracking-wider text-text-muted" title={status}>
                     {status}
                   </p>
-                  <span className={cn("text-lg font-bold", statusAccent(status))}>{incidents}</span>
+                  <span className={cn("shrink-0 text-lg font-bold", statusAccent(status))}>{incidents}</span>
                 </div>
                 <div className="h-1 w-full overflow-hidden rounded-full bg-border/40">
                   <div className={cn("h-full rounded-full", statusBarColor(status))} style={{ width: `${pct}%` }} />
