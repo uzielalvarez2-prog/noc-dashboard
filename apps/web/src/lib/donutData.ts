@@ -1,26 +1,27 @@
 import type { DonutDatum } from "@/components/shared/DonutChart";
 
-// Paleta en tonos: azul → cian → verde → ámbar → naranja, un color por porción.
+// Paleta sobria ("ejecutiva") para gráficas que van a gerencia: tonos apagados,
+// sin neón, un color por porción.
 export const DONUT_COLORS = [
-  "#3b82f6", // azul
-  "#06b6d4", // cian
-  "#22c55e", // verde
-  "#a3e635", // lima
-  "#f59e0b", // ámbar
-  "#fb923c", // naranja
-  "#f472b6", // rosa
-  "#a78bfa", // violeta
-  "#38bdf8", // celeste
-  "#34d399", // esmeralda
-  "#fbbf24", // dorado
-  "#fb7185", // coral
-  "#818cf8", // índigo
-  "#2dd4bf", // teal
-  "#facc15", // amarillo
-  "#f87171", // rojo claro
+  "#4a6fa5", // azul acero
+  "#5b9aa0", // verde azulado
+  "#6a9a6f", // verde salvia
+  "#a3b565", // oliva claro
+  "#c9a24d", // dorado apagado
+  "#c98a5a", // bronce
+  "#b5707a", // rosa polvo
+  "#8574a8", // violeta apagado
+  "#7aa6c2", // azul cielo suave
+  "#7db3a0", // verde mar
+  "#d1b86a", // arena
+  "#b86f5e", // ladrillo
+  "#7683b5", // azul pervinca
+  "#5fa89f", // turquesa gris
+  "#bfae5a", // mostaza
+  "#a8706a", // rojo apagado
 ];
 
-export const OTROS_COLOR = "#64748b";
+export const OTROS_COLOR = "#7b8794";
 
 // Toma las `topN` mayores y agrupa el resto en una rebanada "Otros", para que la
 // dona sea legible sin perder el total. Ordena por conteo (las filas pueden venir
