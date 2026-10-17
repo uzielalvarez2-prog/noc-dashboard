@@ -160,38 +160,50 @@ export function CecorEstadisticas({ group }: { group: "PEXA" | "CECOR" }) {
         <Kpi label="Causas distintas" value={String(stats?.byCause.length ?? 0)} hint={`${stats?.byUser.length ?? 0} analistas`} />
       </div>
 
-      {/* Volumen por periodo */}
-      <div className="rounded-xl border border-border/60 bg-surface/60 p-4">
-        <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-          <h3 className="flex items-center gap-1.5 text-sm font-semibold text-text-primary">
-            <TrendingUp className="h-4 w-4 text-accent" />
-            Incidentes generados por {bucket === "month" ? "mes" : bucket === "week" ? "semana" : "día"}
-          </h3>
-          <div className="flex items-center gap-1.5">
-            <button type="button" onClick={() => setBucket("month")} className={bucketBtn(bucket === "month")}>Mes</button>
-            <button type="button" onClick={() => setBucket("week")} className={bucketBtn(bucket === "week")}>Semana</button>
-            <button type="button" onClick={() => setBucket("day")} className={bucketBtn(bucket === "day")}>Día</button>
+      {/* Volumen por periodo + Quién abre más, lado a lado. */}
+      <div className="grid gap-4 lg:grid-cols-2">
+        {/* Incidentes generados por periodo */}
+        <div className="rounded-xl border border-border/60 bg-surface/60 p-4">
+          <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+            <h3 className="flex items-center gap-1.5 text-sm font-semibold text-text-primary">
+              <TrendingUp className="h-4 w-4 text-accent" />
+              Incidentes generados por {bucket === "month" ? "mes" : bucket === "week" ? "semana" : "día"}
+            </h3>
+            <div className="flex items-center gap-1.5">
+              <button type="button" onClick={() => setBucket("month")} className={bucketBtn(bucket === "month")}>Mes</button>
+              <button type="button" onClick={() => setBucket("week")} className={bucketBtn(bucket === "week")}>Semana</button>
+              <button type="button" onClick={() => setBucket("day")} className={bucketBtn(bucket === "day")}>Día</button>
+            </div>
           </div>
+
+          {periods.length === 0 ? (
+            <p className="py-8 text-center text-xs text-text-muted">Sin datos. ¿Ya se cargó el histórico de cerrados?</p>
+          ) : (
+            // Dona siempre. Mes: todas las porciones (son pocas). Semana/Día: top 12
+            // + "Otros" para que no sea un arcoíris ilegible.
+            <DonutChart
+              title=""
+              bare
+              data={
+                bucket === "month"
+                  ? toDonut(periods, (n) => periodLabel(n, "month"))
+                  : toDonutTop(periods, (n) => periodLabel(n, bucket))
+              }
+              centerLabel="total"
+              unitLabel="incidentes"
+              fileBase={`cecor-volumen-${bucket}-${group.toLowerCase()}`}
+            />
+          )}
         </div>
 
-        {periods.length === 0 ? (
-          <p className="py-8 text-center text-xs text-text-muted">Sin datos. ¿Ya se cargó el histórico de cerrados?</p>
-        ) : (
-          // Dona siempre. Mes: todas las porciones (son pocas). Semana/Día: top 12
-          // + "Otros" para que no sea un arcoíris ilegible.
-          <DonutChart
-            title=""
-            bare
-            data={
-              bucket === "month"
-                ? toDonut(periods, (n) => periodLabel(n, "month"))
-                : toDonutTop(periods, (n) => periodLabel(n, bucket))
-            }
-            centerLabel="total"
-            unitLabel="incidentes"
-            fileBase={`cecor-volumen-${bucket}-${group.toLowerCase()}`}
-          />
-        )}
+        {/* Quién abre más incidentes (Requested By del CSV, ya en login). */}
+        <DonutChart
+          title="Quién abre más incidentes"
+          data={toDonutTop(stats?.byRequester ?? [], (n) => n, 15)}
+          centerLabel="abiertos"
+          unitLabel="abiertos"
+          fileBase={`cecor-aperturas-${group.toLowerCase()}`}
+        />
       </div>
 
       {/* Causa raíz + productividad como donas (con botón Copiar imagen). */}
@@ -209,17 +221,6 @@ export function CecorEstadisticas({ group }: { group: "PEXA" | "CECOR" }) {
           centerLabel="cerrados"
           unitLabel="cerrados"
           fileBase={`cecor-analista-${group.toLowerCase()}`}
-        />
-      </div>
-
-      {/* Quién abre más incidentes (Requested By del CSV, ya en login). */}
-      <div className="grid gap-4 lg:grid-cols-2">
-        <DonutChart
-          title="Quién abre más incidentes"
-          data={toDonutTop(stats?.byRequester ?? [], (n) => n, 15)}
-          centerLabel="abiertos"
-          unitLabel="abiertos"
-          fileBase={`cecor-aperturas-${group.toLowerCase()}`}
         />
       </div>
     </div>
