@@ -15,6 +15,7 @@ export interface ClosedStats {
   medianResolutionMins: number;
   bucket: "day" | "week" | "month";
   byUser: ClosedRankRow[];
+  byRequester: ClosedRankRow[];
   byCause: ClosedRankRow[];
   byPeriod: ClosedRankRow[];
 }

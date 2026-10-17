@@ -47,6 +47,7 @@ export async function POST(req: NextRequest) {
     const cClose = pickCol(headers, ["Close Time"]);
     const cStatus = pickCol(headers, ["Status"]);
     const cClosedBy = pickCol(headers, ["Closed By"]);
+    const cRequestedBy = pickCol(headers, ["Requested By"]);
     const cRes = pickCol(headers, ["Res Analyst Code"]);
 
     if (!cId || !cClose) {
@@ -69,6 +70,7 @@ export async function POST(req: NextRequest) {
       closeTime: Date;
       status: string;
       closedBy: string;
+      requestedBy: string;
       resAnalystCode: string;
       resCause: string;
       resolutionMins: number;
@@ -98,6 +100,7 @@ export async function POST(req: NextRequest) {
         closeTime,
         status: cStatus ? (row[cStatus] ?? "").trim() || "Closed" : "Closed",
         closedBy: cClosedBy ? (row[cClosedBy] ?? "").trim() : "",
+        requestedBy: cRequestedBy ? (row[cRequestedBy] ?? "").trim() : "",
         resAnalystCode,
         resCause,
         resolutionMins,
@@ -111,12 +114,12 @@ export async function POST(req: NextRequest) {
       await db.$executeRaw`
         INSERT INTO "ClosedIncident"
           ("incidentId","group","openTime","closeTime","status","closedBy",
-           "resAnalystCode","resCause","resolutionMins","slaBreached","uploadedAt")
+           "requestedBy","resAnalystCode","resCause","resolutionMins","slaBreached","uploadedAt")
         VALUES ${Prisma.join(
           records.map(
             (r) =>
               Prisma.sql`(${r.incidentId},${r.group},${r.openTime},${r.closeTime},
-              ${r.status},${r.closedBy},${r.resAnalystCode},${r.resCause},
+              ${r.status},${r.closedBy},${r.requestedBy},${r.resAnalystCode},${r.resCause},
               ${r.resolutionMins},${r.slaBreached},${uploadedAt})`
           )
         )}
@@ -126,6 +129,7 @@ export async function POST(req: NextRequest) {
           "closeTime"      = EXCLUDED."closeTime",
           "status"         = EXCLUDED."status",
           "closedBy"       = EXCLUDED."closedBy",
+          "requestedBy"    = EXCLUDED."requestedBy",
           "resAnalystCode" = EXCLUDED."resAnalystCode",
           "resCause"       = EXCLUDED."resCause",
           "resolutionMins" = EXCLUDED."resolutionMins",

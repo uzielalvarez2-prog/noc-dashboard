@@ -48,6 +48,7 @@ export async function getClosedStats(f: ClosedFilters = {}) {
     where,
     select: {
       closedBy: true,
+      requestedBy: true,
       resCause: true,
       slaBreached: true,
       resolutionMins: true,
@@ -61,6 +62,7 @@ export async function getClosedStats(f: ClosedFilters = {}) {
   let sumMins = 0;
   const resMinsList: number[] = []; // para la mediana
   const userMap = new Map<string, number>();
+  const requesterMap = new Map<string, number>(); // quién ABRE (Requested By, ya login)
   const causeMap = new Map<string, number>();
   const periodMap = new Map<string, number>(); // volumen por mes/semana/día (por apertura)
 
@@ -72,8 +74,11 @@ export async function getClosedStats(f: ClosedFilters = {}) {
       if (r.slaBreached) vencidos++;
     }
     const u = r.closedBy ? toOperatorLogin(r.closedBy) : "(sin dato)";
+    // requestedBy ya viene como login en el CSV ("mflopez"): no se convierte.
+    const req = r.requestedBy?.trim() || "(sin dato)";
     const c = r.resCause || "(sin dato)";
     userMap.set(u, (userMap.get(u) ?? 0) + 1);
+    requesterMap.set(req, (requesterMap.get(req) ?? 0) + 1);
     causeMap.set(c, (causeMap.get(c) ?? 0) + 1);
     const pk = periodKey(r.openTime, bucket);
     periodMap.set(pk, (periodMap.get(pk) ?? 0) + 1);
@@ -106,6 +111,7 @@ export async function getClosedStats(f: ClosedFilters = {}) {
     medianResolutionMins,
     bucket,
     byUser: toArr(userMap),
+    byRequester: toArr(requesterMap),
     byCause: toArr(causeMap),
     byPeriod,
   };

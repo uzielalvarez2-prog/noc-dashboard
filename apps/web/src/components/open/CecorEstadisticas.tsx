@@ -204,11 +204,22 @@ export function CecorEstadisticas({ group }: { group: "PEXA" | "CECOR" }) {
           fileBase={`cecor-causa-${group.toLowerCase()}`}
         />
         <DonutChart
-          title="Productividad por analista"
+          title="Quién cierra más (productividad)"
           data={toDonut(stats?.byUser ?? [])}
           centerLabel="cerrados"
           unitLabel="cerrados"
           fileBase={`cecor-analista-${group.toLowerCase()}`}
+        />
+      </div>
+
+      {/* Quién abre más incidentes (Requested By del CSV, ya en login). */}
+      <div className="grid gap-4 lg:grid-cols-2">
+        <DonutChart
+          title="Quién abre más incidentes"
+          data={toDonutTop(stats?.byRequester ?? [], (n) => n, 15)}
+          centerLabel="abiertos"
+          unitLabel="abiertos"
+          fileBase={`cecor-aperturas-${group.toLowerCase()}`}
         />
       </div>
     </div>

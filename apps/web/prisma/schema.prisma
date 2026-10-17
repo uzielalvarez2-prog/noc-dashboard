@@ -114,6 +114,7 @@ model ClosedIncident {
   closeTime      DateTime
   status         String
   closedBy       String
+  requestedBy    String   @default("") // "Requested By" del CSV (login del que ABRE el incidente)
   resAnalystCode String
   resCause       String
   resolutionMins Int
@@ -122,6 +123,7 @@ model ClosedIncident {
 
   @@index([group])
   @@index([closedBy])
+  @@index([requestedBy])
   @@index([resCause])
   @@index([slaBreached])
   @@index([closeTime])
