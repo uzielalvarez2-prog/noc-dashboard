@@ -3,7 +3,8 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import type { ClosedStats } from "@/types/closed";
-import { ClosedRanking } from "@/components/closed/ClosedRanking";
+import { DonutChart } from "@/components/shared/DonutChart";
+import { toDonutTop } from "@/lib/donutData";
 import { cn } from "@/lib/utils";
 
 type Range = "today" | "all";
@@ -60,19 +61,19 @@ export function OverviewClosedRankings() {
         </div>
       </div>
       <div className="grid gap-4 lg:grid-cols-2">
-        <ClosedRanking
+        <DonutChart
           title="Analistas"
-          dimensionLabel="Analista"
-          rows={stats?.byUser ?? []}
+          data={toDonutTop(stats?.byUser ?? [], (n) => n, 15)}
+          centerLabel="cerrados"
+          unitLabel="cerrados"
           fileBase="cerrados-analista-overview"
-          variant="analyst"
         />
-        <ClosedRanking
+        <DonutChart
           title="Incidentes cerrados por Código"
-          dimensionLabel="Causa"
-          rows={stats?.byCause ?? []}
+          data={toDonutTop(stats?.byCause ?? [], (n) => n, 12)}
+          centerLabel="cerrados"
+          unitLabel="cerrados"
           fileBase="cerrados-causa-overview"
-          variant="cause"
         />
       </div>
     </div>
