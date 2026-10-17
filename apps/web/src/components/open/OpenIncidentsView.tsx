@@ -45,7 +45,7 @@ function PexaCecorView({ group }: { group: "PEXA" | "CECOR" }) {
   const [sortDir, setSortDir] = useState<SortDir>("desc");
   const [recentOnly, setRecentOnly] = useState(true);
   const [selectedStatus, setSelectedStatus] = useState<string | null>(null);
-  const [subTab, setSubTab] = useState<"abiertos" | "sisa" | "estadisticas">("abiertos");
+  const [subTab, setSubTab] = useState<"abiertos" | "sisa" | "estadisticas" | "fallas">("abiertos");
   const maxAgeHours = recentOnly ? 1 : undefined;
 
   const { data: stats, isFetching, refetch } = useQuery<OpenStats>({
@@ -74,7 +74,8 @@ function PexaCecorView({ group }: { group: "PEXA" | "CECOR" }) {
         : "border border-border text-text-muted hover:text-text-primary"
     );
 
-  // Barra de sub-pestañas de CECOR (Abiertos · SISA CECOR · Estadísticas).
+  // Barra de sub-pestañas: CECOR (Abiertos · SISA CECOR · Estadísticas) y
+  // PEXA (Abiertos · Fallas Masivas).
   const cecorSubTabs = group === "CECOR" && (
     <div className="flex items-center gap-2">
       <button type="button" onClick={() => setSubTab("abiertos")} className={subTabBtn(subTab === "abiertos")}>
@@ -88,6 +89,69 @@ function PexaCecorView({ group }: { group: "PEXA" | "CECOR" }) {
       </button>
     </div>
   );
+
+  const pexaSubTabs = group === "PEXA" && (
+    <div className="flex items-center gap-2">
+      <button type="button" onClick={() => setSubTab("abiertos")} className={subTabBtn(subTab === "abiertos")}>
+        Abiertos
+      </button>
+      <button type="button" onClick={() => setSubTab("fallas")} className={subTabBtn(subTab === "fallas")}>
+        Fallas Masivas
+      </button>
+    </div>
+  );
+
+  const topSection = (
+    <>
+      <div className="flex items-center justify-between gap-2">
+        <h2 className="text-sm font-semibold text-text-primary">Top por Estado / Distrito</h2>
+        <div className="flex items-center gap-1">
+          <button type="button" onClick={() => setRecentOnly(true)} className={ageBtn(recentOnly)}>
+            Última hora (≤1h)
+          </button>
+          <button type="button" onClick={() => setRecentOnly(false)} className={ageBtn(!recentOnly)}>
+            Todo
+          </button>
+        </div>
+      </div>
+
+      <div className="grid gap-4 lg:grid-cols-2">
+        <TopByDimension
+          title="IM-Estado"
+          dimensionLabel="Estado"
+          dimensionField="state"
+          rows={topStats?.topByState ?? []}
+          total={topStats?.stateTotal ?? 0}
+          fileBase={`im-estado-${group.toLowerCase()}${recentOnly ? "-1h" : ""}`}
+          group={group}
+          maxAgeHours={maxAgeHours}
+        />
+        <TopByDimension
+          title="IM-Distrito"
+          dimensionLabel="Distrito"
+          dimensionField="district"
+          rows={topStats?.topByDistrict ?? []}
+          total={topStats?.districtTotal ?? 0}
+          fileBase={`im-distrito-${group.toLowerCase()}${recentOnly ? "-1h" : ""}`}
+          group={group}
+          maxAgeHours={maxAgeHours}
+        />
+      </div>
+
+      {/* Detector de fallas masivas: agrupa aperturas cercanas en el tiempo por
+          zona (no respeta el filtro ≤1h de arriba; analiza todos los abiertos). */}
+      <FallasMasivas group={group} />
+    </>
+  );
+
+  if (group === "PEXA" && subTab === "fallas") {
+    return (
+      <div className="space-y-5">
+        {pexaSubTabs}
+        {topSection}
+      </div>
+    );
+  }
 
   if (group === "CECOR" && subTab === "sisa") {
     return (
@@ -110,6 +174,7 @@ function PexaCecorView({ group }: { group: "PEXA" | "CECOR" }) {
   return (
     <div className="space-y-5">
       {cecorSubTabs}
+      {pexaSubTabs}
 
       <OpenKpis stats={stats} group={group} />
 
@@ -152,44 +217,8 @@ function PexaCecorView({ group }: { group: "PEXA" | "CECOR" }) {
         </div>
       )}
 
-      <div className="flex items-center justify-between gap-2">
-        <h2 className="text-sm font-semibold text-text-primary">Top por Estado / Distrito</h2>
-        <div className="flex items-center gap-1">
-          <button type="button" onClick={() => setRecentOnly(true)} className={ageBtn(recentOnly)}>
-            Última hora (≤1h)
-          </button>
-          <button type="button" onClick={() => setRecentOnly(false)} className={ageBtn(!recentOnly)}>
-            Todo
-          </button>
-        </div>
-      </div>
-
-      <div className="grid gap-4 lg:grid-cols-2">
-        <TopByDimension
-          title="IM-Estado"
-          dimensionLabel="Estado"
-          dimensionField="state"
-          rows={topStats?.topByState ?? []}
-          total={topStats?.stateTotal ?? 0}
-          fileBase={`im-estado-${group.toLowerCase()}${recentOnly ? "-1h" : ""}`}
-          group={group}
-          maxAgeHours={maxAgeHours}
-        />
-        <TopByDimension
-          title="IM-Distrito"
-          dimensionLabel="Distrito"
-          dimensionField="district"
-          rows={topStats?.topByDistrict ?? []}
-          total={topStats?.districtTotal ?? 0}
-          fileBase={`im-distrito-${group.toLowerCase()}${recentOnly ? "-1h" : ""}`}
-          group={group}
-          maxAgeHours={maxAgeHours}
-        />
-      </div>
-
-      {/* Detector de fallas masivas: agrupa aperturas cercanas en el tiempo por
-          zona (no respeta el filtro ≤1h de arriba; analiza todos los abiertos). */}
-      <FallasMasivas group={group} />
+      {/* En PEXA el Top y las fallas masivas viven en su propia sub-pestaña. */}
+      {group === "CECOR" && topSection}
     </div>
   );
 }
