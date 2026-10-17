@@ -93,7 +93,7 @@ function PexaCecorView({ group }: { group: "PEXA" | "CECOR" }) {
   const pexaSubTabs = group === "PEXA" && (
     <div className="flex items-center gap-2">
       <button type="button" onClick={() => setSubTab("abiertos")} className={subTabBtn(subTab === "abiertos")}>
-        Abiertos
+        En gestión
       </button>
       <button type="button" onClick={() => setSubTab("fallas")} className={subTabBtn(subTab === "fallas")}>
         Fallas Masivas
