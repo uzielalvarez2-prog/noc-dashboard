@@ -125,6 +125,7 @@ function PexaCecorView({ group }: { group: "PEXA" | "CECOR" }) {
           fileBase={`im-estado-${group.toLowerCase()}${recentOnly ? "-1h" : ""}`}
           group={group}
           maxAgeHours={maxAgeHours}
+          variant={group === "PEXA" ? "radial" : "bars"}
         />
         <TopByDimension
           title="IM-Distrito"
@@ -135,6 +136,7 @@ function PexaCecorView({ group }: { group: "PEXA" | "CECOR" }) {
           fileBase={`im-distrito-${group.toLowerCase()}${recentOnly ? "-1h" : ""}`}
           group={group}
           maxAgeHours={maxAgeHours}
+          variant={group === "PEXA" ? "radial" : "bars"}
         />
       </div>
 

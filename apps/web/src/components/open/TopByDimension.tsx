@@ -6,6 +6,7 @@ import type { TopRow, OpenIncidentRow } from "@/types/open";
 import { copyHTMLTable } from "@/lib/openExport";
 import { downloadXLSX } from "@/lib/excelExport";
 import { formatHpsmExcel } from "@/lib/utils";
+import { RadialRanking } from "./RadialRanking";
 
 // El Excel solo lleva la columna de su propia dimensión: Top por Estado omite
 // Distrito y Top por Distrito omite Estado (así la masiva queda limpia).
@@ -94,6 +95,7 @@ export function TopByDimension({
   group,
   maxAgeHours,
   limit = 12,
+  variant = "bars",
 }: {
   title: string;
   dimensionLabel: string;
@@ -104,6 +106,8 @@ export function TopByDimension({
   group?: string;
   maxAgeHours?: number;
   limit?: number;
+  /** "radial" = anillos concéntricos (Fallas Masivas de PEXA); "bars" = barras. */
+  variant?: "bars" | "radial";
 }) {
   const [copied, setCopied] = useState(false);
   const [loadingExport, setLoadingExport] = useState(false);
@@ -177,6 +181,16 @@ export function TopByDimension({
         <span className="font-mono text-xs text-text-muted">{total} incidentes</span>
       </div>
 
+      {variant === "radial" ? (
+        <RadialRanking
+          rows={top}
+          total={total}
+          loadingName={rowLoading}
+          onSelect={downloadDetail}
+          dimensionLabel={dimensionLabel}
+        />
+      ) : (
+      <>
       <div className="max-h-64 space-y-1.5 overflow-y-auto pr-1">
         {top.length === 0 && (
           <p className="py-6 text-center text-xs text-text-muted">Sin datos</p>
@@ -221,6 +235,8 @@ export function TopByDimension({
       <p className="mt-2 text-[11px] text-text-muted/70">
         Tip: haz click en cualquier barra para bajar el Excel de ese {dimensionLabel.toLowerCase()}.
       </p>
+      </>
+      )}
 
       <div className="mt-3 flex items-center justify-between border-t border-border/50 pt-3">
         <div className="text-xs text-text-muted">
