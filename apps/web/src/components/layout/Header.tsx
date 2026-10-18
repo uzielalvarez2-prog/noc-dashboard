@@ -4,6 +4,7 @@ import { usePathname } from "next/navigation";
 import { LogOut } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { LiveIndicator } from "@/components/dashboard/LiveIndicator";
+import { usePageHeaderValue } from "@/components/layout/PageHeaderProvider";
 import { useEffect, useState } from "react";
 
 const BREADCRUMBS: Record<string, string> = {
@@ -19,6 +20,7 @@ export function Header({ lastSync }: { lastSync?: string }) {
   const pathname = usePathname();
   const segment = "/" + pathname.split("/")[1];
   const breadcrumb = BREADCRUMBS[segment] ?? "NOC";
+  const pageHeader = usePageHeaderValue();
 
   // Leer nombre/role de la cookie de sesión vía API
   const [userName, setUserName] = useState("");
@@ -32,13 +34,28 @@ export function Header({ lastSync }: { lastSync?: string }) {
   }
 
   return (
-    <header className="flex h-14 items-center justify-between border-b border-border bg-surface px-6">
-      <div>
-        <p className="text-xs text-text-muted">NOC Dashboard</p>
-        <p className="text-sm font-semibold text-text-primary">{breadcrumb}</p>
+    <header className="flex h-14 items-center justify-between gap-6 border-b border-border bg-surface px-6">
+      <div className="flex min-w-0 flex-1 items-center">
+        <div className="shrink-0">
+          <p className="text-xs text-text-muted">NOC Dashboard</p>
+          <p className="text-sm font-semibold text-text-primary">{breadcrumb}</p>
+        </div>
+
+        {pageHeader && (
+          <div className="ml-8 min-w-0 border-l border-border pl-8">
+            <h1 className="truncate text-base font-bold leading-tight text-text-primary">
+              {pageHeader.title}
+            </h1>
+            {pageHeader.subtitle && (
+              <p className="truncate text-xs text-text-muted" title={pageHeader.subtitle}>
+                {pageHeader.subtitle}
+              </p>
+            )}
+          </div>
+        )}
       </div>
 
-      <div className="flex items-center gap-4">
+      <div className="flex shrink-0 items-center gap-4">
         <LiveIndicator lastSync={lastSync} />
         <div className="flex items-center gap-2">
           {userName && (

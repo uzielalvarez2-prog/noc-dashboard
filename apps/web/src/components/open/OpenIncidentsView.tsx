@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useTheme } from "@/components/layout/ThemeProvider";
+import { PageHeader } from "@/components/layout/PageHeaderProvider";
 import type { OpenStats } from "@/types/open";
 import { OpenKpis } from "./OpenKpis";
 import { StatusBreakdown, ALL_STATUS } from "./StatusBreakdown";
@@ -246,7 +247,9 @@ function getGroupStyle(isLight: boolean): Record<Group, GroupStyle> {
   };
 }
 
-export function OpenIncidentsView() {
+const OPEN_SUBTITLE = "PEXA + CECOR · busca por cualquier columna, detecta falla masiva y exporta";
+
+export function OpenIncidentsView({ trailing }: { trailing?: React.ReactNode }) {
   const { theme } = useTheme();
   const isLight = theme === "light";
   const [group, setGroup] = useState<Group>("CLIENTE_TOP");
@@ -263,12 +266,15 @@ export function OpenIncidentsView() {
 
   return (
     <div className="space-y-5">
+      <PageHeader title={`Incidentes abiertos · ${GROUP_LABELS[group]}`} subtitle={OPEN_SUBTITLE} />
+
       <div className="flex flex-wrap items-center gap-2">
         {GROUP_ORDER.map((g) => (
           <button key={g} type="button" onClick={() => setGroup(g)} className={groupBtn(g)}>
             {GROUP_LABELS[g]}
           </button>
         ))}
+        {trailing && <div className="ml-auto">{trailing}</div>}
       </div>
 
       {group === "CLIENTE_TOP" && <ClienteTopView />}
