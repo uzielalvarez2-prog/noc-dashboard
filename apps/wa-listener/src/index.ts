@@ -15,6 +15,12 @@ import { startSendServer } from "./server.js";
 
 const { Client, LocalAuth } = pkg;
 
+// Redeploy forzado 2026-10-18: la sesión de WhatsApp Web se degradó (sendMessage
+// fallaba con "getChat undefined"/"r" y timeouts desde el 17-oct ~23:01). El
+// redeploy reinicia el cliente reusando la sesión del volumen /data (sin QR) y
+// re-inyecta un Chromium fresco para recuperar el Store. Este comentario solo
+// existe para disparar el deploy desde git; puede quitarse en un commit futuro.
+
 // Extrae un mensaje legible de cualquier throw. whatsapp-web.js/Puppeteer a veces
 // rechazan con objetos raros o strings de 1 carácter; esto garantiza un texto útil
 // (evita el "r" truncado que dejaba la bitácora sin información).
