@@ -171,7 +171,14 @@ export function OpenIncidentTable({
   async function handleExport() {
     setExporting(true);
     try {
-      await exportOpenIncidents({ q, group, status: statusFilter, sortDir, label: statusFilter ?? "abiertos" });
+      await exportOpenIncidents({
+        q,
+        group,
+        status: statusFilter,
+        company: companyFilter,
+        sortDir,
+        label: statusFilter ?? companyFilter ?? "abiertos",
+      });
     } finally {
       setExporting(false);
     }

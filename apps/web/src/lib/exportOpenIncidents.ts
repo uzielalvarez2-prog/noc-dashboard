@@ -62,6 +62,8 @@ export interface ExportOpenArgs {
   status?: string;
   /** Texto libre del buscador (para el export de la tabla principal). */
   q?: string;
+  /** Empresa exacta (Cliente TOP): el Excel trae solo los incidentes de ese cliente. */
+  company?: string;
   /** Orden por fecha de apertura. asc = más antiguo→reciente. */
   sortDir?: SortDir;
   /** Etiqueta para el nombre del archivo (ej. "abiertos", el estatus, etc.). */
@@ -69,12 +71,13 @@ export interface ExportOpenArgs {
 }
 
 export async function exportOpenIncidents(args: ExportOpenArgs): Promise<void> {
-  const { group, status, q, sortDir = "desc", label } = args;
+  const { group, status, q, company, sortDir = "desc", label } = args;
 
   const base = new URLSearchParams();
   if (group && group !== "ALL") base.set("group", group);
   if (status) base.set("status", status);
   if (q) base.set("q", q);
+  if (company) base.set("company", company);
   // collapse omitido → API colapsa a 1 fila por incidente (deduplicado).
 
   const rows = await fetchAllCollapsed(base);
