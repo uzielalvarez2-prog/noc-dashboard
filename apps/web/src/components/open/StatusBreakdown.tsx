@@ -1,7 +1,7 @@
 "use client";
 
-import { useRef, useState } from "react";
-import { ArrowDownWideNarrow, ArrowUpNarrowWide, Check, ImageDown, RefreshCw } from "lucide-react";
+import { useState, type MouseEvent } from "react";
+import { ArrowDownWideNarrow, ArrowUpNarrowWide, Check, Copy, RefreshCw } from "lucide-react";
 import type { OpenStats } from "@/types/open";
 import type { SortDir } from "@/lib/exportOpenIncidents";
 import { copyElementAsImage } from "@/lib/copyImage";
@@ -10,6 +10,8 @@ import { cn } from "@/lib/utils";
 // Centinela para la tarjeta del total: seleccionarla muestra TODOS los
 // incidentes abiertos (sin filtro de estatus) en la tabla.
 export const ALL_STATUS = "__ALL__";
+
+type CopyState = "copying" | "done" | "error";
 
 function statusAccent(status: string): string {
   const s = status.toUpperCase();
@@ -29,6 +31,33 @@ function statusBarColor(status: string): string {
   if (s.includes("PENDING OTHER")) return "bg-text-muted";
   if (s.includes("PENDING")) return "bg-accent";
   return "bg-text-primary";
+}
+
+// Icono en la esquina de cada tarjeta (aparece al pasar el mouse). Va como
+// hermano del botón de la tarjeta, no dentro: un <button> no admite otro <button>.
+function CopyCardButton({
+  state,
+  onCopy,
+}: {
+  state?: CopyState;
+  onCopy: (e: MouseEvent<HTMLButtonElement>) => void;
+}) {
+  return (
+    <button
+      type="button"
+      data-copy-ignore
+      onClick={onCopy}
+      disabled={state === "copying"}
+      title="Copiar tarjeta como imagen"
+      className={cn(
+        "absolute -right-1.5 -top-1.5 z-10 flex h-5 w-5 items-center justify-center rounded-full border bg-surface text-text-muted transition-opacity hover:border-accent hover:text-accent focus-visible:opacity-100",
+        state ? "opacity-100" : "opacity-0 group-hover:opacity-100",
+        state === "error" ? "border-critical text-critical" : "border-border"
+      )}
+    >
+      {state === "done" ? <Check className="h-3 w-3 text-success" /> : <Copy className="h-3 w-3" />}
+    </button>
+  );
 }
 
 export function StatusBreakdown({
@@ -53,21 +82,25 @@ export function StatusBreakdown({
   const byStatus = stats?.byStatus ?? [];
   const showTotal = group !== "ALL";
 
-  const captureRef = useRef<HTMLDivElement>(null);
-  const [copyState, setCopyState] = useState<"idle" | "copying" | "done" | "error">("idle");
+  const [copy, setCopy] = useState<{ key: string; state: CopyState } | null>(null);
 
-  async function handleCopy() {
-    if (!captureRef.current || copyState === "copying") return;
-    setCopyState("copying");
+  async function copyCard(key: string, label: string, e: MouseEvent<HTMLButtonElement>) {
+    const card = e.currentTarget.parentElement;
+    if (!card || copy?.state === "copying") return;
+    setCopy({ key, state: "copying" });
+    let state: CopyState | null = "done";
     try {
-      const res = await copyElementAsImage(captureRef.current, `estatus-${group.toLowerCase()}.png`, { padding: 12 });
+      const slug = `${group}-${label}`.toLowerCase().replace(/[^a-z0-9]+/g, "-");
+      // minWidth: en una tarjeta angosta el nombre del estatus saldría cortado ("PENDING CUS…")
+      const res = await copyElementAsImage(card, `estatus-${slug}.png`, { padding: 10, minWidth: 240 });
       // "downloaded" = el navegador no dejó usar el portapapeles; igual se bajó el PNG
-      setCopyState(res === "copied" ? "done" : "idle");
+      if (res === "downloaded") state = null;
     } catch (err) {
-      console.error("No se pudo copiar la imagen de estatus", err);
-      setCopyState("error");
+      console.error("No se pudo copiar la tarjeta de estatus", err);
+      state = "error";
     }
-    setTimeout(() => setCopyState("idle"), 1800);
+    setCopy(state ? { key, state } : null);
+    if (state) setTimeout(() => setCopy((c) => (c?.key === key ? null : c)), 1500);
   }
 
   const sortBtn = (dir: SortDir, label: string, Icon: typeof ArrowDownWideNarrow) => (
@@ -90,34 +123,13 @@ export function StatusBreakdown({
   const total = stats?.totalIncidents || 0;
 
   return (
-    <div ref={captureRef} className="space-y-2">
+    <div className="space-y-2">
       <div className="flex items-center justify-between gap-2">
         <h2 className="text-sm font-semibold text-text-primary">Por estatus</h2>
-        <div data-copy-ignore className="flex items-center gap-1.5">
+        <div className="flex items-center gap-1.5">
           <span className="mr-1 hidden text-[11px] text-text-muted sm:inline">Orden:</span>
           {sortBtn("desc", "Reciente → antiguo", ArrowDownWideNarrow)}
           {sortBtn("asc", "Antiguo → reciente", ArrowUpNarrowWide)}
-          <button
-            type="button"
-            onClick={() => void handleCopy()}
-            disabled={copyState === "copying" || byStatus.length === 0}
-            title="Copiar las tarjetas de estatus como imagen (para pegar en WhatsApp)"
-            className={cn(
-              "ml-1 flex items-center gap-1.5 rounded-md border px-2.5 py-1 text-xs font-medium transition-colors disabled:opacity-40",
-              copyState === "error"
-                ? "border-critical text-critical"
-                : "border-border text-text-muted hover:border-accent hover:text-accent"
-            )}
-          >
-            {copyState === "done" ? (
-              <Check className="h-3.5 w-3.5 text-success" />
-            ) : (
-              <ImageDown className={cn("h-3.5 w-3.5", copyState === "copying" && "animate-pulse")} />
-            )}
-            <span className="hidden sm:inline">
-              {copyState === "done" ? "Copiado" : copyState === "error" ? "Error" : "Copiar imagen"}
-            </span>
-          </button>
           {onRefresh && (
             <button
               type="button"
@@ -140,56 +152,67 @@ export function StatusBreakdown({
       ) : (
         <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 xl:grid-cols-8">
           {showTotal && (
-            <button
-              type="button"
-              onClick={() => onStatusSelect(selectedStatus === ALL_STATUS ? null : ALL_STATUS)}
-              title="Ver todos los incidentes abiertos"
-              className={cn(
-                "flex flex-col gap-1.5 rounded-lg border px-3 py-2 text-left backdrop-blur-md transition-all",
-                selectedStatus === ALL_STATUS
-                  ? "border-warning bg-warning/10 ring-2 ring-warning shadow-[0_0_10px_1px_rgba(245,158,11,0.30)]"
-                  : "border-warning/50 bg-warning/5 ring-1 ring-warning/40 hover:border-warning"
-              )}
-            >
-              <div className="flex items-center gap-3">
-                <p className="min-w-0 truncate text-[11px] font-medium uppercase tracking-wider text-warning/90">
-                  Abiertos
-                </p>
-                <span className="shrink-0 text-lg font-bold text-warning drop-shadow-[0_0_7px_rgba(245,158,11,0.8)]">
-                  {stats?.totalIncidents ?? "—"}
-                </span>
-              </div>
-              <div className="h-1 w-full overflow-hidden rounded-full bg-warning/15">
-                <div className="h-full w-full rounded-full bg-warning" />
-              </div>
-            </button>
+            <div className="group relative">
+              <button
+                type="button"
+                onClick={() => onStatusSelect(selectedStatus === ALL_STATUS ? null : ALL_STATUS)}
+                title="Ver todos los incidentes abiertos"
+                className={cn(
+                  "flex h-full w-full flex-col gap-1.5 rounded-lg border px-3 py-2 text-left backdrop-blur-md transition-all",
+                  selectedStatus === ALL_STATUS
+                    ? "border-warning bg-warning/10 ring-2 ring-warning shadow-[0_0_10px_1px_rgba(245,158,11,0.30)]"
+                    : "border-warning/50 bg-warning/5 ring-1 ring-warning/40 hover:border-warning"
+                )}
+              >
+                <div className="flex items-center gap-3">
+                  <p className="min-w-0 truncate text-[11px] font-medium uppercase tracking-wider text-warning/90">
+                    Abiertos
+                  </p>
+                  <span className="shrink-0 text-lg font-bold text-warning drop-shadow-[0_0_7px_rgba(245,158,11,0.8)]">
+                    {stats?.totalIncidents ?? "—"}
+                  </span>
+                </div>
+                <div className="h-1 w-full overflow-hidden rounded-full bg-warning/15">
+                  <div className="h-full w-full rounded-full bg-warning" />
+                </div>
+              </button>
+              <CopyCardButton
+                state={copy?.key === ALL_STATUS ? copy.state : undefined}
+                onCopy={(e) => void copyCard(ALL_STATUS, "abiertos", e)}
+              />
+            </div>
           )}
           {byStatus.map(({ status, incidents }) => {
             const isSelected = selectedStatus === status;
             const pct = total > 0 ? Math.min(100, Math.round((incidents / total) * 100)) : 0;
             return (
-              <button
-                key={status}
-                type="button"
-                onClick={() => onStatusSelect(isSelected ? null : status)}
-                title={`Ver incidentes con estatus "${status}"`}
-                className={cn(
-                  "flex flex-col gap-1.5 rounded-lg border px-3 py-2 text-left backdrop-blur-md transition-colors",
-                  isSelected
-                    ? "border-accent bg-accent/10 ring-1 ring-accent"
-                    : "border-border/60 bg-surface/60 hover:border-accent/60"
-                )}
-              >
-                <div className="flex items-center gap-3">
-                  <p className="min-w-0 truncate text-[11px] font-medium uppercase tracking-wider text-text-muted" title={status}>
-                    {status}
-                  </p>
-                  <span className={cn("shrink-0 text-lg font-bold", statusAccent(status))}>{incidents}</span>
-                </div>
-                <div className="h-1 w-full overflow-hidden rounded-full bg-border/40">
-                  <div className={cn("h-full rounded-full", statusBarColor(status))} style={{ width: `${pct}%` }} />
-                </div>
-              </button>
+              <div key={status} className="group relative">
+                <button
+                  type="button"
+                  onClick={() => onStatusSelect(isSelected ? null : status)}
+                  title={`Ver incidentes con estatus "${status}"`}
+                  className={cn(
+                    "flex h-full w-full flex-col gap-1.5 rounded-lg border px-3 py-2 text-left backdrop-blur-md transition-colors",
+                    isSelected
+                      ? "border-accent bg-accent/10 ring-1 ring-accent"
+                      : "border-border/60 bg-surface/60 hover:border-accent/60"
+                  )}
+                >
+                  <div className="flex items-center gap-3">
+                    <p className="min-w-0 truncate text-[11px] font-medium uppercase tracking-wider text-text-muted" title={status}>
+                      {status}
+                    </p>
+                    <span className={cn("shrink-0 text-lg font-bold", statusAccent(status))}>{incidents}</span>
+                  </div>
+                  <div className="h-1 w-full overflow-hidden rounded-full bg-border/40">
+                    <div className={cn("h-full rounded-full", statusBarColor(status))} style={{ width: `${pct}%` }} />
+                  </div>
+                </button>
+                <CopyCardButton
+                  state={copy?.key === status ? copy.state : undefined}
+                  onCopy={(e) => void copyCard(status, status, e)}
+                />
+              </div>
             );
           })}
         </div>
