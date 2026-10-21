@@ -1,8 +1,10 @@
 "use client";
 
-import { ArrowDownWideNarrow, ArrowUpNarrowWide, RefreshCw } from "lucide-react";
+import { useRef, useState } from "react";
+import { ArrowDownWideNarrow, ArrowUpNarrowWide, Check, ImageDown, RefreshCw } from "lucide-react";
 import type { OpenStats } from "@/types/open";
 import type { SortDir } from "@/lib/exportOpenIncidents";
+import { copyElementAsImage } from "@/lib/copyImage";
 import { cn } from "@/lib/utils";
 
 // Centinela para la tarjeta del total: seleccionarla muestra TODOS los
@@ -51,6 +53,23 @@ export function StatusBreakdown({
   const byStatus = stats?.byStatus ?? [];
   const showTotal = group !== "ALL";
 
+  const captureRef = useRef<HTMLDivElement>(null);
+  const [copyState, setCopyState] = useState<"idle" | "copying" | "done" | "error">("idle");
+
+  async function handleCopy() {
+    if (!captureRef.current || copyState === "copying") return;
+    setCopyState("copying");
+    try {
+      const res = await copyElementAsImage(captureRef.current, `estatus-${group.toLowerCase()}.png`, { padding: 12 });
+      // "downloaded" = el navegador no dejó usar el portapapeles; igual se bajó el PNG
+      setCopyState(res === "copied" ? "done" : "idle");
+    } catch (err) {
+      console.error("No se pudo copiar la imagen de estatus", err);
+      setCopyState("error");
+    }
+    setTimeout(() => setCopyState("idle"), 1800);
+  }
+
   const sortBtn = (dir: SortDir, label: string, Icon: typeof ArrowDownWideNarrow) => (
     <button
       type="button"
@@ -71,13 +90,34 @@ export function StatusBreakdown({
   const total = stats?.totalIncidents || 0;
 
   return (
-    <div className="space-y-2">
+    <div ref={captureRef} className="space-y-2">
       <div className="flex items-center justify-between gap-2">
         <h2 className="text-sm font-semibold text-text-primary">Por estatus</h2>
-        <div className="flex items-center gap-1.5">
+        <div data-copy-ignore className="flex items-center gap-1.5">
           <span className="mr-1 hidden text-[11px] text-text-muted sm:inline">Orden:</span>
           {sortBtn("desc", "Reciente → antiguo", ArrowDownWideNarrow)}
           {sortBtn("asc", "Antiguo → reciente", ArrowUpNarrowWide)}
+          <button
+            type="button"
+            onClick={() => void handleCopy()}
+            disabled={copyState === "copying" || byStatus.length === 0}
+            title="Copiar las tarjetas de estatus como imagen (para pegar en WhatsApp)"
+            className={cn(
+              "ml-1 flex items-center gap-1.5 rounded-md border px-2.5 py-1 text-xs font-medium transition-colors disabled:opacity-40",
+              copyState === "error"
+                ? "border-critical text-critical"
+                : "border-border text-text-muted hover:border-accent hover:text-accent"
+            )}
+          >
+            {copyState === "done" ? (
+              <Check className="h-3.5 w-3.5 text-success" />
+            ) : (
+              <ImageDown className={cn("h-3.5 w-3.5", copyState === "copying" && "animate-pulse")} />
+            )}
+            <span className="hidden sm:inline">
+              {copyState === "done" ? "Copiado" : copyState === "error" ? "Error" : "Copiar imagen"}
+            </span>
+          </button>
           {onRefresh && (
             <button
               type="button"
