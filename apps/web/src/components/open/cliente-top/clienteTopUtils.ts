@@ -86,17 +86,17 @@ export function severityOf(c: ClienteTopStat): Severity {
   return "muted";
 }
 
-// Clases por severidad: línea + punto con glow (lollipop), texto y chip del resumen.
+// Clases por severidad: línea + punto con glow (lollipop), texto y segmento de la
+// barra de resumen. El rojo va más tenue (opacidad + glow suave) que los demás.
 export const SEV: Record<
   Severity,
-  { text: string; track: string; dot: string; seg: string; chip: string; label: string }
+  { text: string; track: string; dot: string; seg: string; label: string }
 > = {
   critical: {
-    text: "text-critical",
-    track: "bg-critical/60",
-    dot: "bg-critical shadow-[0_0_8px_2px_rgba(239,68,68,0.55)]",
-    seg: "bg-critical",
-    chip: "border-critical/40 bg-critical/10 text-critical",
+    text: "text-critical/80",
+    track: "bg-critical/40",
+    dot: "bg-critical/75 shadow-[0_0_7px_1px_rgba(239,68,68,0.3)]",
+    seg: "bg-critical/60",
     label: "Con dilación",
   },
   warning: {
@@ -104,7 +104,6 @@ export const SEV: Record<
     track: "bg-warning/60",
     dot: "bg-warning shadow-[0_0_8px_2px_rgba(245,158,11,0.5)]",
     seg: "bg-warning",
-    chip: "border-warning/40 bg-warning/10 text-warning",
     label: "En gestión",
   },
   success: {
@@ -112,7 +111,6 @@ export const SEV: Record<
     track: "bg-success/60",
     dot: "bg-success shadow-[0_0_7px_2px_rgba(34,197,94,0.45)]",
     seg: "bg-success",
-    chip: "border-success/40 bg-success/10 text-success",
     label: "Solo resueltos",
   },
   muted: {
@@ -120,10 +118,34 @@ export const SEV: Record<
     track: "bg-text-muted/20",
     dot: "bg-text-muted/40",
     seg: "bg-text-muted/40",
-    chip: "border-border bg-surface-elevated/40 text-text-muted",
     label: "Sin IM's",
   },
 };
+
+/** Edad a la que el color llega a rojo pleno: ámbar al pasar el SLA (4h) → rojo a las 24h. */
+export const RED_MS = 24 * 3_600_000;
+
+type Rgb = readonly [number, number, number];
+const GREEN: Rgb = [34, 197, 94];
+const AMBER: Rgb = [245, 158, 11];
+const RED: Rgb = [239, 68, 68];
+
+function rgba([r, g, b]: Rgb, alpha: number): string {
+  return `rgba(${Math.round(r)}, ${Math.round(g)}, ${Math.round(b)}, ${alpha})`;
+}
+
+/**
+ * Color de un IM según su edad: verde dentro del SLA; al pasarlo arranca en ámbar y
+ * se va tornando a rojo hasta RED_MS. Sirve para la barra de antigüedad y su texto.
+ */
+export function ageColor(ms: number, alpha = 1): string {
+  if (ms <= SLA_MS) return rgba(GREEN, alpha);
+  const t = Math.min(1, (ms - SLA_MS) / (RED_MS - SLA_MS));
+  return rgba(
+    [AMBER[0] + (RED[0] - AMBER[0]) * t, AMBER[1] + (RED[1] - AMBER[1]) * t, AMBER[2] + (RED[2] - AMBER[2]) * t],
+    alpha,
+  );
+}
 
 export const SEVERITY_ORDER: Severity[] = ["critical", "warning", "success", "muted"];
 

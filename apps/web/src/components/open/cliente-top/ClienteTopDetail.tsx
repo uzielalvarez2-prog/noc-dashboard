@@ -141,12 +141,12 @@ export function ClienteTopDetail({
         <Kpi
           label="Con dilación (>4h)"
           value={cliente.criticalCount}
-          tone={cliente.criticalCount > 0 ? "text-critical" : undefined}
+          tone={cliente.criticalCount > 0 ? "text-critical/80" : undefined}
         />
         <Kpi
           label="Más antiguo"
           value={activos.length > 0 ? formatEdad(masAntiguo) : "—"}
-          tone={masAntiguo > SLA_MS ? "text-critical" : undefined}
+          tone={masAntiguo > SLA_MS ? "text-critical/80" : undefined}
         />
         <Kpi
           label="Resueltos (por cerrar)"

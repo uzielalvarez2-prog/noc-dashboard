@@ -7,7 +7,7 @@ import { cn } from "@/lib/utils";
 import { AddClienteModal } from "./cliente-top/AddClienteModal";
 import { ClienteTopDetail } from "./cliente-top/ClienteTopDetail";
 import { ClienteTopList } from "./cliente-top/ClienteTopList";
-import { ClienteTopSummary, type SeverityFilter } from "./cliente-top/ClienteTopSummary";
+import { ClienteTopSummary } from "./cliente-top/ClienteTopSummary";
 import {
   SEVERITY_ORDER,
   matchesQuery,
@@ -46,7 +46,6 @@ export function ClienteTopView() {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [search, setSearch] = useState("");
   const [sort, setSort] = useState<SortKey>("gravedad");
-  const [filter, setFilter] = useState<SeverityFilter>("all");
   const searchRef = useRef<HTMLInputElement>(null);
   const listPanelRef = useRef<HTMLDivElement>(null);
 
@@ -70,12 +69,8 @@ export function ClienteTopView() {
   // mano). Busca por alias/nombre y también por IM, servicio, sitio o estado.
   const q = norm(search.trim());
   const visible = useMemo(
-    () =>
-      sortClientes(
-        clientes.filter((c) => (filter === "all" || severityOf(c) === filter) && matchesQuery(c, q)),
-        sort,
-      ),
-    [clientes, filter, q, sort],
+    () => sortClientes(clientes.filter((c) => matchesQuery(c, q)), sort),
+    [clientes, q, sort],
   );
 
   // Cliente elegido a mano (si sigue visible) o, por defecto, el primero de la
@@ -196,23 +191,18 @@ export function ClienteTopView() {
           </div>
         ) : (
           <>
-            <ClienteTopSummary counts={counts} total={clientes.length} filter={filter} onFilter={setFilter} />
+            <ClienteTopSummary counts={counts} total={clientes.length} />
 
             {visible.length === 0 ? (
               <div className="py-6 text-center text-sm text-text-muted">
-                {q ? <>Sin coincidencias para "{search}".</> : "Ningún cliente en este estado."}{" "}
-                {(q || filter !== "all") && (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setSearch("");
-                      setFilter("all");
-                    }}
-                    className="font-medium text-accent hover:underline"
-                  >
-                    Quitar filtros
-                  </button>
-                )}
+                Sin coincidencias para "{search}".{" "}
+                <button
+                  type="button"
+                  onClick={() => setSearch("")}
+                  className="font-medium text-accent hover:underline"
+                >
+                  Limpiar búsqueda
+                </button>
               </div>
             ) : (
               <div className="grid gap-5 lg:grid-cols-[22rem_minmax(0,1fr)] lg:items-start">
