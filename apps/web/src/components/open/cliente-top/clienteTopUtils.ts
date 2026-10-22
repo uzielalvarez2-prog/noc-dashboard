@@ -86,39 +86,31 @@ export function severityOf(c: ClienteTopStat): Severity {
   return "muted";
 }
 
-// Clases por severidad: línea + punto con glow (lollipop), texto y segmento de la
-// barra de resumen. El rojo va más tenue (opacidad + glow suave) que los demás.
+// Clases por severidad: línea + punto con glow (lollipop) y texto. El rojo va más
+// tenue (opacidad + glow suave) que los demás.
 export const SEV: Record<
   Severity,
-  { text: string; track: string; dot: string; seg: string; label: string }
+  { text: string; track: string; dot: string }
 > = {
   critical: {
     text: "text-critical/80",
     track: "bg-critical/40",
     dot: "bg-critical/75 shadow-[0_0_7px_1px_rgba(239,68,68,0.3)]",
-    seg: "bg-critical/60",
-    label: "Con dilación",
   },
   warning: {
     text: "text-warning",
     track: "bg-warning/60",
     dot: "bg-warning shadow-[0_0_8px_2px_rgba(245,158,11,0.5)]",
-    seg: "bg-warning",
-    label: "En gestión",
   },
   success: {
     text: "text-success",
     track: "bg-success/60",
     dot: "bg-success shadow-[0_0_7px_2px_rgba(34,197,94,0.45)]",
-    seg: "bg-success",
-    label: "Solo resueltos",
   },
   muted: {
     text: "text-text-muted",
     track: "bg-text-muted/20",
     dot: "bg-text-muted/40",
-    seg: "bg-text-muted/40",
-    label: "Sin IM's",
   },
 };
 
@@ -146,8 +138,6 @@ export function ageColor(ms: number, alpha = 1): string {
     alpha,
   );
 }
-
-export const SEVERITY_ORDER: Severity[] = ["critical", "warning", "success", "muted"];
 
 export type SortKey = "gravedad" | "ims" | "nombre";
 

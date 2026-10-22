@@ -7,15 +7,11 @@ import { cn } from "@/lib/utils";
 import { AddClienteModal } from "./cliente-top/AddClienteModal";
 import { ClienteTopDetail } from "./cliente-top/ClienteTopDetail";
 import { ClienteTopList } from "./cliente-top/ClienteTopList";
-import { ClienteTopSummary } from "./cliente-top/ClienteTopSummary";
 import {
-  SEVERITY_ORDER,
   matchesQuery,
   norm,
-  severityOf,
   sortClientes,
   type ClienteTopStat,
-  type Severity,
   type SortKey,
 } from "./cliente-top/clienteTopUtils";
 
@@ -39,7 +35,7 @@ async function fetchClienteTopStats(): Promise<{ clientes: ClienteTopStat[] }> {
 
 // Tablero Cliente TOP en dos paneles: lista compacta a la izquierda y ficha del
 // cliente activo a la derecha. Todo sale del snapshot de OpenIncident (el CSV de
-// HPSM): resumen por semáforo arriba, gráfica de antigüedad por IM en la ficha.
+// HPSM): gráfica de antigüedad por IM en la ficha.
 export function ClienteTopView() {
   const qc = useQueryClient();
   const [addOpen, setAddOpen] = useState(false);
@@ -58,12 +54,6 @@ export function ClienteTopView() {
   // Las edades de la ficha se miden al momento del último refetch, igual que la
   // dilación que calcula el endpoint, para que lista y ficha no se contradigan.
   const now = dataUpdatedAt;
-
-  const counts = useMemo(() => {
-    const acc = Object.fromEntries(SEVERITY_ORDER.map((s) => [s, 0])) as Record<Severity, number>;
-    for (const c of clientes) acc[severityOf(c)] += 1;
-    return acc;
-  }, [clientes]);
 
   // Filtrado en memoria: la lista de clientes TOP es chica (el usuario la arma a
   // mano). Busca por alias/nombre y también por IM, servicio, sitio o estado.
@@ -189,52 +179,46 @@ export function ClienteTopView() {
               abiertos de un vistazo.
             </p>
           </div>
+        ) : visible.length === 0 ? (
+          <div className="py-6 text-center text-sm text-text-muted">
+            Sin coincidencias para "{search}".{" "}
+            <button
+              type="button"
+              onClick={() => setSearch("")}
+              className="font-medium text-accent hover:underline"
+            >
+              Limpiar búsqueda
+            </button>
+          </div>
         ) : (
-          <>
-            <ClienteTopSummary counts={counts} total={clientes.length} />
-
-            {visible.length === 0 ? (
-              <div className="py-6 text-center text-sm text-text-muted">
-                Sin coincidencias para "{search}".{" "}
-                <button
-                  type="button"
-                  onClick={() => setSearch("")}
-                  className="font-medium text-accent hover:underline"
-                >
-                  Limpiar búsqueda
-                </button>
-              </div>
-            ) : (
-              <div className="grid gap-5 lg:grid-cols-[22rem_minmax(0,1fr)] lg:items-start">
-                {/* En pantallas chicas se ve lista O ficha (como antes); en ≥lg, las dos. */}
-                <div ref={listPanelRef} className={cn("lg:sticky lg:top-4", selected && "hidden lg:block")}>
-                  <ClienteTopList
-                    clientes={visible}
-                    activeId={active?.id ?? null}
-                    query={q}
-                    maxOpen={maxOpen}
-                    sort={sort}
-                    onSort={setSort}
-                    onSelect={setSelectedId}
-                  />
-                </div>
-                <div className={cn("min-w-0", !selected && "hidden lg:block")}>
-                  {active && (
-                    <ClienteTopDetail
-                      key={active.id}
-                      cliente={active}
-                      now={now}
-                      onBack={() => setSelectedId(null)}
-                      onRemove={() => removeMutation.mutate(active.id)}
-                      removing={removeMutation.isPending}
-                      onRename={(alias) => renameMutation.mutate({ cliente: active, alias })}
-                      renaming={renameMutation.isPending}
-                    />
-                  )}
-                </div>
-              </div>
-            )}
-          </>
+          <div className="grid gap-5 lg:grid-cols-[22rem_minmax(0,1fr)] lg:items-start">
+            {/* En pantallas chicas se ve lista O ficha (como antes); en ≥lg, las dos. */}
+            <div ref={listPanelRef} className={cn("lg:sticky lg:top-4", selected && "hidden lg:block")}>
+              <ClienteTopList
+                clientes={visible}
+                activeId={active?.id ?? null}
+                query={q}
+                maxOpen={maxOpen}
+                sort={sort}
+                onSort={setSort}
+                onSelect={setSelectedId}
+              />
+            </div>
+            <div className={cn("min-w-0", !selected && "hidden lg:block")}>
+              {active && (
+                <ClienteTopDetail
+                  key={active.id}
+                  cliente={active}
+                  now={now}
+                  onBack={() => setSelectedId(null)}
+                  onRemove={() => removeMutation.mutate(active.id)}
+                  removing={removeMutation.isPending}
+                  onRename={(alias) => renameMutation.mutate({ cliente: active, alias })}
+                  renaming={renameMutation.isPending}
+                />
+              )}
+            </div>
+          </div>
         )}
 
         {addOpen && (
