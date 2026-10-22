@@ -33,11 +33,11 @@ export function ClienteTopAgeChart({
   const trackGradient = `linear-gradient(to right, ${ageColor(0, 0.5)} 0%, ${ageColor(SLA_MS, 0.5)} ${slaPos}%, ${ageColor(SLA_MS + 1, 0.75)} ${slaPos}%, ${ageColor(RED_MS, 0.65)} ${redPos}%, ${ageColor(RED_MS, 0.65)} 100%)`;
 
   return (
-    <div className="rounded-2xl border border-border/60 bg-surface/60 p-4 backdrop-blur-md">
+    <div className="@container rounded-2xl border border-border/60 bg-surface/60 p-4 backdrop-blur-md">
       <p className="mb-3 text-[11px] font-medium uppercase tracking-wide text-text-muted">
         Antigüedad de sus IM&apos;s
       </p>
-      <div className="grid grid-cols-[8.5rem_1fr_4.5rem] items-end gap-x-3 md:grid-cols-[8.5rem_1fr_4.5rem_8rem]">
+      <div className="grid grid-cols-[8.5rem_1fr_4.5rem] items-end gap-x-3 @lg:grid-cols-[8.5rem_1fr_4.5rem_8rem]">
         <span />
         <div className="relative h-4">
           <span
@@ -48,7 +48,7 @@ export function ClienteTopAgeChart({
           </span>
         </div>
         <span />
-        <span className="hidden md:block" />
+        <span className="hidden @lg:block" />
       </div>
       <ul className="max-h-64 space-y-1.5 overflow-y-auto pt-1">
         {rows.map((r) => {
@@ -58,7 +58,7 @@ export function ClienteTopAgeChart({
           return (
             <li
               key={r.incidentId}
-              className="grid grid-cols-[8.5rem_1fr_4.5rem] items-center gap-x-3 md:grid-cols-[8.5rem_1fr_4.5rem_8rem]"
+              className="grid grid-cols-[8.5rem_1fr_4.5rem] items-center gap-x-3 @lg:grid-cols-[8.5rem_1fr_4.5rem_8rem]"
               title={[r.incidentId, r.siteName || r.serviceId, r.status, r.assignee]
                 .filter(Boolean)
                 .join(" · ")}
@@ -90,7 +90,7 @@ export function ClienteTopAgeChart({
               >
                 {formatEdad(r.ageMs)}
               </span>
-              <span className="hidden truncate text-[11px] text-text-muted md:block">{r.status}</span>
+              <span className="hidden truncate text-[11px] text-text-muted @lg:block">{r.status}</span>
             </li>
           );
         })}

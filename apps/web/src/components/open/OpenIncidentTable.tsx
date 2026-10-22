@@ -213,7 +213,7 @@ export function OpenIncidentTable({
 
   return (
     <div className="overflow-hidden rounded-xl border border-border/60 bg-surface/40 backdrop-blur-md">
-      <div className="max-h-[70vh] overflow-auto">
+      <div className={cn("max-h-[70vh] overflow-auto", showFtxt && "@container")}>
         <table className="w-full border-collapse text-sm">
           {/* El thead es sticky: el buscador (fila 1) y los títulos (fila 2) se
               quedan fijos al hacer scroll, justo como pediste. */}
@@ -223,7 +223,15 @@ export function OpenIncidentTable({
                 colSpan={colCount}
                 className="border-b border-border/60 bg-surface/80 p-2 backdrop-blur-md"
               >
-                <div className="flex items-center gap-3">
+                {/* En Cliente TOP la tabla es más ancha que el panel y hay scroll horizontal:
+                    la barra se ancla a la izquierda y mide como máximo lo visible (cqw del
+                    contenedor con scroll), así buscador y Excel nunca quedan fuera de vista. */}
+                <div
+                  className={cn(
+                    "flex items-center gap-3",
+                    showFtxt && "sticky left-0 w-[min(40rem,calc(100cqw-1rem))]",
+                  )}
+                >
                   <div className="relative flex-1">
                     <Search className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-text-muted" />
                     <input
@@ -241,7 +249,10 @@ export function OpenIncidentTable({
                     onClick={handleExport}
                     disabled={exporting}
                     title="Descargar Excel (tabla dinámica)"
-                    className="flex items-center gap-1.5 rounded-md border border-border bg-surface px-2.5 py-2 text-xs font-medium text-text-muted hover:text-text-primary disabled:opacity-50"
+                    className={cn(
+                      "flex items-center gap-1.5 rounded-md border border-border bg-surface px-2.5 py-2 text-xs font-medium hover:text-text-primary disabled:opacity-50",
+                      showFtxt ? "text-text-primary" : "text-text-muted",
+                    )}
                   >
                     <Download className={cn("h-3.5 w-3.5", exporting && "animate-pulse")} />
                     <span className="hidden sm:inline">{exporting ? "Generando…" : "Excel"}</span>
