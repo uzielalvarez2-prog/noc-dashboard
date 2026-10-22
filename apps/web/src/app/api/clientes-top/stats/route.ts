@@ -34,14 +34,34 @@ export async function GET(req: NextRequest) {
     const [clientes, rows] = await Promise.all([
       db.clienteTop.findMany({ orderBy: [{ company: "asc" }] }),
       db.openIncident.findMany({
-        select: { incidentId: true, openTime: true, status: true, company: true, serviceId: true },
+        select: {
+          incidentId: true,
+          openTime: true,
+          status: true,
+          company: true,
+          serviceId: true,
+          siteName: true,
+          state: true,
+          assignee: true,
+        },
       }),
     ]);
 
-    // 1 fila por incidente (un IM puede abarcar varios sitios en OpenIncident).
-    const byIncident = new Map<string, (typeof rows)[number]>();
-    for (const r of rows) if (!byIncident.has(r.incidentId)) byIncident.set(r.incidentId, r);
-    const abiertos = [...byIncident.values()];
+    // 1 fila por incidente (un IM puede abarcar varios sitios en OpenIncident); los
+    // estados de todas sus filas se juntan para el desglose por estado de la ficha.
+    const byIncident = new Map<string, { row: (typeof rows)[number]; states: Set<string> }>();
+    for (const r of rows) {
+      const hit = byIncident.get(r.incidentId);
+      if (hit) {
+        if (r.state) hit.states.add(r.state);
+      } else {
+        byIncident.set(r.incidentId, { row: r, states: new Set(r.state ? [r.state] : []) });
+      }
+    }
+    const abiertos = [...byIncident.values()].map(({ row, states }) => ({
+      ...row,
+      states: [...states],
+    }));
 
     const now = Date.now();
     const stats = clientes.map((c) => {
@@ -81,6 +101,18 @@ export async function GET(req: NextRequest) {
         activeCount,
         criticalCount: delayedMs.length,
         delayedMs,
+        // Detalle por IM para la ficha del cliente (gráfica de antigüedad) y para
+        // buscar por IM / servicio / sitio desde el buscador del tablero.
+        incidentes: matches.map((inc) => ({
+          incidentId: inc.incidentId,
+          openTime: inc.openTime.toISOString(),
+          status: inc.status,
+          resolved: isResolvedStatus(inc.status),
+          serviceId: inc.serviceId,
+          siteName: inc.siteName,
+          states: inc.states,
+          assignee: inc.assignee,
+        })),
       };
     });
 

@@ -1,96 +1,23 @@
 "use client";
 
-import { useMemo, useState, useEffect, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useQuery, useQueryClient, useMutation } from "@tanstack/react-query";
-import { Plus, Search, X, Star, Trash2, AlertTriangle, Loader2, Pencil, Check } from "lucide-react";
-import { useTheme } from "@/components/layout/ThemeProvider";
+import { Plus, Search, Star } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { OpenIncidentTable } from "./OpenIncidentTable";
-import type { SortDir } from "@/lib/exportOpenIncidents";
-import type { OpenListResponse } from "@/types/open";
-
-interface ClienteTopStat {
-  id: string;
-  company: string;
-  /** Nombre corto a mostrar en la tarjeta (alias); igual a company si no se definió uno. */
-  displayName: string;
-  siglasIm: string;
-  serviceRef: string;
-  note: string | null;
-  openCount: number;
-  /** IM's aún no resueltos (los RESOLVED siguen en el snapshot hasta el cierre). */
-  activeCount: number;
-  criticalCount: number;
-  /** Edad en ms de cada incidente que ya superó el SLA de 4h, sin resolver. */
-  delayedMs: number[];
-}
-
-/** "1d 4h" / "4h" — se trunca a horas (no se baja a minutos: el SLA es de 4h). */
-function formatDilacion(ms: number): string {
-  const totalHours = Math.floor(ms / 3_600_000);
-  const days = Math.floor(totalHours / 24);
-  const hours = totalHours % 24;
-  if (days > 0) return hours > 0 ? `${days}d ${hours}h` : `${days}d`;
-  return `${hours}h`;
-}
-
-/** Agrupa las dilaciones iguales: "1 con dilación de 1d 4h", "1 con dilación de 4h". */
-function describirDilaciones(delayedMs: number[]): string[] {
-  const counts = new Map<string, { count: number; ms: number }>();
-  for (const ms of delayedMs) {
-    const label = formatDilacion(ms);
-    const prev = counts.get(label);
-    counts.set(label, { count: (prev?.count ?? 0) + 1, ms });
-  }
-  // Dilación más grave (mayor) primero.
-  return [...counts.entries()]
-    .sort((a, b) => b[1].ms - a[1].ms)
-    .map(([label, { count }]) => `${count} con dilación de ${label}`);
-}
-
-// Dilación máxima del cliente (0 si no tiene ninguno vencido) — para ordenar y
-// colorear la franja de la lista por gravedad.
-function maxDilacion(c: ClienteTopStat): number {
-  return c.delayedMs.length > 0 ? Math.max(...c.delayedMs) : 0;
-}
-
-// Semáforo de la fila:
-//   rojo   = al menos 1 IM activo con dilación >4h
-//   ámbar  = tiene IM's activos (sin resolver) pero ninguno pasó las 4h
-//   verde  = tiene IM's pero TODOS están en RESOLVED (nada en gestión)
-//   gris   = no tiene ningún IM en el snapshot
-type Severity = "critical" | "warning" | "success" | "muted";
-
-function severityOf(c: ClienteTopStat): Severity {
-  if (c.delayedMs.length > 0) return "critical";
-  if (c.activeCount > 0) return "warning";
-  if (c.openCount > 0) return "success";
-  return "muted";
-}
-
-// Clases por severidad para el "lollipop" (línea + punto con glow) de cada fila.
-const SEV: Record<Severity, { text: string; track: string; dot: string }> = {
-  critical: {
-    text: "text-critical",
-    track: "bg-critical/60",
-    dot: "bg-critical shadow-[0_0_8px_2px_rgba(239,68,68,0.55)]",
-  },
-  warning: {
-    text: "text-warning",
-    track: "bg-warning/60",
-    dot: "bg-warning shadow-[0_0_8px_2px_rgba(245,158,11,0.5)]",
-  },
-  success: {
-    text: "text-success",
-    track: "bg-success/60",
-    dot: "bg-success shadow-[0_0_7px_2px_rgba(34,197,94,0.45)]",
-  },
-  muted: {
-    text: "text-text-muted",
-    track: "bg-text-muted/20",
-    dot: "bg-text-muted/40",
-  },
-};
+import { AddClienteModal } from "./cliente-top/AddClienteModal";
+import { ClienteTopDetail } from "./cliente-top/ClienteTopDetail";
+import { ClienteTopList } from "./cliente-top/ClienteTopList";
+import { ClienteTopSummary, type SeverityFilter } from "./cliente-top/ClienteTopSummary";
+import {
+  SEVERITY_ORDER,
+  matchesQuery,
+  norm,
+  severityOf,
+  sortClientes,
+  type ClienteTopStat,
+  type Severity,
+  type SortKey,
+} from "./cliente-top/clienteTopUtils";
 
 // Resplandor ambiental muy sutil detrás de las tarjetas (look "glass"),
 // puramente decorativo — nunca intercepta clicks.
@@ -110,37 +37,67 @@ async function fetchClienteTopStats(): Promise<{ clientes: ClienteTopStat[] }> {
   return res.json();
 }
 
+// Tablero Cliente TOP en dos paneles: lista compacta a la izquierda y ficha del
+// cliente activo a la derecha. Todo sale del snapshot de OpenIncident (el CSV de
+// HPSM): resumen por semáforo arriba, gráfica de antigüedad por IM en la ficha.
 export function ClienteTopView() {
-  const { theme } = useTheme();
-  const isLight = theme === "light";
   const qc = useQueryClient();
   const [addOpen, setAddOpen] = useState(false);
-  const [selected, setSelected] = useState<ClienteTopStat | null>(null);
+  const [selectedId, setSelectedId] = useState<string | null>(null);
   const [search, setSearch] = useState("");
+  const [sort, setSort] = useState<SortKey>("gravedad");
+  const [filter, setFilter] = useState<SeverityFilter>("all");
+  const searchRef = useRef<HTMLInputElement>(null);
+  const listPanelRef = useRef<HTMLDivElement>(null);
 
-  const { data, isLoading } = useQuery({
+  const { data, isLoading, dataUpdatedAt } = useQuery({
     queryKey: ["clientes-top-stats"],
     queryFn: fetchClienteTopStats,
     refetchInterval: 240_000, // mismo ritmo que el resto de Incidentes abiertos
   });
-  const clientes = data?.clientes ?? [];
+  const clientes = useMemo(() => data?.clientes ?? [], [data]);
+  // Las edades de la ficha se miden al momento del último refetch, igual que la
+  // dilación que calcula el endpoint, para que lista y ficha no se contradigan.
+  const now = dataUpdatedAt;
+
+  const counts = useMemo(() => {
+    const acc = Object.fromEntries(SEVERITY_ORDER.map((s) => [s, 0])) as Record<Severity, number>;
+    for (const c of clientes) acc[severityOf(c)] += 1;
+    return acc;
+  }, [clientes]);
 
   // Filtrado en memoria: la lista de clientes TOP es chica (el usuario la arma a
-  // mano), no vale la pena un endpoint de búsqueda aparte. Busca por alias y por
-  // nombre completo, sin acentos ni mayúsculas.
+  // mano). Busca por alias/nombre y también por IM, servicio, sitio o estado.
   const q = norm(search.trim());
-  const visibleClientes = (q
-    ? clientes.filter((c) => norm(c.displayName).includes(q) || norm(c.company).includes(q))
-    : clientes
-  )
-    .slice()
-    // Más grave primero: mayor dilación, luego más IM's abiertos, luego alfabético.
-    .sort(
-      (a, b) =>
-        maxDilacion(b) - maxDilacion(a) ||
-        b.openCount - a.openCount ||
-        a.displayName.localeCompare(b.displayName, "es"),
-    );
+  const visible = useMemo(
+    () =>
+      sortClientes(
+        clientes.filter((c) => (filter === "all" || severityOf(c) === filter) && matchesQuery(c, q)),
+        sort,
+      ),
+    [clientes, filter, q, sort],
+  );
+
+  // Cliente elegido a mano (si sigue visible) o, por defecto, el primero de la
+  // lista — así la ficha nunca queda vacía y teclear en el buscador la actualiza.
+  const selected = visible.find((c) => c.id === selectedId) ?? null;
+  const active = selected ?? visible[0] ?? null;
+  const maxOpen = Math.max(1, ...clientes.map((c) => c.openCount));
+
+  // "/" enfoca el buscador desde cualquier parte del tablero (salvo escribiendo).
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) {
+      if (addOpen || e.key !== "/" || e.metaKey || e.ctrlKey || e.altKey) return;
+      const t = e.target as HTMLElement | null;
+      if (t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.tagName === "SELECT" || t.isContentEditable)) {
+        return;
+      }
+      e.preventDefault();
+      searchRef.current?.focus();
+    }
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [addOpen]);
 
   const removeMutation = useMutation({
     mutationFn: async (id: string) => {
@@ -148,7 +105,7 @@ export function ClienteTopView() {
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["clientes-top-stats"] });
-      setSelected(null);
+      setSelectedId(null);
     },
   });
 
@@ -172,512 +129,134 @@ export function ClienteTopView() {
     onSuccess: () => qc.invalidateQueries({ queryKey: ["clientes-top-stats"] }),
   });
 
-  const cardCls = (critical: boolean, active: boolean) =>
-    cn(
-      "group relative w-full rounded-2xl border p-4 text-left transition-all hover:-translate-y-0.5",
-      critical
-        ? isLight
-          ? "border-critical/50 bg-critical-dim/40 hover:shadow-md"
-          : "border-critical/50 bg-critical-dim shadow-[0_0_16px_-4px_rgba(239,68,68,0.35)] hover:shadow-[0_0_20px_-2px_rgba(239,68,68,0.5)]"
-        : isLight
-          ? "border-amber-300 bg-amber-50 hover:shadow-md"
-          : "border-amber-500/40 bg-amber-500/10 hover:shadow-[0_0_16px_-4px_rgba(245,158,11,0.4)]",
-      // Tarjeta en consulta: anillo de acento bien visible, por encima del estilo
-      // crítico/normal, para que quede claro cuál detalle está abierto ahora.
-      active && (isLight ? "ring-2 ring-accent -translate-y-0.5" : "ring-2 ring-accent shadow-[0_0_14px_1px_rgba(59,130,246,0.5)] -translate-y-0.5"),
-    );
-
-  function renderCard(c: ClienteTopStat, isSelected: boolean) {
-    return (
-      <button
-        key={c.id}
-        type="button"
-        onClick={() => setSelected(isSelected ? null : c)}
-        className={cardCls(c.criticalCount > 0, isSelected)}
-      >
-        {isSelected && (
-          <span className="absolute left-3 top-2.5 flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wide text-accent">
-            <span className="h-1.5 w-1.5 rounded-full bg-accent animate-pulse" />
-            En consulta
-          </span>
-        )}
-        {isSelected ? (
-          <span
-            role="button"
-            tabIndex={0}
-            onClick={(e) => {
-              e.stopPropagation();
-              setSelected(null);
-            }}
-            title="Cerrar vista de incidentes"
-            className="absolute right-2 top-2 rounded p-1 text-text-muted hover:bg-black/10 hover:text-text-primary"
-          >
-            <X className="h-3.5 w-3.5" />
-          </span>
-        ) : (
-          c.criticalCount > 0 && (
-            <AlertTriangle className="absolute right-3 top-3 h-4 w-4 text-critical" />
-          )
-        )}
-        <p
-          className={cn(
-            "truncate pr-5 text-sm font-semibold text-text-primary",
-            isSelected && "mt-3.5",
-          )}
-          title={c.displayName !== c.company ? `${c.displayName} — ${c.company}` : c.company}
-        >
-          {c.displayName}
-        </p>
-        <p className="mt-3 flex items-baseline gap-1.5">
-          <span className="text-3xl font-bold text-text-primary">{c.openCount}</span>
-          <span className="text-xs text-text-muted">IM&apos;s en gestión</span>
-        </p>
-        {c.delayedMs.length > 0 && (
-          <div className="mt-1.5 space-y-0.5">
-            {describirDilaciones(c.delayedMs).map((linea) => (
-              <p key={linea} className="text-sm font-medium text-amber-500/80">
-                {linea}
-              </p>
-            ))}
-          </div>
-        )}
-      </button>
-    );
+  function focusFirstRow() {
+    listPanelRef.current?.querySelector<HTMLElement>("[data-id]")?.focus();
   }
-
-  // Con un cliente seleccionado, se oculta el grid completo: solo queda esa
-  // tarjeta arriba y su detalle debajo (lo que pidió el usuario — nada de la
-  // lista general distrae mientras consulta un cliente puntual).
-  if (selected) {
-    return (
-      <Glow>
-        <div className="space-y-5">
-          <button
-            type="button"
-            onClick={() => setSelected(null)}
-            className="text-xs font-medium text-accent hover:underline"
-          >
-            ← Ver todos los clientes
-          </button>
-          <div className="mx-auto w-full max-w-xs">{renderCard(selected, true)}</div>
-          <ClienteDetail
-            cliente={selected}
-            onClose={() => setSelected(null)}
-            onRemove={() => removeMutation.mutate(selected.id)}
-            removing={removeMutation.isPending}
-            onRename={(alias) => renameMutation.mutate({ cliente: selected, alias })}
-            renaming={renameMutation.isPending}
-          />
-        </div>
-      </Glow>
-    );
-  }
-
-  const maxOpen = Math.max(1, ...clientes.map((c) => c.openCount));
 
   return (
     <Glow>
-    <div className="space-y-5">
-      <div className="flex flex-wrap items-center gap-3">
-        <p className="shrink-0 text-sm text-text-muted">
-          {clientes.length === 0
-            ? "Aún no has marcado ningún cliente como TOP."
-            : `${clientes.length} cliente${clientes.length === 1 ? "" : "s"} TOP · ${clientes.reduce((a, c) => a + c.openCount, 0)} incidentes abiertos`}
-        </p>
-
-        {clientes.length > 0 && (
-          <div className="order-last w-full sm:order-none sm:flex-1 sm:px-4">
-            <div className="group relative mx-auto w-full max-w-md">
-              <Search className="pointer-events-none absolute left-4 top-1/2 z-10 h-4 w-4 -translate-y-1/2 text-text-muted transition-colors group-focus-within:text-accent" />
-              <input
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                placeholder="Buscar cliente…"
-                className="h-10 w-full rounded-full border border-border/70 bg-surface/60 pl-11 pr-4 text-sm text-text-primary placeholder:text-text-muted backdrop-blur-md transition-all focus:border-accent/60 focus:bg-surface focus:outline-none focus:ring-4 focus:ring-accent/15"
-              />
-            </div>
-          </div>
-        )}
-
-        <button
-          type="button"
-          onClick={() => setAddOpen(true)}
-          className="ml-auto flex shrink-0 items-center gap-1.5 rounded-md bg-accent px-3 py-2 text-xs font-semibold text-white hover:bg-accent/90"
-        >
-          <Plus className="h-3.5 w-3.5" />
-          Agregar cliente
-        </button>
-      </div>
-
-      {isLoading ? (
-        <p className="text-sm text-text-muted">Cargando…</p>
-      ) : clientes.length === 0 ? (
-        <div className="rounded-2xl border border-dashed border-border bg-surface/40 p-10 text-center">
-          <Star className="mx-auto h-6 w-6 text-text-muted" />
-          <p className="mt-3 text-sm text-text-muted">
-            Marca un cliente como TOP desde "Agregar cliente" y aquí verás sus incidentes
-            abiertos de un vistazo.
+      <div className="space-y-5">
+        <div className="flex flex-wrap items-center gap-3">
+          <p className="shrink-0 text-sm text-text-muted">
+            {clientes.length === 0
+              ? "Aún no has marcado ningún cliente como TOP."
+              : `${clientes.length} cliente${clientes.length === 1 ? "" : "s"} TOP · ${clientes.reduce((a, c) => a + c.openCount, 0)} incidentes abiertos`}
           </p>
-        </div>
-      ) : visibleClientes.length === 0 ? (
-        <p className="py-6 text-center text-sm text-text-muted">
-          Sin coincidencias para "{search}".
-        </p>
-      ) : (
-        <div className="overflow-hidden rounded-2xl border border-border/60 bg-surface/60 shadow-[0_20px_40px_-24px_rgba(0,0,0,0.6)] backdrop-blur-md">
-          <div className="max-h-[60vh] overflow-y-auto">
-            {visibleClientes.map((c) => {
-              const dils = describirDilaciones(c.delayedMs);
-              const sev = SEV[severityOf(c)];
-              const pct = c.openCount === 0 ? 0 : Math.max(6, (c.openCount / maxOpen) * 100);
-              return (
-                <button
-                  key={c.id}
-                  type="button"
-                  onClick={() => setSelected(c)}
-                  className="group flex w-full flex-col gap-2 border-b border-border/40 px-4 py-3 text-left transition-all last:border-0 hover:-translate-y-0.5 hover:bg-surface-elevated/50"
-                >
-                  <div className="flex items-baseline justify-between gap-3">
-                    <span
-                      className="min-w-0 flex-1 truncate text-sm font-semibold text-text-primary"
-                      title={c.displayName !== c.company ? `${c.displayName} — ${c.company}` : c.company}
-                    >
-                      {c.displayName}
-                    </span>
-                    <span className="flex shrink-0 items-baseline gap-3">
-                      {dils.length > 0 && (
-                        <span className="hidden max-w-[12rem] truncate text-xs font-medium text-warning/80 sm:inline">
-                          {dils.join(" · ")}
-                        </span>
-                      )}
-                      <span className={cn("text-sm font-bold tabular-nums", sev.text)}>
-                        {c.openCount}
-                        <span className="ml-1 text-[10px] font-medium text-text-muted">IM&apos;s</span>
-                      </span>
-                    </span>
-                  </div>
-                  <div className="relative h-1 w-full rounded-full bg-surface-elevated">
-                    <span
-                      className={cn("absolute inset-y-0 left-0 rounded-full transition-all", sev.track)}
-                      style={{ width: `${pct}%` }}
-                    />
-                    <span
-                      className={cn(
-                        "absolute top-1/2 h-2.5 w-2.5 -translate-x-1/2 -translate-y-1/2 rounded-full transition-all",
-                        sev.dot,
-                      )}
-                      style={{ left: `${pct}%` }}
-                    />
-                  </div>
-                </button>
-              );
-            })}
-          </div>
-        </div>
-      )}
 
-      {addOpen && (
-        <AddClienteModal
-          onClose={() => setAddOpen(false)}
-          onAdded={() => {
-            qc.invalidateQueries({ queryKey: ["clientes-top-stats"] });
-            setAddOpen(false);
-          }}
-        />
-      )}
-    </div>
-    </Glow>
-  );
-}
+          {clientes.length > 0 && (
+            <div className="order-last w-full sm:order-none sm:flex-1 sm:px-4">
+              <div className="group relative mx-auto w-full max-w-md">
+                <Search className="pointer-events-none absolute left-4 top-1/2 z-10 h-4 w-4 -translate-y-1/2 text-text-muted transition-colors group-focus-within:text-accent" />
+                <input
+                  ref={searchRef}
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Escape") {
+                      setSearch("");
+                      e.currentTarget.blur();
+                    } else if ((e.key === "Enter" || e.key === "ArrowDown") && visible.length > 0) {
+                      // Pasa al listado con el primer resultado, listo para ↑/↓.
+                      e.preventDefault();
+                      setSelectedId(visible[0].id);
+                      focusFirstRow();
+                    }
+                  }}
+                  placeholder="Buscar cliente, IM, servicio o sitio…"
+                  className="h-10 w-full rounded-full border border-border/70 bg-surface/60 pl-11 pr-10 text-sm text-text-primary placeholder:text-text-muted backdrop-blur-md transition-all focus:border-accent/60 focus:bg-surface focus:outline-none focus:ring-4 focus:ring-accent/15"
+                />
+                {!search && (
+                  <kbd className="pointer-events-none absolute right-4 top-1/2 -translate-y-1/2 rounded border border-border/70 px-1.5 text-[10px] text-text-muted">
+                    /
+                  </kbd>
+                )}
+              </div>
+            </div>
+          )}
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Panel de detalle: incidentes abiertos del cliente seleccionado, mismas
-// columnas que "Todos los incidentes abiertos" (reusa OpenIncidentTable con
-// companyFilter en vez de duplicar la tabla).
-// ─────────────────────────────────────────────────────────────────────────────
-function ClienteDetail({
-  cliente,
-  onClose,
-  onRemove,
-  removing,
-  onRename,
-  renaming,
-}: {
-  cliente: ClienteTopStat;
-  onClose: () => void;
-  onRemove: () => void;
-  removing: boolean;
-  onRename: (alias: string) => void;
-  renaming: boolean;
-}) {
-  const [sortDir, setSortDir] = useState<SortDir>("desc");
-  void sortDir; // sin control de orden en este panel por ahora; la tabla lo acepta igual
-
-  const [editing, setEditing] = useState(false);
-  const [alias, setAlias] = useState(cliente.note ?? "");
-
-  function saveAlias() {
-    onRename(alias.trim());
-    setEditing(false);
-  }
-
-  return (
-    <div className="space-y-2">
-      <div className="flex flex-wrap items-center gap-2">
-        {editing ? (
-          <div className="flex items-center gap-1.5">
-            <input
-              autoFocus
-              value={alias}
-              onChange={(e) => setAlias(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter") saveAlias();
-                if (e.key === "Escape") setEditing(false);
-              }}
-              placeholder={cliente.company}
-              maxLength={60}
-              className="h-7 rounded-md border border-border bg-background/60 px-2 text-sm text-text-primary placeholder:text-text-muted/60 focus:border-accent focus:outline-none"
-            />
-            <button
-              type="button"
-              onClick={saveAlias}
-              disabled={renaming}
-              title="Guardar"
-              className="rounded p-1 text-success hover:bg-success-dim disabled:opacity-50"
-            >
-              {renaming ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Check className="h-3.5 w-3.5" />}
-            </button>
-            <button
-              type="button"
-              onClick={() => setEditing(false)}
-              title="Cancelar"
-              className="rounded p-1 text-text-muted hover:text-text-primary"
-            >
-              <X className="h-3.5 w-3.5" />
-            </button>
-          </div>
-        ) : (
-          <h2 className="text-sm font-semibold text-text-primary">
-            Incidentes abiertos — <span className="text-accent">{cliente.displayName}</span>
-          </h2>
-        )}
-        {!editing && (
           <button
             type="button"
-            onClick={() => {
-              setAlias(cliente.note ?? "");
-              setEditing(true);
-            }}
-            title="Editar nombre abreviado"
-            className="rounded p-1 text-text-muted hover:text-text-primary"
+            onClick={() => setAddOpen(true)}
+            className="ml-auto flex shrink-0 items-center gap-1.5 rounded-md bg-accent px-3 py-2 text-xs font-semibold text-white hover:bg-accent/90"
           >
-            <Pencil className="h-3.5 w-3.5" />
-          </button>
-        )}
-        <button
-          type="button"
-          onClick={onClose}
-          className="rounded-md border border-border px-2 py-0.5 text-xs text-text-muted hover:text-text-primary"
-        >
-          Cerrar
-        </button>
-        <button
-          type="button"
-          onClick={onRemove}
-          disabled={removing}
-          className="ml-auto flex items-center gap-1.5 rounded-md border border-critical/40 px-2 py-0.5 text-xs text-critical hover:bg-critical-dim disabled:opacity-50"
-        >
-          {removing ? <Loader2 className="h-3 w-3 animate-spin" /> : <Trash2 className="h-3 w-3" />}
-          Quitar de Cliente TOP
-        </button>
-      </div>
-      <OpenIncidentTable group="ALL" sortDir={sortDir} companyFilter={cliente.company} />
-    </div>
-  );
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Modal "Agregar cliente": busca sobre los incidentes abiertos de HOY (mismo
-// endpoint y búsqueda libre que "Todos los incidentes abiertos") y al elegir
-// una fila da de alta esa Empresa en Cliente TOP.
-// ─────────────────────────────────────────────────────────────────────────────
-function norm(s: string): string {
-  return s.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase();
-}
-
-async function searchOpen(q: string): Promise<OpenListResponse> {
-  const p = new URLSearchParams({ q, limit: "20", page: "1" });
-  const res = await fetch(`/api/incidents/open?${p.toString()}`);
-  if (!res.ok) throw new Error("Error al buscar incidentes");
-  return res.json();
-}
-
-function AddClienteModal({ onClose, onAdded }: { onClose: () => void; onAdded: () => void }) {
-  const [query, setQuery] = useState("");
-  const [debounced, setDebounced] = useState("");
-  const [feedback, setFeedback] = useState<string | null>(null);
-  const [busy, setBusy] = useState(false);
-  // Empresa elegida de la búsqueda, pendiente de confirmar con su alias.
-  const [picked, setPicked] = useState<{ company: string; serviceId: string; siteName: string } | null>(
-    null,
-  );
-  const [alias, setAlias] = useState("");
-
-  useEffect(() => {
-    const t = setTimeout(() => setDebounced(query.trim()), 300);
-    return () => clearTimeout(t);
-  }, [query]);
-
-  const { data, isFetching } = useQuery({
-    queryKey: ["open-incidents-search", debounced],
-    queryFn: () => searchOpen(debounced),
-    enabled: debounced.length >= 2,
-  });
-
-  // Una fila por empresa (puede haber varios incidentes de la misma empresa).
-  const companies = useMemo(() => {
-    const rows = data?.data ?? [];
-    const seen = new Map<string, { company: string; serviceId: string; siteName: string }>();
-    for (const r of rows) {
-      if (!seen.has(norm(r.company))) {
-        seen.set(norm(r.company), { company: r.company, serviceId: r.serviceId, siteName: r.siteName });
-      }
-    }
-    return [...seen.values()];
-  }, [data]);
-
-  async function confirmAdd() {
-    if (!picked) return;
-    setBusy(true);
-    setFeedback(null);
-    try {
-      const res = await fetch("/api/clientes-top", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ company: picked.company, note: alias.trim() || undefined }),
-      });
-      const body = await res.json().catch(() => ({}));
-      if (!res.ok) {
-        if (body.duplicate) {
-          setFeedback("Ese cliente ya está en tu lista TOP.");
-        } else {
-          setFeedback(body.error ?? "No se pudo agregar");
-        }
-        return;
-      }
-      onAdded();
-    } catch {
-      setFeedback("Error de conexión");
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  return (
-    <div className="fixed inset-0 z-50 flex items-start justify-center bg-black/50 p-4 pt-20">
-      <div className="w-full max-w-lg rounded-xl border border-border bg-surface shadow-xl">
-        <div className="flex items-center justify-between border-b border-border p-4">
-          <h2 className="text-sm font-semibold text-text-primary">Agregar cliente a TOP</h2>
-          <button onClick={onClose} className="text-text-muted hover:text-text-primary">
-            <X className="h-4 w-4" />
+            <Plus className="h-3.5 w-3.5" />
+            Agregar cliente
           </button>
         </div>
 
-        {picked ? (
-          <div className="space-y-3 p-4">
-            <div>
-              <p className="text-xs text-text-muted">Cliente elegido</p>
-              <p className="text-sm font-medium text-text-primary">{picked.company}</p>
-            </div>
-            <div>
-              <label className="mb-1 block text-xs font-medium text-text-muted">
-                Nombre abreviado para la tarjeta (opcional)
-              </label>
-              <input
-                autoFocus
-                value={alias}
-                onChange={(e) => setAlias(e.target.value)}
-                placeholder={picked.company}
-                maxLength={60}
-                className="h-9 w-full rounded-md border border-border bg-background/60 px-3 text-sm text-text-primary placeholder:text-text-muted/60 focus:border-accent focus:outline-none"
-              />
-              <p className="mt-1 text-xs text-text-muted">
-                Útil cuando el nombre real es muy largo. Si lo dejas vacío, se usa el nombre completo.
-              </p>
-            </div>
-
-            {feedback && <p className="text-xs text-warning">{feedback}</p>}
-
-            <div className="flex items-center justify-between gap-2 pt-1">
-              <button
-                type="button"
-                onClick={() => {
-                  setPicked(null);
-                  setAlias("");
-                  setFeedback(null);
-                }}
-                className="rounded-md border border-border px-3 py-2 text-xs font-medium text-text-muted hover:text-text-primary"
-              >
-                Volver a buscar
-              </button>
-              <button
-                type="button"
-                onClick={confirmAdd}
-                disabled={busy}
-                className="flex items-center gap-1.5 rounded-md bg-accent px-3 py-2 text-xs font-semibold text-white hover:bg-accent/90 disabled:opacity-50"
-              >
-                {busy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Plus className="h-3.5 w-3.5" />}
-                Agregar a Cliente TOP
-              </button>
-            </div>
+        {isLoading ? (
+          <p className="text-sm text-text-muted">Cargando…</p>
+        ) : clientes.length === 0 ? (
+          <div className="rounded-2xl border border-dashed border-border bg-surface/40 p-10 text-center">
+            <Star className="mx-auto h-6 w-6 text-text-muted" />
+            <p className="mt-3 text-sm text-text-muted">
+              Marca un cliente como TOP desde "Agregar cliente" y aquí verás sus incidentes
+              abiertos de un vistazo.
+            </p>
           </div>
         ) : (
-          <div className="space-y-3 p-4">
-            <div className="relative">
-              <Search className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-text-muted" />
-              <input
-                autoFocus
-                value={query}
-                onChange={(e) => setQuery(e.target.value)}
-                placeholder="Busca por empresa, sitio o servicio del incidente…"
-                className="h-9 w-full rounded-md border border-border bg-background/60 pl-9 pr-3 text-sm text-text-primary placeholder:text-text-muted focus:border-accent focus:outline-none"
-              />
-            </div>
+          <>
+            <ClienteTopSummary counts={counts} total={clientes.length} filter={filter} onFilter={setFilter} />
 
-            <div className="max-h-80 overflow-y-auto">
-              {debounced.length < 2 ? (
-                <p className="py-6 text-center text-xs text-text-muted">
-                  Escribe al menos 2 caracteres para buscar entre los incidentes abiertos.
-                </p>
-              ) : isFetching ? (
-                <p className="py-6 text-center text-xs text-text-muted">Buscando…</p>
-              ) : companies.length === 0 ? (
-                <p className="py-6 text-center text-xs text-text-muted">Sin coincidencias.</p>
-              ) : (
-                <ul className="divide-y divide-border/60">
-                  {companies.map((c) => (
-                    <li key={c.company}>
-                      <button
-                        type="button"
-                        onClick={() => setPicked(c)}
-                        className="flex w-full items-center justify-between gap-3 px-1 py-2.5 text-left hover:bg-surface-elevated/60"
-                      >
-                        <span className="min-w-0">
-                          <span className="block truncate text-sm text-text-primary">{c.company}</span>
-                          <span className="block truncate text-xs text-text-muted">
-                            {c.serviceId} {c.siteName ? `· ${c.siteName}` : ""}
-                          </span>
-                        </span>
-                        <Plus className="h-3.5 w-3.5 shrink-0 text-accent" />
-                      </button>
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </div>
-          </div>
+            {visible.length === 0 ? (
+              <div className="py-6 text-center text-sm text-text-muted">
+                {q ? <>Sin coincidencias para "{search}".</> : "Ningún cliente en este estado."}{" "}
+                {(q || filter !== "all") && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setSearch("");
+                      setFilter("all");
+                    }}
+                    className="font-medium text-accent hover:underline"
+                  >
+                    Quitar filtros
+                  </button>
+                )}
+              </div>
+            ) : (
+              <div className="grid gap-5 lg:grid-cols-[22rem_minmax(0,1fr)] lg:items-start">
+                {/* En pantallas chicas se ve lista O ficha (como antes); en ≥lg, las dos. */}
+                <div ref={listPanelRef} className={cn("lg:sticky lg:top-4", selected && "hidden lg:block")}>
+                  <ClienteTopList
+                    clientes={visible}
+                    activeId={active?.id ?? null}
+                    query={q}
+                    maxOpen={maxOpen}
+                    sort={sort}
+                    onSort={setSort}
+                    onSelect={setSelectedId}
+                  />
+                </div>
+                <div className={cn("min-w-0", !selected && "hidden lg:block")}>
+                  {active && (
+                    <ClienteTopDetail
+                      key={active.id}
+                      cliente={active}
+                      now={now}
+                      onBack={() => setSelectedId(null)}
+                      onRemove={() => removeMutation.mutate(active.id)}
+                      removing={removeMutation.isPending}
+                      onRename={(alias) => renameMutation.mutate({ cliente: active, alias })}
+                      renaming={renameMutation.isPending}
+                    />
+                  )}
+                </div>
+              </div>
+            )}
+          </>
+        )}
+
+        {addOpen && (
+          <AddClienteModal
+            onClose={() => setAddOpen(false)}
+            onAdded={() => {
+              qc.invalidateQueries({ queryKey: ["clientes-top-stats"] });
+              setAddOpen(false);
+            }}
+          />
         )}
       </div>
-    </div>
+    </Glow>
   );
 }
