@@ -4,7 +4,7 @@ import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import type { ClosedStats } from "@/types/closed";
 import { ClosedKpis } from "./ClosedKpis";
-import { ClosedRanking } from "./ClosedRanking";
+import { ClosedRankingDonut } from "./ClosedRankingDonut";
 import { cn } from "@/lib/utils";
 
 type Group = "ALL" | "PEXA" | "CECOR";
@@ -80,19 +80,19 @@ export function ClosedIncidentsView() {
       <ClosedKpis stats={stats} />
 
       <div className="grid gap-4 lg:grid-cols-2">
-        <ClosedRanking
+        <ClosedRankingDonut
           title="Analistas"
           dimensionLabel="Analista"
           rows={stats?.byUser ?? []}
           fileBase={`cerrados-analista-${group.toLowerCase()}`}
-          variant="analyst"
+          limit={15}
         />
-        <ClosedRanking
+        <ClosedRankingDonut
           title="Incidentes cerrados por Código"
           dimensionLabel="Causa"
           rows={stats?.byCause ?? []}
           fileBase={`cerrados-causa-${group.toLowerCase()}`}
-          variant="cause"
+          limit={12}
         />
       </div>
     </div>

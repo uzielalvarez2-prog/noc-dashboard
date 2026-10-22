@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from "recharts";
 import { Camera, Check } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -36,6 +36,7 @@ export function DonutChart({
   fileBase,
   legendMaxHeight = 260,
   bare = false,
+  actions,
 }: {
   title: string;
   data: DonutDatum[];
@@ -46,6 +47,9 @@ export function DonutChart({
   /** Sin recuadro ni título propio: para anidar dentro de otra tarjeta que ya
    *  tiene su encabezado (el botón Imagen se muestra alineado a la derecha). */
   bare?: boolean;
+  /** Botones extra (p. ej. Copiar tabla / Excel) que se muestran en el
+   *  encabezado junto al botón Imagen. Solo aplica en modo no-bare. */
+  actions?: ReactNode;
 }) {
   const { theme } = useTheme();
   const [imgCopied, setImgCopied] = useState(false);
@@ -230,7 +234,10 @@ export function DonutChart({
     <div className="rounded-xl border border-border/60 bg-surface/60 p-4 backdrop-blur-md">
       <div className="mb-3 flex items-center justify-between gap-2">
         <h3 className="text-sm font-semibold text-text-primary">{title}</h3>
-        {imgBtn}
+        <div className="flex gap-2">
+          {actions}
+          {imgBtn}
+        </div>
       </div>
       {body}
     </div>
