@@ -4,7 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
 import { cn } from "@/lib/utils";
-import { canAccessSettings, canAccessMonitoring, canConsultarEstatusIm, canVerCaseSanJuan, isRolCase } from "@/lib/permissions";
+import { canAccessSettings, canAccessMonitoring, canAccessAsistencia, canConsultarEstatusIm, canVerCaseSanJuan, isRolCase } from "@/lib/permissions";
 import {
   LayoutDashboard,
   AlertTriangle,
@@ -23,6 +23,7 @@ import {
   NotebookPen,
   AlertOctagon,
   BellRing,
+  CalendarCheck,
 } from "lucide-react";
 import { useTheme } from "@/components/layout/ThemeProvider";
 
@@ -39,6 +40,7 @@ const NAV_ITEMS = [
   { href: "/reglas-notificacion", label: "Alertas de apertura", icon: BellRing, monitoringOnly: true },
   { href: "/estatus-im", label: "Estatus IMs", icon: ListChecks, imEstatusOnly: true },
   { href: "/case-san-juan", label: "CASE San Juan - PEXA", icon: NotebookPen, caseSanJuanOnly: true },
+  { href: "/asistencia", label: "Asistencia", icon: CalendarCheck, asistenciaOnly: true },
   { href: "/settings", label: "Configuración", icon: Settings, settingsOnly: true },
 ];
 
@@ -66,6 +68,7 @@ export function Sidebar({ collapsed, onToggle }: SidebarProps) {
       (!("caseSanJuanOnly" in item) || !item.caseSanJuanOnly || canVerCaseSanJuan(role)) &&
       (!item.settingsOnly || canAccessSettings(role)) &&
       (!("monitoringOnly" in item) || !item.monitoringOnly || canAccessMonitoring(role)) &&
+      (!("asistenciaOnly" in item) || !item.asistenciaOnly || canAccessAsistencia(role)) &&
       (!("imEstatusOnly" in item) || !item.imEstatusOnly || canConsultarEstatusIm(role))
   );
 

@@ -598,6 +598,53 @@ model IpMonitor {
   @@index([monitoredIpId])
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// ASISTENCIA — control de asistencia del equipo (solo ADMIN, página /asistencia).
+// Modelo por excepción: se asume que cada quien cumplió su HorarioBase salvo que
+// exista un AsistenciaEvento ese día. No hay pase de lista diario.
+// ─────────────────────────────────────────────────────────────────────────────
+model Colaborador {
+  id        String             @id @default(cuid())
+  nombre    String
+  usuario   String             @default("") // login HPSM (dmorelos, etc.)
+  grupo     String             @default("") // Matutino / Vespertino / CECOR
+  activo    Boolean            @default(true)
+  orden     Int                @default(0)
+  createdAt DateTime           @default(now())
+  updatedAt DateTime           @updatedAt
+  horarios  HorarioBase[]
+  eventos   AsistenciaEvento[]
+
+  @@index([grupo])
+  @@index([activo])
+}
+
+model HorarioBase {
+  id            String      @id @default(cuid())
+  colaboradorId String
+  dia           Int // 0=Domingo .. 6=Sábado
+  horario       String      @default("") // "07:00 - 15:00"; vacío = descanso
+  colaborador   Colaborador @relation(fields: [colaboradorId], references: [id], onDelete: Cascade)
+
+  @@unique([colaboradorId, dia])
+}
+
+model AsistenciaEvento {
+  id               String      @id @default(cuid())
+  colaboradorId    String
+  fecha            DateTime // medianoche del día del evento (zona México)
+  tipo             String // FALTA|RETARDO|PERMISO|VACACIONES|INCAPACIDAD|AVISO|CAMBIO_DIA|CAMBIO_HORARIO|NOTA
+  nota             String      @default("")
+  fechaRelacionada DateTime? // CAMBIO_DIA: el día permutado
+  createdBy        String      @default("")
+  createdAt        DateTime    @default(now())
+  updatedAt        DateTime    @updatedAt
+  colaborador      Colaborador @relation(fields: [colaboradorId], references: [id], onDelete: Cascade)
+
+  @@index([fecha])
+  @@index([colaboradorId])
+}
+
 enum Severity {
   CRITICAL
   HIGH

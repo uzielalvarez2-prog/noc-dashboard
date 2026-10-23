@@ -83,6 +83,15 @@ export function isRolCase(role: string | undefined): boolean {
   return role === "CASE";
 }
 
+/**
+ * Control de asistencia del equipo (página /asistencia + su API). ADMIN estricto:
+ * es información personal del equipo (faltas, permisos, incapacidades) y solo el
+ * administrador la lleva.
+ */
+export function canAccessAsistencia(role: string | undefined): boolean {
+  return role === "ADMIN";
+}
+
 export function isValidRole(role: string): role is Role {
   return (ROLES as string[]).includes(role);
 }
