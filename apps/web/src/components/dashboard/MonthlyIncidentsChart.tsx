@@ -53,6 +53,8 @@ interface MonthlyIncidentsChartProps {
   initial: MonthlyIncidentPoint[];
 }
 
+const fmt = (n: number) => n.toLocaleString("es-MX");
+
 export function MonthlyIncidentsChart({ initial }: MonthlyIncidentsChartProps) {
   const { theme } = useTheme();
   const [copied, setCopied] = useState(false);
@@ -104,10 +106,10 @@ export function MonthlyIncidentsChart({ initial }: MonthlyIncidentsChartProps) {
 
     // Stats (derecha)
     const stats = [
-      { val: String(totalYTD), label: " total YTD" },
-      { val: String(avgPerMonth), label: " prom./mes" },
+      { val: fmt(totalYTD), label: " total YTD" },
+      { val: fmt(avgPerMonth), label: " prom./mes" },
       ...(current?.isPartial && current.projectedTotal != null
-        ? [{ val: `~${current.projectedTotal}`, label: ` proy. ${current.label}`, accent: true }]
+        ? [{ val: `~${fmt(current.projectedTotal)}`, label: ` proy. ${current.label}`, accent: true }]
         : []),
     ];
     ctx.font = "bold 15px Arial,sans-serif";
@@ -194,7 +196,7 @@ export function MonthlyIncidentsChart({ initial }: MonthlyIncidentsChartProps) {
       ctx.textAlign = "center";
       ctx.fillStyle = pal.text;
       ctx.font = "10px Arial,sans-serif";
-      ctx.fillText(String(p.total), xCenter(i), y - 6);
+      ctx.fillText(fmt(p.total), xCenter(i), y - 6);
       ctx.fillStyle = pal.muted;
       ctx.fillText(p.label, xCenter(i), chartBottom + 16);
     });
@@ -282,17 +284,17 @@ export function MonthlyIncidentsChart({ initial }: MonthlyIncidentsChartProps) {
         <div className="flex items-center gap-3">
           <div className="flex items-baseline gap-4 font-mono text-xs">
             <span>
-              <span className="text-lg font-bold text-text-primary">{totalYTD}</span>{" "}
+              <span className="text-lg font-bold text-text-primary">{fmt(totalYTD)}</span>{" "}
               <span className="text-text-muted">total YTD</span>
             </span>
             <span>
-              <span className="text-lg font-bold text-text-primary">{avgPerMonth}</span>{" "}
+              <span className="text-lg font-bold text-text-primary">{fmt(avgPerMonth)}</span>{" "}
               <span className="text-text-muted">prom./mes</span>
             </span>
             {current?.isPartial && current.projectedTotal != null && (
               <span>
                 <span className="text-lg font-bold text-accent">
-                  ~{current.projectedTotal}
+                  ~{fmt(current.projectedTotal)}
                 </span>{" "}
                 <span className="text-text-muted">proy. {current.label}</span>
               </span>
@@ -337,16 +339,18 @@ export function MonthlyIncidentsChart({ initial }: MonthlyIncidentsChartProps) {
               tickLine={false}
               axisLine={false}
               allowDecimals={false}
+              tickFormatter={(v: number) => (v >= 1000 ? `${v / 1000}K` : String(v))}
             />
             <Tooltip
               {...TOOLTIP_STYLE}
               formatter={(value, name, props) => {
                 const p = props.payload as MonthlyIncidentPoint;
-                if (name === "trend") return [value ?? "—", "Tendencia (3m)"];
+                const n = typeof value === "number" ? value : Number(value);
+                if (name === "trend") return [Number.isFinite(n) ? fmt(n) : "—", "Tendencia (3m)"];
                 if (p.isPartial && p.projectedTotal != null) {
-                  return [`${value} (proy. ~${p.projectedTotal})`, "Incidentes"];
+                  return [`${fmt(n)} (proy. ~${fmt(p.projectedTotal)})`, "Incidentes"];
                 }
-                return [value, "Incidentes"];
+                return [fmt(n), "Incidentes"];
               }}
               labelFormatter={(label, payload) => {
                 const p = payload?.[0]?.payload as MonthlyIncidentPoint | undefined;
@@ -362,6 +366,7 @@ export function MonthlyIncidentsChart({ initial }: MonthlyIncidentsChartProps) {
                 dataKey="total"
                 position="top"
                 style={{ fill: "#e2e8f0", fontSize: 11 }}
+                formatter={(v) => (typeof v === "number" ? fmt(v) : String(v ?? ""))}
               />
             </Bar>
             <Line
