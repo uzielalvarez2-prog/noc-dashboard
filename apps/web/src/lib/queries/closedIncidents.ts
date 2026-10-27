@@ -2,6 +2,15 @@ import { db } from "@/lib/db";
 import type { Prisma } from "@prisma/client";
 import { toOperatorLogin } from "@/lib/operatorLogin";
 
+export interface MonthlyIncidentPoint {
+  month: string; // "YYYY-MM"
+  label: string; // "Ene", "Feb", ...
+  total: number;
+  changePct: number | null; // % vs mes anterior; null si no hay mes anterior o el anterior es 0
+  isPartial: boolean; // true solo en el mes en curso
+  projectedTotal: number | null; // proyección a mes completo; solo en el mes en curso
+}
+
 export interface ClosedFilters {
   group?: string; // PEXA | CECOR | ALL
   from?: Date;
@@ -115,4 +124,85 @@ export async function getClosedStats(f: ClosedFilters = {}) {
     byCause: toArr(causeMap),
     byPeriod,
   };
+}
+
+const MONTH_LABELS = [
+  "Ene", "Feb", "Mar", "Abr", "May", "Jun",
+  "Jul", "Ago", "Sep", "Oct", "Nov", "Dic",
+];
+
+/**
+ * Incidentes por mes para un grupo (default PEXA), desde enero del año actual.
+ * Combina ClosedIncident (histórico, por openTime) con OpenIncident (los que
+ * siguen abiertos) para que el mes en curso no quede subcontado. El mes en
+ * curso además trae una proyección lineal a mes completo según el ritmo diario
+ * observado — útil porque comparar un mes parcial contra meses cerrados es
+ * injusto.
+ */
+export async function getMonthlyIncidentTrend(
+  group: string = "PEXA"
+): Promise<MonthlyIncidentPoint[]> {
+  const now = new Date();
+  const yearStart = new Date(Date.UTC(now.getUTCFullYear(), 0, 1));
+
+  const [closedRows, openRows] = await Promise.all([
+    db.closedIncident.findMany({
+      where: { group, openTime: { gte: yearStart } },
+      select: { openTime: true },
+    }),
+    db.openIncident.findMany({
+      where: { group, openTime: { gte: yearStart } },
+      select: { incidentId: true, openTime: true },
+    }),
+  ]);
+
+  // Los abiertos pueden tener varias filas (una por sitio); contar el incidente una vez.
+  const openUniq = new Map<string, Date>();
+  for (const r of openRows) {
+    const prev = openUniq.get(r.incidentId);
+    if (!prev || r.openTime < prev) openUniq.set(r.incidentId, r.openTime);
+  }
+
+  const monthMap = new Map<string, number>();
+  for (const { openTime } of closedRows) {
+    const key = periodKey(openTime, "month");
+    monthMap.set(key, (monthMap.get(key) ?? 0) + 1);
+  }
+  for (const openTime of openUniq.values()) {
+    const key = periodKey(openTime, "month");
+    monthMap.set(key, (monthMap.get(key) ?? 0) + 1);
+  }
+
+  const currentMonthKey = periodKey(now, "month");
+  const dayOfMonth = now.getUTCDate();
+  const daysInCurrentMonth = new Date(
+    Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 0)
+  ).getUTCDate();
+
+  const points: MonthlyIncidentPoint[] = [];
+  let prevTotal: number | null = null;
+  for (let m = 0; m <= now.getUTCMonth(); m++) {
+    const key = `${now.getUTCFullYear()}-${String(m + 1).padStart(2, "0")}`;
+    const total = monthMap.get(key) ?? 0;
+    const isPartial = key === currentMonthKey;
+    const changePct =
+      prevTotal && prevTotal > 0 && !isPartial
+        ? Math.round(((total - prevTotal) / prevTotal) * 1000) / 10
+        : null;
+    const projectedTotal = isPartial && dayOfMonth > 0
+      ? Math.round((total / dayOfMonth) * daysInCurrentMonth)
+      : null;
+
+    points.push({
+      month: key,
+      label: MONTH_LABELS[m],
+      total,
+      changePct,
+      isPartial,
+      projectedTotal,
+    });
+    prevTotal = total;
+  }
+
+  return points;
 }

@@ -1,10 +1,12 @@
 import { getKPIs, getIncidentTrend, getOpenByDay } from "@/lib/queries/incidents";
 import { getSLAMetrics } from "@/lib/queries/sla";
+import { getMonthlyIncidentTrend } from "@/lib/queries/closedIncidents";
 import { KPIGrid } from "@/components/dashboard/KPIGrid";
 import { SLAGauge } from "@/components/dashboard/SLAGauge";
 import { IncidentsChart } from "@/components/dashboard/IncidentsChart";
 import { OpenByDayChart } from "@/components/dashboard/OpenByDayChart";
 import { OverviewClosedRankings } from "@/components/dashboard/OverviewClosedRankings";
+import { MonthlyIncidentsChart } from "@/components/dashboard/MonthlyIncidentsChart";
 
 export const dynamic = "force-dynamic";
 
@@ -22,11 +24,12 @@ const EMPTY_SLA = {
 
 export default async function OverviewPage() {
   // Resiliente a fallos de DB — muestra datos vacíos en lugar de crashear
-  const [kpis, sla, trend, byDay] = await Promise.all([
+  const [kpis, sla, trend, byDay, monthlyTrend] = await Promise.all([
     getKPIs().catch(() => EMPTY_KPIS),
     getSLAMetrics().catch(() => EMPTY_SLA),
     getIncidentTrend().catch(() => []),
     getOpenByDay().catch(() => []),
+    getMonthlyIncidentTrend("PEXA").catch(() => []),
   ]);
 
   return (
@@ -58,6 +61,8 @@ export default async function OverviewPage() {
       <OpenByDayChart initial={byDay} />
 
       <OverviewClosedRankings />
+
+      <MonthlyIncidentsChart initial={monthlyTrend} />
     </div>
   );
 }

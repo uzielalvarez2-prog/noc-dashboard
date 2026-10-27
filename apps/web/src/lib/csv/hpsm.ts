@@ -25,40 +25,75 @@ export function decodeCsvBuffer(buf: ArrayBuffer): string {
   return utf8;
 }
 
-/** Separa una línea CSV respetando comillas dobles y comas dentro de campos. */
-function splitCsvLine(line: string): string[] {
-  const out: string[] = [];
+/**
+ * Parsea el CSV completo carácter por carácter, respetando comillas dobles,
+ * comas dentro de campos, y saltos de línea DENTRO de campos entrecomillados
+ * (HPSM a veces pega salidas de ping multilínea en "Summary"). Dividir por
+ * líneas antes de interpretar comillas —como hacía la versión anterior—
+ * rompe esos campos y desalinea el resto del archivo.
+ */
+function parseCsvRows(text: string): string[][] {
+  const rows: string[][] = [];
+  let row: string[] = [];
   let cur = "";
   let inQuotes = false;
-  for (let j = 0; j < line.length; j++) {
-    const ch = line[j];
-    if (ch === '"') {
-      if (inQuotes && line[j + 1] === '"') {
-        cur += '"';
-        j++; // comilla escapada ("")
-      } else {
-        inQuotes = !inQuotes;
+  let i = 0;
+  const n = text.length;
+
+  while (i < n) {
+    const ch = text[i];
+    if (inQuotes) {
+      if (ch === '"') {
+        if (text[i + 1] === '"') {
+          cur += '"';
+          i += 2;
+          continue;
+        }
+        inQuotes = false;
+        i++;
+        continue;
       }
-    } else if (ch === "," && !inQuotes) {
-      out.push(cur);
+      cur += ch;
+      i++;
+      continue;
+    }
+
+    if (ch === '"') {
+      inQuotes = true;
+      i++;
+    } else if (ch === ",") {
+      row.push(cur);
       cur = "";
+      i++;
+    } else if (ch === "\r") {
+      i++; // ignorado; \n (propio o siguiente) cierra la fila
+    } else if (ch === "\n") {
+      row.push(cur);
+      rows.push(row);
+      row = [];
+      cur = "";
+      i++;
     } else {
       cur += ch;
+      i++;
     }
   }
-  out.push(cur);
-  return out;
+  // Última fila sin salto de línea final.
+  if (cur !== "" || row.length > 0) {
+    row.push(cur);
+    rows.push(row);
+  }
+  return rows;
 }
 
 /** Convierte el CSV en filas indexadas por nombre de columna. */
 export function parseCSV(text: string): Record<string, string>[] {
-  const lines = text.replace(/\r\n/g, "\n").replace(/\r/g, "\n").split("\n");
-  if (lines.length < 2) return [];
-  const headers = splitCsvLine(lines[0]).map((h) => h.trim());
+  const allRows = parseCsvRows(text).filter((r) => !(r.length === 1 && r[0].trim() === ""));
+  if (allRows.length < 2) return [];
+  const headers = allRows[0].map((h) => h.trim());
   const rows: Record<string, string>[] = [];
-  for (let i = 1; i < lines.length; i++) {
-    if (!lines[i].trim()) continue;
-    const values = splitCsvLine(lines[i]);
+  for (let i = 1; i < allRows.length; i++) {
+    const values = allRows[i];
     const row: Record<string, string> = {};
     headers.forEach((h, idx) => {
       row[h] = (values[idx] ?? "").trim();
