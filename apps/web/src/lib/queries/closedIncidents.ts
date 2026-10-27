@@ -9,6 +9,7 @@ export interface MonthlyIncidentPoint {
   changePct: number | null; // % vs mes anterior; null si no hay mes anterior o el anterior es 0
   isPartial: boolean; // true solo en el mes en curso
   projectedTotal: number | null; // proyección a mes completo; solo en el mes en curso
+  trend: number | null; // media móvil de 3 meses (usa projectedTotal del mes parcial); null si aún no hay 3 meses
 }
 
 export interface ClosedFilters {
@@ -200,8 +201,19 @@ export async function getMonthlyIncidentTrend(
       changePct,
       isPartial,
       projectedTotal,
+      trend: null,
     });
     prevTotal = total;
+  }
+
+  // Media móvil de 3 meses, calculada sobre el total (o la proyección si el
+  // mes es parcial) para que la tendencia no se desplome artificialmente por
+  // un mes que todavía no termina.
+  const series = points.map((p) => p.projectedTotal ?? p.total);
+  for (let i = 0; i < points.length; i++) {
+    if (i < 2) continue;
+    const window = series.slice(i - 2, i + 1);
+    points[i].trend = Math.round(window.reduce((s, v) => s + v, 0) / window.length);
   }
 
   return points;
