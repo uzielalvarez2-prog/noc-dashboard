@@ -108,15 +108,19 @@ export async function POST(req: NextRequest) {
       });
     }
 
-    // Un solo INSERT ... ON CONFLICT DO UPDATE para todos los registros.
-    // Evita N round-trips a Neon y es resiliente a cold starts.
-    if (records.length > 0) {
+    // INSERT ... ON CONFLICT DO UPDATE en lotes. Cada fila usa 12 parámetros y
+    // Postgres permite 65 535 por consulta (~5461 filas); se lotea a 4000 para
+    // quedar con margen y soportar CSVs grandes sin volver a chocar el límite.
+    const BATCH_SIZE = 4000;
+    for (let i = 0; i < records.length; i += BATCH_SIZE) {
+      const batch = records.slice(i, i + BATCH_SIZE);
+      if (batch.length === 0) continue;
       await db.$executeRaw`
         INSERT INTO "ClosedIncident"
           ("incidentId","group","openTime","closeTime","status","closedBy",
            "requestedBy","resAnalystCode","resCause","resolutionMins","slaBreached","uploadedAt")
         VALUES ${Prisma.join(
-          records.map(
+          batch.map(
             (r) =>
               Prisma.sql`(${r.incidentId},${r.group},${r.openTime},${r.closeTime},
               ${r.status},${r.closedBy},${r.requestedBy},${r.resAnalystCode},${r.resCause},
