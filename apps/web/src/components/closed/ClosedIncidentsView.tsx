@@ -141,7 +141,7 @@ export function ClosedIncidentsView() {
           dimensionLabel="Analista"
           rows={stats?.byUser ?? []}
           fileBase={`cerrados-analista-${group.toLowerCase()}`}
-          limit={15}
+          limit={25}
         />
         <ClosedRankingDonut
           title="Incidentes cerrados por Código"

@@ -19,6 +19,15 @@ export const DONUT_COLORS = [
   "#5fa89f", // turquesa gris
   "#bfae5a", // mostaza
   "#a8706a", // rojo apagado
+  "#6b8e7a", // verde pino suave
+  "#9c7fb0", // lila apagado
+  "#c2955c", // ámbar
+  "#5d8ab0", // azul medio
+  "#8aa85e", // verde lima apagado
+  "#b07d93", // malva
+  "#7c9bb8", // azul niebla
+  "#caa45f", // trigo
+  "#699a8e", // jade gris
 ];
 
 export const OTROS_COLOR = "#7b8794";
