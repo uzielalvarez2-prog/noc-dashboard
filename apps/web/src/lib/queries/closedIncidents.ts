@@ -1,6 +1,6 @@
 import { db } from "@/lib/db";
 import type { Prisma } from "@prisma/client";
-import { toOperatorLogin } from "@/lib/operatorLogin";
+import { toOperatorLogin, isBotOperator } from "@/lib/operatorLogin";
 
 export interface MonthlyIncidentPoint {
   month: string; // "YYYY-MM"
@@ -87,7 +87,8 @@ export async function getClosedStats(f: ClosedFilters = {}) {
     // requestedBy ya viene como login en el CSV ("mflopez"): no se convierte.
     const req = r.requestedBy?.trim() || "(sin dato)";
     const c = r.resCause || "(sin dato)";
-    userMap.set(u, (userMap.get(u) ?? 0) + 1);
+    // El ranking de analistas es de humanos: el bot smBotCARE se excluye.
+    if (!isBotOperator(u)) userMap.set(u, (userMap.get(u) ?? 0) + 1);
     requesterMap.set(req, (requesterMap.get(req) ?? 0) + 1);
     causeMap.set(c, (causeMap.get(c) ?? 0) + 1);
     const pk = periodKey(r.openTime, bucket);

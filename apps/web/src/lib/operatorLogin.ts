@@ -52,7 +52,32 @@ const NAME_TO_LOGIN: Record<string, string> = {
   "ibarra carmona harec garald": "hibarra",
   "farca villavicencio fedra": "ffarca",
   "morales solano luis alfonso": "lmsolano",
+  // Analistas que HPSM reporta solo con nombre completo (sin login en el export
+  // original). No son duplicados de otro login: son personas distintas. Login
+  // provisional derivado del nombre hasta tener el login HPSM real.
+  "moreno flores angel yair": "aymoreno",
+  "tinajera padilla abigail guadalupe": "atinajer",
+  "zambrano lara miguel": "mzambran",
+  "flores diaz angel antolin": "aflores",
+  "leon garcia jose arturo": "jaleon",
+  "sanchez sanchez jesus humberto": "jhsanche",
+  "cosgaya euan ixchel lucia": "icosgaya",
+  "perez vega rogelio": "rperezv",
+  "fuentes jimenez david": "dfuentes",
+  "arias velazquez israel": "iarias",
+  "serrano jimenez brandon alberto": "bserrano",
+  "zapata castillo adrian de jesus": "azapata",
 };
+
+// Cuentas de bot (no operadores humanos). Comparadas contra el login ya
+// resuelto por toOperatorLogin, en minúsculas. HPSM reporta el bot tanto como
+// "smBotCARE" (login) como "SM BOT" (nombre), así que se cubren ambos.
+const BOT_LOGINS = new Set(["smbotcare", "sm bot"]);
+
+export function isBotOperator(value: string): boolean {
+  if (!value) return false;
+  return BOT_LOGINS.has(value.trim().toLowerCase());
+}
 
 // Quita acentos y colapsa espacios para poder comparar "Núñez" == "Nunez"
 // sin depender de que el CSV traiga los acentos correctos (HPSM a veces los rompe).
