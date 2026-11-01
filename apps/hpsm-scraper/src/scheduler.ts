@@ -170,6 +170,11 @@ cron.schedule(
 startScraperServer({
   runImEstatus: (env) =>
     runJob("run-im-estatus", "src/run-im-estatus.ts", IM_ESTATUS_TIMEOUT_MS, IM_ESTATUS_WAIT_MS, env),
+  // Cierre de IMs: mismo molde que run-im-estatus (entra a HPSM, espera su
+  // turno detrás de open/sisa/closed). ~30 s por IM (abre, aplica template,
+  // cierra, reabre para verificar).
+  runCerrar: (env) =>
+    runJob("run-cerrar", "src/run-cerrar.ts", IM_ESTATUS_TIMEOUT_MS, IM_ESTATUS_WAIT_MS, env),
 });
 
 logger.info(
