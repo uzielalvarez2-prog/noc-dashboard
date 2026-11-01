@@ -65,6 +65,15 @@ export function canConsultarEstatusIm(role: string | undefined): boolean {
 }
 
 /**
+ * Cierre de incidentes en HPSM aplicando templates (página /cerrar-incidentes).
+ * ADMIN estricto: cierra incidentes de verdad (irreversible) y ocupa el login
+ * único del scraper.
+ */
+export function canCerrarIncidentes(role: string | undefined): boolean {
+  return role === "ADMIN";
+}
+
+/**
  * Vista /case-san-juan (incidentes SISA del CASE SAN JUAN + bitácora "Estatus CASE").
  * Abierta a ADMIN, al rol CASE y a SUPERVISOR (desde 2026-10-16). Los supervisores
  * además pueden agregar notas (ver canEditarEstatusCase). IDS aún no la ve.

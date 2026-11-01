@@ -119,6 +119,8 @@ const IM_ESTATUS_FILE = join(process.cwd(), "im-estatus.json");
 export interface ScraperServerDeps {
   /** Encola run-im-estatus en el scheduler. Resuelve false si no llegó a correr. */
   runImEstatus(env: NodeJS.ProcessEnv): Promise<boolean>;
+  /** Encola run-cerrar en el scheduler. Resuelve false si no llegó a correr. */
+  runCerrar(env: NodeJS.ProcessEnv): Promise<boolean>;
 }
 
 interface ProgresoIm {
@@ -174,6 +176,93 @@ async function correrImEstatus(deps: ScraperServerDeps, ims: string[]): Promise<
     progresoIm.mensaje = `Error: ${(e as Error).message}`;
   } finally {
     progresoIm.terminadoEn = new Date().toISOString();
+  }
+}
+
+// ── Cierre de IMs en HPSM (bajo demanda, solo ADMIN) ─────────────────────────
+// Mismo molde que estatus de IMs: job hijo run-cerrar vía runCerrar, resultados
+// en CERRAR_FILE reescrito tras cada IM, progreso leído aquí. El cliente manda
+// pares { im, template } y el modo (verificar | aplicar | cerrar).
+
+const MAX_CERRAR = 50;
+const CERRAR_FILE = join(process.cwd(), "cerrar-estatus.json");
+
+type ModoCierre = "verificar" | "aplicar" | "cerrar";
+
+interface CierreResult {
+  im: string;
+  template: string;
+  modo: ModoCierre;
+  ok: boolean;
+  resultado: string;
+  mensaje: string;
+  statusPrevio?: string;
+}
+
+interface ProgresoCierre {
+  estado: "inactivo" | "en_cola" | "cerrando" | "terminado" | "error";
+  total: number;
+  modo: ModoCierre;
+  iniciadoEn: string | null;
+  terminadoEn: string | null;
+  mensaje: string | null;
+}
+
+const progresoCierre: ProgresoCierre = {
+  estado: "inactivo",
+  total: 0,
+  modo: "verificar",
+  iniciadoEn: null,
+  terminadoEn: null,
+  mensaje: null,
+};
+
+function leerResultadosCierre(): CierreResult[] {
+  try {
+    return JSON.parse(readFileSync(CERRAR_FILE, "utf8")) as CierreResult[];
+  } catch {
+    return [];
+  }
+}
+
+async function correrCierre(
+  deps: ScraperServerDeps,
+  items: { im: string; template: string }[],
+  modo: ModoCierre,
+): Promise<void> {
+  try {
+    if (existsSync(CERRAR_FILE)) unlinkSync(CERRAR_FILE);
+  } catch { /* se sobrescribe igual */ }
+  Object.assign(progresoCierre, {
+    estado: "en_cola",
+    total: items.length,
+    modo,
+    iniciadoEn: new Date().toISOString(),
+    terminadoEn: null,
+    mensaje: null,
+  });
+  try {
+    // CERRAR_LIST con pares "IM=template" para que cada IM lleve el suyo.
+    const lista = items.map((it) => `${it.im}=${it.template}`).join(",");
+    const corrio = await deps.runCerrar({ CERRAR_LIST: lista, CERRAR_MODO: modo, CERRAR_OUT: CERRAR_FILE });
+    const resultados = leerResultadosCierre();
+    const n = resultados.length;
+    if (!corrio) {
+      progresoCierre.estado = "error";
+      progresoCierre.mensaje = "El scraper siguió ocupado con otra corrida de HPSM; intenta de nuevo en unos minutos.";
+    } else if (n < items.length) {
+      progresoCierre.estado = "error";
+      progresoCierre.mensaje = `La corrida se interrumpió: ${n} de ${items.length} IMs procesados (ver logs del scraper).`;
+    } else {
+      const ok = resultados.filter((r) => r.ok).length;
+      progresoCierre.estado = "terminado";
+      progresoCierre.mensaje = `${ok} de ${n} IMs OK (modo ${modo}).`;
+    }
+  } catch (e) {
+    progresoCierre.estado = "error";
+    progresoCierre.mensaje = `Error: ${(e as Error).message}`;
+  } finally {
+    progresoCierre.terminadoEn = new Date().toISOString();
   }
 }
 
@@ -275,6 +364,65 @@ export function startScraperServer(deps: ScraperServerDeps): void {
         }
         void correrImEstatus(deps, ims);
         json(202, { ok: true, iniciado: true, total: ims.length });
+      })();
+      return;
+    }
+
+    // ── Cierre de IMs ────────────────────────────────────────────────────────
+    if (req.method === "GET" && url === "/cerrar-incidentes/progreso") {
+      if (req.headers["x-internal-key"] !== config.internalApiKey) {
+        json(401, { error: "No autorizado" });
+        return;
+      }
+      const estado =
+        progresoCierre.estado === "en_cola" && existsSync(CERRAR_FILE) ? "cerrando" : progresoCierre.estado;
+      json(200, { ok: true, progreso: { ...progresoCierre, estado }, resultados: leerResultadosCierre() });
+      return;
+    }
+
+    if (req.method === "POST" && url === "/cerrar-incidentes") {
+      if (req.headers["x-internal-key"] !== config.internalApiKey) {
+        json(401, { error: "No autorizado" });
+        return;
+      }
+      void (async () => {
+        let body: unknown;
+        try {
+          body = await readJsonBody(req);
+        } catch (e) {
+          json(400, { error: (e as Error).message });
+          return;
+        }
+        const b = (body ?? {}) as { items?: unknown; modo?: unknown };
+        const modoRaw = typeof b.modo === "string" ? b.modo : "verificar";
+        const modo: ModoCierre =
+          modoRaw === "cerrar" || modoRaw === "aplicar" ? (modoRaw as ModoCierre) : "verificar";
+        // items: [{ im, template }]. IM validado contra IM_REGEX; template no
+        // vacío. Se deduplica por IM (el último gana).
+        const porIm = new Map<string, { im: string; template: string }>();
+        if (Array.isArray(b.items)) {
+          for (const it of b.items) {
+            const o = (it ?? {}) as { im?: unknown; template?: unknown };
+            const im = typeof o.im === "string" ? o.im.trim().toUpperCase() : "";
+            const template = typeof o.template === "string" ? o.template.trim() : "";
+            if (IM_REGEX.test(im) && template) porIm.set(im, { im, template });
+          }
+        }
+        const items = [...porIm.values()];
+        if (items.length === 0) {
+          json(400, { error: "items requerido: [{ im, template }] con IM válido y template no vacío" });
+          return;
+        }
+        if (items.length > MAX_CERRAR) {
+          json(400, { error: `Demasiados IMs (máximo ${MAX_CERRAR})` });
+          return;
+        }
+        if (progresoCierre.estado === "en_cola" || progresoCierre.estado === "cerrando") {
+          json(409, { error: "Ya hay una corrida de cierre en curso" });
+          return;
+        }
+        void correrCierre(deps, items, modo);
+        json(202, { ok: true, iniciado: true, total: items.length, modo });
       })();
       return;
     }

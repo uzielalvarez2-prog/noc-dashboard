@@ -6,6 +6,13 @@ debug-*.png
 diag-*.png
 hpsm-cookies.json
 
+# Artefactos de las corridas de cierre/reconocimiento (screenshots y JSON de salida)
+cerrar-*.png
+cerrar-*.json
+explorar-cierre-*.png
+explorar-cierre-*.json
+aplicado-*.png
+
 # Token de Control Center (NUNCA versionar — es secreto)
 .cc-token.json
 .cc-token*.json
