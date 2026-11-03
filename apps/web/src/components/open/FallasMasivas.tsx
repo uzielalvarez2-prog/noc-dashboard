@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { AlertTriangle, Loader2, Copy, Check, ChevronDown, ChevronRight, ShieldCheck, Search, X } from "lucide-react";
 import type { OpenIncidentRow } from "@/types/open";
@@ -97,6 +97,20 @@ export function FallasMasivas({ group }: { group: "PEXA" | "CECOR" }) {
   const [zoneQuery, setZoneQuery] = useState("");
   const [selectedZone, setSelectedZone] = useState<string | null>(null);
   const [zoneCopied, setZoneCopied] = useState(false);
+  const [zoneOpen, setZoneOpen] = useState(false); // dropdown de sugerencias abierto
+  const zoneBoxRef = useRef<HTMLDivElement>(null);
+
+  // Cierra el dropdown al hacer clic fuera del buscador.
+  useEffect(() => {
+    if (!zoneOpen) return;
+    const onDocClick = (e: MouseEvent) => {
+      if (zoneBoxRef.current && !zoneBoxRef.current.contains(e.target as Node)) {
+        setZoneOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", onDocClick);
+    return () => document.removeEventListener("mousedown", onDocClick);
+  }, [zoneOpen]);
 
   const { data: rows, isLoading } = useQuery({
     queryKey: ["zone-bursts", group],
@@ -207,11 +221,13 @@ export function FallasMasivas({ group }: { group: "PEXA" | "CECOR" }) {
     setSelectedZone(zone);
     setZoneQuery(zone);
     setZoneCopied(false);
+    setZoneOpen(false); // al elegir, se cierra el dropdown
   }
   function clearZone() {
     setSelectedZone(null);
     setZoneQuery("");
     setZoneCopied(false);
+    setZoneOpen(false);
   }
   async function copyZone() {
     if (!selectedZone || !zoneSummary) return;
@@ -380,13 +396,18 @@ export function FallasMasivas({ group }: { group: "PEXA" | "CECOR" }) {
           </span>
         </div>
 
-        <div className="relative max-w-md">
+        <div ref={zoneBoxRef} className="relative max-w-md">
           <input
             type="text"
             value={zoneQuery}
+            onFocus={() => setZoneOpen(true)}
             onChange={(e) => {
               setZoneQuery(e.target.value);
               if (selectedZone) setSelectedZone(null);
+              setZoneOpen(true);
+            }}
+            onKeyDown={(e) => {
+              if (e.key === "Escape") setZoneOpen(false);
             }}
             placeholder={dim === "state" ? "Ej. CDMX, Jalisco, Nuevo León…" : "Ej. Distrito…"}
             className="w-full rounded-md border border-border bg-surface px-3 py-2 pr-8 text-sm text-text-primary placeholder:text-text-muted/60 focus:border-accent focus:outline-none"
@@ -402,8 +423,10 @@ export function FallasMasivas({ group }: { group: "PEXA" | "CECOR" }) {
             </button>
           )}
 
-          {/* Sugerencias: visibles mientras no haya zona fijada y haya coincidencias. */}
-          {!selectedZone && zoneMatches.length > 0 && (
+          {/* Sugerencias: solo cuando el buscador tiene foco (dropdown abierto),
+              no hay zona fijada y hay coincidencias. Se cierra al elegir, al
+              hacer clic fuera o con Escape. */}
+          {zoneOpen && !selectedZone && zoneMatches.length > 0 && (
             <ul className="absolute z-10 mt-1 max-h-60 w-full overflow-auto rounded-md border border-border bg-surface-elevated py-1 shadow-lg">
               {zoneMatches.map((z) => (
                 <li key={z.zone}>
