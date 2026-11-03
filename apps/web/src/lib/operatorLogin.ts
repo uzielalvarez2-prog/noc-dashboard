@@ -101,3 +101,38 @@ export function toOperatorLogin(fullName: string): string {
   const login = NAME_TO_LOGIN[normalizeName(fullName)];
   return login ?? fullName;
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Cruce inverso: login HPSM → nombre completo legible.
+//
+// NAME_TO_LOGIN mapea nombre→login y a veces varias grafías del mismo nombre
+// apuntan al mismo login (p.ej. "morelos ramirez daniel alberto" y
+// "daniel alberto morelos ramirez" → "dmorelos"). Para el inverso nos quedamos
+// con la PRIMERA grafía declarada de cada login (la del listado oficial HPSM),
+// que viene en orden "Apellido(s) Nombre(s)".
+// ─────────────────────────────────────────────────────────────────────────────
+const LOGIN_TO_NAME: Record<string, string> = (() => {
+  const out: Record<string, string> = {};
+  for (const [name, login] of Object.entries(NAME_TO_LOGIN)) {
+    const key = login.toLowerCase();
+    if (!(key in out)) out[key] = name; // conserva la primera grafía vista
+  }
+  return out;
+})();
+
+// Pasa a Capital Case: "licea alvarez pablo" → "Licea Alvarez Pablo".
+function titleCase(s: string): string {
+  return s.replace(/\b([a-záéíóúñ])([a-záéíóúñ]*)/giu, (_, a: string, b: string) => a.toUpperCase() + b);
+}
+
+/**
+ * Devuelve el nombre completo legible para un login HPSM, o `null` si el login
+ * no está mapeado todavía (operador nuevo por dar de alta en el diccionario/BD).
+ * El nombre sale en el orden del CSV ("Apellidos Nombres") pero con mayúsculas
+ * iniciales, p.ej. "kvieyra" → "Vieyra Renteria Katherine Alexa".
+ */
+export function operatorFullName(login: string): string | null {
+  if (!login) return null;
+  const name = LOGIN_TO_NAME[login.trim().toLowerCase()];
+  return name ? titleCase(name) : null;
+}
