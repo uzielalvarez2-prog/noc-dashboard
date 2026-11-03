@@ -272,8 +272,11 @@ const client = new Client({
   // patrón webVersionCache remoto es la solución documentada de whatsapp-web.js.
   webVersionCache: {
     type: "remote",
+    // Actualizado 2026-11-02: el pin anterior (2.3000.1046969912) quedó obsoleto y
+    // WhatsApp dejó de aceptarlo al vincular ("no se puede vincular" tras escanear
+    // QR, aun con QR fresco). Se sube a la versión que WhatsApp sirve actualmente.
     remotePath:
-      "https://raw.githubusercontent.com/wppconnect-team/wa-version/main/html/2.3000.1046969912-alpha.html",
+      "https://raw.githubusercontent.com/wppconnect-team/wa-version/main/html/2.3000.1052747707-alpha.html",
   },
   puppeteer: {
     // --no-sandbox: necesario en varios entornos Windows/servidor sin GUI dedicada.
