@@ -12,6 +12,8 @@ cerrar-*.json
 explorar-cierre-*.png
 explorar-cierre-*.json
 aplicado-*.png
+no-encontrado-*.png
+sin-boton-cierre-*.png
 
 # Token de Control Center (NUNCA versionar — es secreto)
 .cc-token.json

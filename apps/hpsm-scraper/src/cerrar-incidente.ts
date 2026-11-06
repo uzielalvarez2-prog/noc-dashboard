@@ -15,7 +15,15 @@ import { IM_REGEX } from "./hpsm-incident.js";
  *   5.   Elegir template          → wizard "Select Incident Template": una tabla
  *                                    de links <a>; se clickea el que su texto ==
  *                                    el template pedido (match exacto, trim).
- *   6.   Close (X)                → GUARDA/CIERRA el incidente. IRREVERSIBLE.
+ *   6.   Cerrar                   → GUARDA/CIERRA el incidente. IRREVERSIBLE.
+ *                                    Dos escenarios (ambos: el template ya dejó
+ *                                    Status=Closed/Phase=Closure):
+ *                                      A) botón "close" en la toolbar (persiste
+ *                                         directo; visto 2026-10-31, *A TX SINC).
+ *                                      B) sin "close": se da "Cancel" y HPSM abre
+ *                                         el popup "unsaved changes… Save them
+ *                                         now?" → "Yes" persiste (visto
+ *                                         2026-11-06, IMSDED*).
  *   7.   Cancel (X)               → vuelve para el siguiente IM (lo hace el job
  *                                    al navegar al próximo deep link).
  *
@@ -106,6 +114,45 @@ async function clickBotonToolbar(page: Page, texto: string, timeoutMs = 15_000):
   return false;
 }
 
+/**
+ * Atrapa el popup de confirmación de HPSM "You have unsaved changes to this
+ * record. Save them now?" (aparece como pestaña "Question" tras dar Cancel en un
+ * incidente con cambios sin guardar) y presiona **Yes** para PERSISTIR esos
+ * cambios. Escenario visto el 2026-11-06 con los IMSDED*: el template deja
+ * Status=Closed/Phase=Closure, la toolbar NO tiene botón "close", y el cierre se
+ * guarda por este diálogo al salir con Cancel.
+ *
+ * CRÍTICO: solo se clickea "Yes". "No" descartaría el cierre y "Cancel" volvería
+ * al incidente — por eso el match es ESTRICTO (texto == "Yes"), no un contains.
+ * Devuelve true si encontró y clickeó el Yes; false si no apareció el popup.
+ */
+async function clickPopupYes(page: Page, timeoutMs = 8_000): Promise<boolean> {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    for (const frame of page.frames()) {
+      // Confirmar que es el diálogo de cambios sin guardar (no cualquier Yes
+      // suelto): debe contener el texto "unsaved changes"/"Save them now".
+      const esDialogo = await frame
+        .locator('text=/unsaved changes|Save them now/i')
+        .first()
+        .count()
+        .catch(() => 0);
+      if (!esDialogo) continue;
+      // Botón Yes: match ESTRICTO al texto "Yes" (case-insensitive), visible.
+      const yes = frame.getByText(/^\s*Yes\s*$/i).first();
+      if (!(await yes.isVisible({ timeout: 500 }).catch(() => false))) continue;
+      const btn = yes.locator(
+        'xpath=ancestor-or-self::*[self::button or contains(concat(" ", normalize-space(@class), " "), " x-btn ")][1]',
+      );
+      const target = (await btn.count().catch(() => 0)) > 0 ? btn : yes;
+      await target.evaluate((el) => (el as HTMLElement).click());
+      return true;
+    }
+    await page.waitForTimeout(500);
+  }
+  return false;
+}
+
 /** Cierra las pestañas de aplicación de HPSM (igual que hpsm-incident.ts). */
 async function cerrarPestanas(page: Page): Promise<void> {
   const main = page.mainFrame();
@@ -183,9 +230,22 @@ export async function cerrarIncidente(
     if (!detail) {
       return { ...base, resultado: "error", mensaje: "El formulario del incidente no cargó (detail.do)" };
     }
-    const numero = (await detail.locator('input[name="instance/number"]').first().inputValue().catch(() => "")).trim();
+    // Esperar a que instance/number se pueble: en un servidor lento (Railway)
+    // el frame existe pero el valor tarda, y leerlo de inmediato daba un falso
+    // "no encontrado". Se reintenta hasta 12 s.
+    let numero = "";
+    const numDeadline = Date.now() + 12_000;
+    while (Date.now() < numDeadline) {
+      numero = (await detail.locator('input[name="instance/number"]').first().inputValue().catch(() => "")).trim();
+      if (numero) break;
+      await page.waitForTimeout(1_000);
+    }
     if (!numero) {
-      return { ...base, resultado: "no-encontrado", mensaje: `IM ${im} no existe en HPSM` };
+      // Diagnóstico: screenshot de lo que HPSM mostró (form de búsqueda si el IM
+      // no existe, o el incidente si solo tardó). Ayuda a distinguir ambos.
+      await page.screenshot({ path: `no-encontrado-${im}.png`, fullPage: true }).catch(() => {});
+      logger.warn(`cerrar-incidente ${im}: instance/number vacío tras 12s → screenshot no-encontrado-${im}.png`);
+      return { ...base, resultado: "no-encontrado", mensaje: `IM ${im} no existe en HPSM (o HPSM no lo devolvió)` };
     }
     if (numero.toUpperCase() !== im) {
       return { ...base, resultado: "error", mensaje: `HPSM abrió ${numero} en lugar de ${im}` };
@@ -293,28 +353,54 @@ export async function cerrarIncidente(
     // aplicado. Queda como prueba de qué se cerró, por si algo sale raro.
     await page.screenshot({ path: `cerrar-antes-${im}.png`, fullPage: true }).catch(() => {});
 
-    // El botón que persiste el cierre tras aplicar el template. Visto el
-    // 2026-10-31: el template *A TX SINC ya deja Status=Closed/Phase=Closure, y
-    // la toolbar muestra "close" (minúscula) que es el que GUARDA ese cierre.
-    // El match de clickBotonToolbar es insensible a mayúsculas. Se deja
-    // "Save & Exit"/"OK" como respaldo por si otro template usa otra toolbar.
+    // Hay DOS escenarios de cierre según el incidente/template (ambos dejan
+    // Status=Closed/Phase=Closure tras aplicar el template):
+    //
+    //   A) Toolbar con "close" (visto 2026-10-31, *A TX SINC): el botón "close"
+    //      (minúscula) de la toolbar GUARDA el cierre directamente.
+    //   B) Toolbar con "Cancel" + popup (visto 2026-11-06, IMSDED*): NO hay
+    //      botón "close". Se da "Cancel" y HPSM abre el diálogo "You have
+    //      unsaved changes… Save them now?" — se presiona "Yes" y eso persiste
+    //      el cierre ("Incident record updated").
+    //
+    // Se intenta A primero (más directo); si no hay "close" en la toolbar, se
+    // usa B. El match de clickBotonToolbar es insensible a mayúsculas.
     let cerrado = false;
     let botonUsado = "";
+
+    // Escenario A: botón "close"/"Save & Exit"/"OK" en la toolbar.
     for (const texto of ["close", "Save & Exit", "OK"]) {
-      if (await clickBotonToolbar(page, texto)) {
+      if (await clickBotonToolbar(page, texto, 5_000)) {
         cerrado = true;
         botonUsado = texto;
-        logger.info(`cerrar-incidente ${im}: click en "${texto}" para cerrar`);
+        logger.info(`cerrar-incidente ${im}: escenario A, click en "${texto}" para cerrar`);
         break;
       }
     }
+
+    // Escenario B: no hubo botón de cierre directo → Cancel + popup "Yes".
     if (!cerrado) {
+      logger.info(`cerrar-incidente ${im}: sin botón de cierre en toolbar → escenario B (Cancel + popup Yes)`);
+      const dioCancel = await clickBotonToolbar(page, "Cancel", 8_000);
+      if (dioCancel) {
+        if (await clickPopupYes(page)) {
+          cerrado = true;
+          botonUsado = "Cancel → Yes (unsaved changes)";
+          logger.info(`cerrar-incidente ${im}: escenario B, popup "Save them now?" → Yes`);
+        } else {
+          logger.warn(`cerrar-incidente ${im}: dio Cancel pero no apareció el popup "Save them now?"`);
+        }
+      }
+    }
+
+    if (!cerrado) {
+      await page.screenshot({ path: `sin-boton-cierre-${im}.png`, fullPage: true }).catch(() => {});
       await cerrarPestanas(page);
       return {
         ...base,
         statusPrevio,
         resultado: "error",
-        mensaje: `Template aplicado pero no se encontró el botón de cierre (Save & Exit/Close/OK) en ${im}`,
+        mensaje: `Template aplicado pero no se pudo cerrar ${im}: ni botón "close" en toolbar ni popup "unsaved changes → Yes". Revisa sin-boton-cierre-${im}.png`,
       };
     }
     await page.waitForTimeout(3_000);
