@@ -1,8 +1,8 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { Fragment, useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Flame, Search, X, RefreshCw } from "lucide-react";
+import { Flame, Search, X, RefreshCw, FileText, Copy, Check, Save } from "lucide-react";
 import { cn, formatHpsm } from "@/lib/utils";
 import { HpsmIncidentId } from "@/components/shared/HpsmIncidentId";
 
@@ -19,6 +19,10 @@ export interface CriticalItem {
   group: string | null;
   stillOpen: boolean;
   markedAt: string;
+  // Formato EDC (texto): editado > reporte WhatsApp > generado desde SISA/abiertos.
+  edcText: string;
+  edcSource: "editado" | "whatsapp" | "generado" | "sin-datos";
+  edcEdited: boolean;
 }
 
 export interface CriticalResponse {
@@ -62,12 +66,121 @@ function GroupBadge({ group }: { group: string | null }) {
 
 const COLS = [
   "Incident ID", "Apertura", "Estatus", "Empresa", "Servicio",
-  "Estado", "Distrito", "Sitio", "Asignado", "Grupo",
+  "Estado", "Distrito", "Sitio", "Asignado", "Grupo", "EDC",
 ];
+
+// Editor del "Formato EDC" de un crítico: textarea con Copiar, Guardar (persiste
+// la edición privada) y Restaurar (borra la edición → vuelve al texto original).
+function EdcEditor({
+  item,
+  onClose,
+  onSave,
+  onRestore,
+  saving,
+}: {
+  item: CriticalItem;
+  onClose: () => void;
+  onSave: (text: string) => void;
+  onRestore: () => void;
+  saving: boolean;
+}) {
+  const [draft, setDraft] = useState(item.edcText);
+  const [copied, setCopied] = useState(false);
+  // Si el texto del servidor cambia (p.ej. tras guardar o refetch) y no hay
+  // ediciones locales sin guardar, sincroniza el borrador.
+  useEffect(() => {
+    setDraft(item.edcText);
+  }, [item.edcText]);
+
+  const dirty = draft !== item.edcText;
+  const sourceLabel =
+    item.edcSource === "editado"
+      ? "editado por ti"
+      : item.edcSource === "whatsapp"
+      ? "desde Reporte WhatsApp"
+      : item.edcSource === "generado"
+      ? "generado (SISA/abiertos)"
+      : "sin datos";
+
+  async function copy() {
+    try {
+      await navigator.clipboard.writeText(draft);
+    } catch {
+      const ta = document.createElement("textarea");
+      ta.value = draft;
+      document.body.appendChild(ta);
+      ta.select();
+      document.execCommand("copy");
+      document.body.removeChild(ta);
+    }
+    setCopied(true);
+    setTimeout(() => setCopied(false), 1500);
+  }
+
+  return (
+    <div className="space-y-2 rounded-lg border border-violet-500/40 bg-surface/60 p-3">
+      <div className="flex items-center justify-between gap-2">
+        <span className="flex items-center gap-1.5 text-xs font-semibold text-text-primary">
+          <FileText className="h-3.5 w-3.5 text-violet-400" />
+          Formato EDC · {item.incidentId}
+          <span className="font-normal text-text-muted">({sourceLabel})</span>
+        </span>
+        <button type="button" onClick={onClose} title="Cerrar" className="text-text-muted hover:text-text-primary">
+          <X className="h-4 w-4" />
+        </button>
+      </div>
+      <textarea
+        value={draft}
+        onChange={(e) => setDraft(e.target.value)}
+        rows={Math.min(14, Math.max(7, draft.split("\n").length + 1))}
+        spellCheck={false}
+        className="w-full resize-y rounded-md border border-border bg-background/60 p-2.5 font-mono text-xs leading-relaxed text-text-primary focus:border-accent focus:outline-none"
+      />
+      <div className="flex flex-wrap items-center gap-2">
+        <button
+          type="button"
+          onClick={copy}
+          className={cn(
+            "flex items-center gap-1 rounded-md border px-2.5 py-1.5 text-xs font-medium transition-colors",
+            copied ? "border-success/50 bg-success/10 text-success" : "border-border text-text-muted hover:text-text-primary"
+          )}
+        >
+          {copied ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
+          {copied ? "Copiado" : "Copiar"}
+        </button>
+        <button
+          type="button"
+          onClick={() => onSave(draft)}
+          disabled={saving || !dirty}
+          title={dirty ? "Guardar tu versión" : "Sin cambios por guardar"}
+          className="flex items-center gap-1 rounded-md border border-violet-500/50 bg-violet-500/10 px-2.5 py-1.5 text-xs font-medium text-violet-300 hover:bg-violet-500/20 disabled:opacity-40"
+        >
+          <Save className="h-3.5 w-3.5" />
+          {saving ? "Guardando…" : "Guardar"}
+        </button>
+        {item.edcEdited && (
+          <button
+            type="button"
+            onClick={onRestore}
+            disabled={saving}
+            title="Borrar tu edición y volver al texto original"
+            className="flex items-center gap-1 rounded-md border border-border px-2.5 py-1.5 text-xs font-medium text-text-muted hover:text-text-primary disabled:opacity-40"
+          >
+            <RefreshCw className="h-3.5 w-3.5" />
+            Restaurar
+          </button>
+        )}
+        {dirty && <span className="text-[11px] text-warning">· cambios sin guardar</span>}
+      </div>
+    </div>
+  );
+}
 
 export function CriticalIncidentsView() {
   const qc = useQueryClient();
   const [searchQuery, setSearchQuery] = useState("");
+  // Incidente cuyo editor EDC está abierto (null = ninguno).
+  const [editingEdc, setEditingEdc] = useState<string | null>(null);
 
   const { data, isFetching, refetch } = useQuery<CriticalResponse>({
     queryKey: ["critical"],
@@ -81,6 +194,17 @@ export function CriticalIncidentsView() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ incidentId, critical: false }),
+      });
+    },
+    onSettled: () => qc.invalidateQueries({ queryKey: ["critical"] }),
+  });
+
+  const saveEdc = useMutation({
+    mutationFn: async ({ incidentId, edcText }: { incidentId: string; edcText: string | null }) => {
+      await fetch("/api/incidents/critical", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ incidentId, edcText }),
       });
     },
     onSettled: () => qc.invalidateQueries({ queryKey: ["critical"] }),
@@ -163,11 +287,13 @@ export function CriticalIncidentsView() {
               </tr>
             ) : (
               shown.map((it) => (
+                <Fragment key={it.incidentId}>
                 <tr
-                  key={it.incidentId}
                   className={cn(
                     "border-b border-border/40 transition-colors",
-                    it.stillOpen
+                    editingEdc === it.incidentId
+                      ? "bg-violet-500/10"
+                      : it.stillOpen
                       ? "bg-critical/5 hover:bg-critical/10"
                       : "opacity-60 hover:bg-surface-elevated/40"
                   )}
@@ -215,7 +341,42 @@ export function CriticalIncidentsView() {
                   <td className="px-3 py-2">
                     <GroupBadge group={it.group} />
                   </td>
+                  <td className="px-3 py-2">
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setEditingEdc((cur) => (cur === it.incidentId ? null : it.incidentId))
+                      }
+                      title="Ver / editar el Formato EDC"
+                      className={cn(
+                        "flex items-center gap-1 rounded-md border px-2 py-1 text-xs font-medium transition-colors",
+                        editingEdc === it.incidentId
+                          ? "border-violet-500 bg-violet-500/20 text-violet-200"
+                          : it.edcEdited
+                          ? "border-violet-500/50 bg-violet-500/10 text-violet-300 hover:bg-violet-500/20"
+                          : "border-border text-text-muted hover:text-text-primary"
+                      )}
+                    >
+                      <FileText className="h-3.5 w-3.5" />
+                      EDC
+                      {it.edcEdited && <span className="text-[10px]">✎</span>}
+                    </button>
+                  </td>
                 </tr>
+                {editingEdc === it.incidentId && (
+                  <tr className="bg-violet-500/5">
+                    <td colSpan={COLS.length + 1} className="px-3 pb-3 pt-0">
+                      <EdcEditor
+                        item={it}
+                        saving={saveEdc.isPending}
+                        onClose={() => setEditingEdc(null)}
+                        onSave={(text) => saveEdc.mutate({ incidentId: it.incidentId, edcText: text })}
+                        onRestore={() => saveEdc.mutate({ incidentId: it.incidentId, edcText: null })}
+                      />
+                    </td>
+                  </tr>
+                )}
+                </Fragment>
               ))
             )}
           </tbody>

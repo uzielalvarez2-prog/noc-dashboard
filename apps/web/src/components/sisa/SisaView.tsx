@@ -8,6 +8,8 @@ import { cn, formatHpsm } from "@/lib/utils";
 import { downloadXLSX } from "@/lib/excelExport";
 import { HpsmIncidentId } from "@/components/shared/HpsmIncidentId";
 import { buildEdcText } from "@/lib/sisa";
+import { canMarcarCriticos } from "@/lib/permissions";
+import { CriticalToggleButton } from "@/components/open/CriticalToggleButton";
 import type { SortDir } from "@/lib/exportOpenIncidents";
 
 interface SisaItem {
@@ -116,6 +118,14 @@ const COLUMNS = ["Incidente", "Apertura", "Empresa", "Servicio", "Distrito", "CA
 export function SisaView() {
   const { theme } = useTheme();
   const isLight = theme === "light";
+  const [role, setRole] = useState<string | undefined>();
+  useEffect(() => {
+    fetch("/api/auth/me")
+      .then((r) => r.json())
+      .then((d) => setRole(d.role))
+      .catch(() => {});
+  }, []);
+  const showCritical = canMarcarCriticos(role);
   const [q, setQ] = useState("");
   const [sortDir, setSortDir] = useState<SortDir>("desc");
   const [selectedStatus, setSelectedStatus] = useState<string | null>(null);
@@ -657,6 +667,14 @@ export function SisaView() {
           <table className="w-full border-collapse text-sm">
             <thead className="sticky top-0 z-10 bg-surface-elevated/80 backdrop-blur-md">
               <tr>
+                {showCritical && (
+                  <th
+                    title="Marcar como Crítico"
+                    className="w-8 border-b border-border/60 px-2 py-2 text-center text-xs font-medium uppercase tracking-wider text-text-muted"
+                  >
+                    🔥
+                  </th>
+                )}
                 {COLUMNS.map((h) => (
                   <th
                     key={h}
@@ -691,11 +709,11 @@ export function SisaView() {
             <tbody>
               {isLoading ? (
                 <tr>
-                  <td colSpan={COLUMNS.length} className="py-12 text-center text-sm text-text-muted">Cargando…</td>
+                  <td colSpan={COLUMNS.length + (showCritical ? 1 : 0)} className="py-12 text-center text-sm text-text-muted">Cargando…</td>
                 </tr>
               ) : filtered.length === 0 ? (
                 <tr>
-                  <td colSpan={COLUMNS.length} className="py-12 text-center text-sm text-text-muted">
+                  <td colSpan={COLUMNS.length + (showCritical ? 1 : 0)} className="py-12 text-center text-sm text-text-muted">
                     {q || hasFilter
                       ? "Sin resultados para el filtro actual"
                       : "Sube un CSV de SISA (o no hay coincidencias con incidentes abiertos)"}
@@ -707,6 +725,11 @@ export function SisaView() {
                     key={it.incidentId}
                     className="border-b border-border/40 transition-colors hover:bg-surface-elevated/40"
                   >
+                    {showCritical && (
+                      <td className="px-2 py-2 text-center">
+                        <CriticalToggleButton incidentId={it.incidentId} />
+                      </td>
+                    )}
                     <td className="px-3 py-2">
                       <HpsmIncidentId incidentId={it.incidentId} className="font-mono text-xs text-text-muted" />
                     </td>

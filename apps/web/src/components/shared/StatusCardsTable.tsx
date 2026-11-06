@@ -113,6 +113,7 @@ export function StatusCardsTable({
   showNote = true,
   showFlag = true,
   renderIpCell,
+  renderCriticalCell,
 }: {
   items: StatusCardItem[];
   isLoading: boolean;
@@ -133,9 +134,13 @@ export function StatusCardsTable({
   // como render-prop para que este componente compartido no dependa del
   // monitoreo (lo usan también las vistas de War Room).
   renderIpCell?: (it: StatusCardItem) => React.ReactNode;
+  // Si viene, agrega una columna "🔥" al inicio (marcar crítico, solo ADMIN).
+  // Render-prop para no acoplar este componente a la lógica de críticos.
+  renderCriticalCell?: (it: StatusCardItem) => React.ReactNode;
 }) {
   const statusColor = neonStatus ? statusNeon : statusAccent;
   const headers = [
+    ...(renderCriticalCell ? ["🔥"] : []),
     ...(showNote ? ["Nota"] : []),
     "Quitar",
     ...(showFlag ? ["🚩"] : []),
@@ -323,6 +328,9 @@ export function StatusCardsTable({
                   const rowText = it.flagged ? "text-critical" : "text-text-primary";
                   return (
                     <tr key={it.incidentId} className="border-b border-border transition-colors last:border-0 hover:bg-surface-elevated/40">
+                      {renderCriticalCell && (
+                        <td className="px-3 py-2.5 text-center">{renderCriticalCell(it)}</td>
+                      )}
                       {showNote && (
                         <td className="px-3 py-2.5">
                           <NoteCell value={it.note} onSave={(note) => onPatch(it, { note })} />

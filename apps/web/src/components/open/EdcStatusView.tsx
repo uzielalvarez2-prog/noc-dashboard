@@ -3,8 +3,9 @@
 import { useMemo, useState, useEffect } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { StatusCardsTable, type StatusCardItem } from "@/components/shared/StatusCardsTable";
-import { canCaptureMonitoredIp } from "@/lib/permissions";
+import { canCaptureMonitoredIp, canMarcarCriticos } from "@/lib/permissions";
 import { IpMonitorCell } from "./IpMonitorCell";
+import { CriticalToggleButton } from "./CriticalToggleButton";
 import {
   fetchMonitoredIpMatches,
   fetchActiveMonitors,
@@ -79,6 +80,7 @@ export function EdcStatusView() {
       .catch((e) => console.error("[EdcStatusView] no se pudo leer el rol", e));
   }, []);
   const showMonitoring = canCaptureMonitoredIp(role);
+  const showCritical = canMarcarCriticos(role);
 
   const companies = useMemo(() => [...new Set(items.map((i) => i.company))], [items]);
   const services = useMemo(() => [...new Set(items.map((i) => i.serviceId))], [items]);
@@ -150,6 +152,9 @@ export function EdcStatusView() {
       neonStatus
       showNote={false}
       showFlag={false}
+      renderCriticalCell={
+        showCritical ? (it) => <CriticalToggleButton incidentId={it.incidentId} /> : undefined
+      }
       renderIpCell={
         showMonitoring
           ? (it) => (

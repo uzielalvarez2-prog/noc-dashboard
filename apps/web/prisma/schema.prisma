@@ -150,6 +150,11 @@ model CriticalIncident {
   id         String   @id @default(cuid())
   userId     String
   incidentId String
+  // Texto "Formato EDC" editado por el usuario para este crítico. Si es null, la
+  // vista lo arma al vuelo (rawText del reporte de WhatsApp si existe, o
+  // buildEdcText desde SISA/abiertos). Es PRIVADO del usuario: no toca el
+  // reporte de WhatsApp del equipo.
+  edcText    String?
   createdAt  DateTime @default(now())
 
   @@unique([userId, incidentId])
