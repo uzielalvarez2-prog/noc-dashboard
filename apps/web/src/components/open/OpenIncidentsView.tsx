@@ -1,8 +1,11 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
+import { Flame } from "lucide-react";
 import { useTheme } from "@/components/layout/ThemeProvider";
+import { canMarcarCriticos } from "@/lib/permissions";
+import { CriticalIncidentsView } from "./CriticalIncidentsView";
 import { PageHeader } from "@/components/layout/PageHeaderProvider";
 import type { OpenStats } from "@/types/open";
 import { OpenKpis } from "./OpenKpis";
@@ -253,10 +256,21 @@ export function OpenIncidentsView({ trailing }: { trailing?: React.ReactNode }) 
   const { theme } = useTheme();
   const isLight = theme === "light";
   const [group, setGroup] = useState<Group>("CLIENTE_TOP");
+  // "&&& Criticos": vista privada de ADMIN, va junto a los botones de grupo.
+  const [showingCriticos, setShowingCriticos] = useState(false);
+
+  const [role, setRole] = useState<string | undefined>();
+  useEffect(() => {
+    fetch("/api/auth/me")
+      .then((r) => r.json())
+      .then((d) => setRole(d.role))
+      .catch(() => {});
+  }, []);
+  const showCriticos = canMarcarCriticos(role);
 
   const groupBtn = (g: Group) => {
     const s = getGroupStyle(isLight)[g];
-    const active = group === g;
+    const active = group === g && !showingCriticos;
     return cn(
       "rounded-lg border px-3 py-2 text-sm font-semibold transition-all",
       s.border, s.bg, s.text,
@@ -264,28 +278,61 @@ export function OpenIncidentsView({ trailing }: { trailing?: React.ReactNode }) 
     );
   };
 
+  // Botón "&&& Criticos" con estilo rojo (critical), al estilo de los grupos.
+  const criticosBtn = cn(
+    "flex items-center gap-1.5 rounded-lg border px-3 py-2 text-sm font-semibold transition-all",
+    isLight ? "border-red-400 bg-red-50 text-red-700" : "border-red-500/50 bg-red-500/10 text-red-400",
+    showingCriticos
+      ? cn("ring-2", isLight ? "ring-red-400" : "ring-red-500", !isLight && "shadow-[0_0_10px_2px_rgba(239,68,68,0.4)]")
+      : "opacity-60 hover:opacity-100"
+  );
+
+  const headerTitle = showingCriticos
+    ? "Incidentes abiertos · Críticos"
+    : `Incidentes abiertos · ${GROUP_LABELS[group]}`;
+
   return (
     <div className="space-y-5">
-      <PageHeader title={`Incidentes abiertos · ${GROUP_LABELS[group]}`} subtitle={OPEN_SUBTITLE} />
+      <PageHeader title={headerTitle} subtitle={OPEN_SUBTITLE} />
 
       <div className="flex flex-wrap items-center gap-2">
         {GROUP_ORDER.map((g) => (
-          <button key={g} type="button" onClick={() => setGroup(g)} className={groupBtn(g)}>
+          <button
+            key={g}
+            type="button"
+            onClick={() => {
+              setGroup(g);
+              setShowingCriticos(false);
+            }}
+            className={groupBtn(g)}
+          >
             {GROUP_LABELS[g]}
           </button>
         ))}
+        {showCriticos && (
+          <button type="button" onClick={() => setShowingCriticos(true)} className={criticosBtn}>
+            <Flame className="h-3.5 w-3.5" />
+            &amp;&amp;&amp; Criticos
+          </button>
+        )}
         {trailing && <div className="ml-auto">{trailing}</div>}
       </div>
 
-      {group === "CLIENTE_TOP" && <ClienteTopView />}
+      {showingCriticos ? (
+        <CriticalIncidentsView />
+      ) : (
+        <>
+          {group === "CLIENTE_TOP" && <ClienteTopView />}
 
-      {(group === "PEXA" || group === "CECOR") && (
-        <PexaCecorView key={group} group={group} />
+          {(group === "PEXA" || group === "CECOR") && (
+            <PexaCecorView key={group} group={group} />
+          )}
+
+          {group === "EDC" && <EdcTabs />}
+
+          {group === "SISA" && <SisaView />}
+        </>
       )}
-
-      {group === "EDC" && <EdcTabs />}
-
-      {group === "SISA" && <SisaView />}
     </div>
   );
 }

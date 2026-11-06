@@ -2,13 +2,14 @@
 
 import { useState, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient, keepPreviousData } from "@tanstack/react-query";
-import { Search, ChevronLeft, ChevronRight, RefreshCw, Star, Download, Copy, Check } from "lucide-react";
+import { Search, ChevronLeft, ChevronRight, RefreshCw, Star, Download, Copy, Check, Flame } from "lucide-react";
 import type { OpenListResponse } from "@/types/open";
 import { fetchEscalated, type EscalatedResponse } from "@/components/dashboard/EscalatedPanel";
+import { fetchCritical, type CriticalResponse } from "@/components/open/CriticalIncidentsView";
 import { cn, formatDate, formatHpsm } from "@/lib/utils";
 import { HpsmIncidentId } from "@/components/shared/HpsmIncidentId";
 import { exportOpenIncidents, type SortDir } from "@/lib/exportOpenIncidents";
-import { canAccessMonitoring } from "@/lib/permissions";
+import { canAccessMonitoring, canMarcarCriticos } from "@/lib/permissions";
 import { IpMonitorCell } from "./IpMonitorCell";
 import { fetchMonitoredIpMatches, fetchActiveMonitors, pickIpMatchForRow } from "@/lib/ipMonitoring";
 import { buildIncidenteTemplate } from "@/lib/incidenteTemplate";
@@ -91,6 +92,8 @@ export function OpenIncidentTable({
   // IP/Monitoreo (esa columna es específica de PEXA).
   const showSummary = group === "CECOR";
   const showMonitoring = !showSummary && canAccessMonitoring(role);
+  // Columna "Crítico" (marcar para la vista privada "&&& Criticos"): solo ADMIN.
+  const showCritical = canMarcarCriticos(role);
   // Columna F.TXT (plantilla de WhatsApp por incidente): solo en el detalle de
   // Cliente TOP, no en las demás vistas que reusan esta misma tabla.
   const showFtxt = Boolean(companyFilter);
@@ -129,6 +132,26 @@ export function OpenIncidentTable({
       });
     },
     onSettled: () => qc.invalidateQueries({ queryKey: ["escalated"] }),
+  });
+
+  // Marcas de "Crítico" (vista privada "&&& Criticos", solo ADMIN).
+  const { data: critical } = useQuery<CriticalResponse>({
+    queryKey: ["critical"],
+    queryFn: fetchCritical,
+    refetchInterval: 60_000,
+    enabled: showCritical,
+  });
+  const criticalSet = new Set(critical?.marked ?? []);
+
+  const toggleCritical = useMutation({
+    mutationFn: async ({ incidentId, value }: { incidentId: string; value: boolean }) => {
+      await fetch("/api/incidents/critical", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ incidentId, critical: value }),
+      });
+    },
+    onSettled: () => qc.invalidateQueries({ queryKey: ["critical"] }),
   });
 
   // Debounce del buscador para no pegarle al servidor en cada tecla.
@@ -209,7 +232,12 @@ export function OpenIncidentTable({
     refetchInterval: 20_000,
   });
   const monitorByIncident = new Map((activeMonitors ?? []).map((m) => [m.incidentId, m]));
-  const colCount = COLUMNS.length + 1 + (showMonitoring || showSummary ? 1 : 0) + (showFtxt ? 1 : 0);
+  const colCount =
+    COLUMNS.length +
+    1 +
+    (showCritical ? 1 : 0) +
+    (showMonitoring || showSummary ? 1 : 0) +
+    (showFtxt ? 1 : 0);
 
   return (
     <div className="overflow-hidden rounded-xl border border-border/60 bg-surface/40 backdrop-blur-md">
@@ -275,6 +303,14 @@ export function OpenIncidentTable({
               >
                 <Star className="mx-auto h-3.5 w-3.5 text-warning" />
               </th>
+              {showCritical && (
+                <th
+                  title="Marcar como Crítico (vista &&& Criticos)"
+                  className="w-8 border-b border-border/60 px-2 py-2 text-center"
+                >
+                  <Flame className="mx-auto h-3.5 w-3.5 text-critical" />
+                </th>
+              )}
               {COLUMNS.map((c) => (
                 <th
                   key={c.key}
@@ -321,6 +357,8 @@ export function OpenIncidentTable({
                     "border-b border-border/40 transition-colors",
                     markedSet.has(r.incidentId)
                       ? "bg-warning/10 hover:bg-warning/15"
+                      : criticalSet.has(r.incidentId)
+                      ? "bg-critical/10 hover:bg-critical/15"
                       : "hover:bg-surface-elevated/40"
                   )}
                 >
@@ -338,6 +376,34 @@ export function OpenIncidentTable({
                       className="h-3.5 w-3.5 cursor-pointer accent-[#f59e0b]"
                     />
                   </td>
+                  {showCritical && (
+                    <td className="px-2 py-2 text-center">
+                      <button
+                        type="button"
+                        title={
+                          criticalSet.has(r.incidentId)
+                            ? "Quitar de Críticos"
+                            : "Marcar como Crítico"
+                        }
+                        onClick={() =>
+                          toggleCritical.mutate({
+                            incidentId: r.incidentId,
+                            value: !criticalSet.has(r.incidentId),
+                          })
+                        }
+                        className="mx-auto flex items-center justify-center"
+                      >
+                        <Flame
+                          className={cn(
+                            "h-4 w-4 cursor-pointer transition-colors",
+                            criticalSet.has(r.incidentId)
+                              ? "fill-critical text-critical"
+                              : "text-text-muted hover:text-critical"
+                          )}
+                        />
+                      </button>
+                    </td>
+                  )}
                   <td className="px-3 py-2">
                     <HpsmIncidentId
                       incidentId={r.incidentId}

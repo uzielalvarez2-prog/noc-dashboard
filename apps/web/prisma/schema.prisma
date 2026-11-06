@@ -142,6 +142,20 @@ model EscalatedIncident {
   createdAt  DateTime @default(now())
 }
 
+// Incidentes marcados como "Crítico" por un ADMIN desde cualquier vista de
+// abiertos. A diferencia de EscalatedIncident (marca global del equipo), esta
+// lista es PRIVADA POR USUARIO: cada admin ve solo los suyos (vista "&&&
+// Criticos"). La clave única (userId, incidentId) impide duplicados por usuario.
+model CriticalIncident {
+  id         String   @id @default(cuid())
+  userId     String
+  incidentId String
+  createdAt  DateTime @default(now())
+
+  @@unique([userId, incidentId])
+  @@index([userId])
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // CLIENTES TOP: base editable (empresa + referencia de servicio) que define los
 // clientes críticos con chat directo. Al subir el snapshot de abiertos, cada

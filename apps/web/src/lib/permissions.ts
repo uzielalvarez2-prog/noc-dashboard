@@ -74,6 +74,15 @@ export function canCerrarIncidentes(role: string | undefined): boolean {
 }
 
 /**
+ * Marcar incidentes como "Crítico" y ver la pestaña privada "&&& Criticos" en
+ * Incidentes abiertos. ADMIN estricto: es una vista de seguimiento personal del
+ * administrador (lista privada por usuario), separada de los escalados del equipo.
+ */
+export function canMarcarCriticos(role: string | undefined): boolean {
+  return role === "ADMIN";
+}
+
+/**
  * Vista /case-san-juan (incidentes SISA del CASE SAN JUAN + bitácora "Estatus CASE").
  * Abierta a ADMIN, al rol CASE y a SUPERVISOR (desde 2026-10-16). Los supervisores
  * además pueden agregar notas (ver canEditarEstatusCase). IDS aún no la ve.
