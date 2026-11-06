@@ -181,6 +181,8 @@ export function CriticalIncidentsView() {
   const [searchQuery, setSearchQuery] = useState("");
   // Incidente cuyo editor EDC está abierto (null = ninguno).
   const [editingEdc, setEditingEdc] = useState<string | null>(null);
+  // Feedback visual del botón "Copiar todos los EDC".
+  const [copiedAll, setCopiedAll] = useState(false);
 
   const { data, isFetching, refetch } = useQuery<CriticalResponse>({
     queryKey: ["critical"],
@@ -228,6 +230,33 @@ export function CriticalIncidentsView() {
     );
   }, [items, searchQuery]);
 
+  // Textos EDC con contenido, en el orden mostrado (respeta el filtro de búsqueda).
+  const edcTextsToCopy = useMemo(
+    () =>
+      shown
+        .filter((it) => it.edcSource !== "sin-datos" && it.edcText.trim())
+        .map((it) => it.edcText.trim()),
+    [shown]
+  );
+
+  async function copyAllEdc() {
+    if (edcTextsToCopy.length === 0) return;
+    // Un formato por bloque, separados por una línea en blanco.
+    const text = edcTextsToCopy.join("\n\n");
+    try {
+      await navigator.clipboard.writeText(text);
+    } catch {
+      const ta = document.createElement("textarea");
+      ta.value = text;
+      document.body.appendChild(ta);
+      ta.select();
+      document.execCommand("copy");
+      document.body.removeChild(ta);
+    }
+    setCopiedAll(true);
+    setTimeout(() => setCopiedAll(false), 1800);
+  }
+
   return (
     <div className="overflow-hidden rounded-xl border border-critical/40 bg-surface/40 backdrop-blur-md">
       {/* Barra superior: título, contadores, buscador, refrescar. */}
@@ -249,6 +278,27 @@ export function CriticalIncidentsView() {
             className="h-9 w-full rounded-md border border-border bg-background/60 pl-9 pr-3 text-sm text-text-primary placeholder:text-text-muted focus:border-accent focus:outline-none"
           />
         </div>
+        <button
+          type="button"
+          onClick={copyAllEdc}
+          disabled={edcTextsToCopy.length === 0}
+          title={
+            edcTextsToCopy.length === 0
+              ? "No hay formatos EDC con datos para copiar"
+              : `Copiar los ${edcTextsToCopy.length} formato${edcTextsToCopy.length === 1 ? "" : "s"} EDC`
+          }
+          className={cn(
+            "flex items-center gap-1.5 rounded-md border px-2.5 py-1.5 text-xs font-medium transition-colors disabled:opacity-40",
+            copiedAll
+              ? "border-success/50 bg-success/10 text-success"
+              : "border-violet-500/50 bg-violet-500/10 text-violet-300 hover:bg-violet-500/20"
+          )}
+        >
+          {copiedAll ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
+          {copiedAll
+            ? "Copiado"
+            : `Copiar EDC${edcTextsToCopy.length > 0 ? ` (${edcTextsToCopy.length})` : ""}`}
+        </button>
         <button
           type="button"
           onClick={() => refetch()}
