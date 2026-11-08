@@ -20,6 +20,21 @@ const TSX_CLI = require.resolve("tsx/cli");
 const TZ = "America/Mexico_City";
 const DRY = process.env.SCHEDULER_DRY === "1";
 
+/**
+ * Interruptor de pausa SOLO para las descargas automáticas (open/sisa/closed).
+ * Se lee en CADA disparo del cron (no al arrancar), así que basta con poner
+ * SCHEDULER_PAUSED=1 en Railway y redeployar/reiniciar para pausar, y quitarla
+ * o ponerla en 0 para reanudar — sin tocar código.
+ *
+ * NO afecta al servidor HTTP: el cierre de incidentes (/cerrar-incidentes) y el
+ * estatus de IMs (/im-estatus) bajo demanda siguen vivos aunque esté pausado.
+ * Son acciones manuales que tú disparas desde el dashboard, no descargas del cron.
+ */
+function downloadsPaused(): boolean {
+  const v = (process.env.SCHEDULER_PAUSED ?? "").trim().toLowerCase();
+  return v === "1" || v === "true" || v === "yes";
+}
+
 const OPEN_TIMEOUT_MS = 12 * 60_000; // corrida sana ~2 min; degradada ~10 min
 const CLOSED_TIMEOUT_MS = 30 * 60_000; // el export de cerrados tarda ~13 min normal
 const SISA_TIMEOUT_MS = 12 * 60_000; // mismo margen que open — sesión HPSM completa propia
@@ -126,6 +141,10 @@ async function runJob(
 // la misma sesión única de login HPSM, y correrlos a la vez arriesga colisión
 // ("Maximum active logins"). runJob ya serializa vía el flag `running`.
 async function runOpenThenSisa(): Promise<void> {
+  if (downloadsPaused()) {
+    logger.info("run-open+sisa: SCHEDULER_PAUSED — descargas en pausa, saltado");
+    return;
+  }
   await runJob("run-open", "src/run-open.ts", OPEN_TIMEOUT_MS);
   await runJob("run-sisa", "src/run-sisa.ts", SISA_TIMEOUT_MS);
 }
@@ -137,24 +156,26 @@ cron.schedule("*/5 6-22 * * *", () => void runOpenThenSisa(), {
 cron.schedule("0 23 * * *", () => void runOpenThenSisa(), {
   timezone: TZ,
 });
+// Cerrados: mismo interruptor de pausa que open/sisa. Wrapper para no repetir el
+// guard en cada corrida.
+function runClosed(label: string, envOverride: NodeJS.ProcessEnv = {}): void {
+  if (downloadsPaused()) {
+    logger.info(`${label}: SCHEDULER_PAUSED — descargas en pausa, saltado`);
+    return;
+  }
+  void runJob(label, "src/run-closed.ts", CLOSED_TIMEOUT_MS, 5 * 60_000, envOverride);
+}
+
 // Cerrados PEXA: 14:02 y 22:12 (mismos horarios que Task Scheduler; :02/:12 fuera de la rejilla de 5 min)
-cron.schedule(
-  "2 14 * * *",
-  () => void runJob("run-closed(PEXA)", "src/run-closed.ts", CLOSED_TIMEOUT_MS, 5 * 60_000),
-  { timezone: TZ },
-);
-cron.schedule(
-  "12 22 * * *",
-  () => void runJob("run-closed(PEXA)", "src/run-closed.ts", CLOSED_TIMEOUT_MS, 5 * 60_000),
-  { timezone: TZ },
-);
+cron.schedule("2 14 * * *", () => runClosed("run-closed(PEXA)"), { timezone: TZ });
+cron.schedule("12 22 * * *", () => runClosed("run-closed(PEXA)"), { timezone: TZ });
 // Cerrados CECOR: 21:00 (:00 se sale de la rejilla */5 de open? no — 21:00 sí cae en ella,
 // por eso waitIfBusyMs=5min deja que un run-open en curso termine antes de arrancar).
 // Ventana de consulta acotada a 07:00-21:00 vía HPSM_CLOSED_END_TIME para el hijo.
 cron.schedule(
   "0 21 * * *",
   () =>
-    void runJob("run-closed(CECOR)", "src/run-closed.ts", CLOSED_TIMEOUT_MS, 5 * 60_000, {
+    runClosed("run-closed(CECOR)", {
       HPSM_CLOSED_GROUP: "CECOR",
       HPSM_CLOSED_END_TIME: "21:00",
     }),
@@ -178,7 +199,7 @@ startScraperServer({
 });
 
 logger.info(
-  `scheduler: iniciado (TZ ${TZ}) — open+sisa */5 06:00-23:00, closed PEXA 14:02 y 22:12, closed CECOR 21:00${DRY ? " [DRY]" : ""}`,
+  `scheduler: iniciado (TZ ${TZ}) — open+sisa */5 06:00-23:00, closed PEXA 14:02 y 22:12, closed CECOR 21:00${DRY ? " [DRY]" : ""}${downloadsPaused() ? " [PAUSADO: descargas en pausa, cierre/estatus siguen activos]" : ""}`,
 );
 logger.info(`scheduler: tsx=${TSX_CLI}`);
 
@@ -188,7 +209,9 @@ const hourMx = Number(
     new Date(),
   ),
 );
-if (process.env.RUN_ON_BOOT !== "false" && hourMx >= 6 && hourMx < 23) {
+if (downloadsPaused()) {
+  logger.info("scheduler: SCHEDULER_PAUSED — sin corrida de arranque (cierre/estatus bajo demanda siguen activos)");
+} else if (process.env.RUN_ON_BOOT !== "false" && hourMx >= 6 && hourMx < 23) {
   void runOpenThenSisa();
 } else {
   logger.info("scheduler: fuera de ventana o RUN_ON_BOOT=false — sin corrida de arranque");
