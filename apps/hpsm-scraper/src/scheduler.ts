@@ -35,6 +35,30 @@ function downloadsPaused(): boolean {
   return v === "1" || v === "true" || v === "yes";
 }
 
+/**
+ * Intervalo (minutos) de las descargas de abiertos+sisa, configurable en Railway
+ * vía OPEN_INTERVAL_MIN para subir/bajar la carga a HPSM sin tocar código.
+ * Default 15 (antes 5). Volver a 5 = poner OPEN_INTERVAL_MIN=5 y redeployar.
+ *
+ * El cron usa el patrón "*​/N", que SOLO reparte parejo con divisores de 60; por
+ * eso si el valor no es uno de ellos, cae al divisor válido más cercano (así nunca
+ * se genera un patrón irregular tipo "*​/7" que dispararía de más al cruzar la hora).
+ */
+const VALID_INTERVALS = [1, 2, 3, 4, 5, 6, 10, 12, 15, 20, 30];
+function openIntervalMin(): number {
+  const raw = Number((process.env.OPEN_INTERVAL_MIN ?? "").trim());
+  if (!Number.isFinite(raw) || raw <= 0) return 15; // default
+  if (VALID_INTERVALS.includes(raw)) return raw;
+  // Divisor de 60 más cercano
+  const nearest = VALID_INTERVALS.reduce((a, b) =>
+    Math.abs(b - raw) < Math.abs(a - raw) ? b : a,
+  );
+  logger.info(
+    `OPEN_INTERVAL_MIN=${raw} no es divisor de 60 — se usa el más cercano: ${nearest} min`,
+  );
+  return nearest;
+}
+
 const OPEN_TIMEOUT_MS = 12 * 60_000; // corrida sana ~2 min; degradada ~10 min
 const CLOSED_TIMEOUT_MS = 30 * 60_000; // el export de cerrados tarda ~13 min normal
 const SISA_TIMEOUT_MS = 12 * 60_000; // mismo margen que open — sesión HPSM completa propia
@@ -149,8 +173,9 @@ async function runOpenThenSisa(): Promise<void> {
   await runJob("run-sisa", "src/run-sisa.ts", SISA_TIMEOUT_MS);
 }
 
-// Abiertos: cada 5 min de 06:00 a 22:55 + la de las 23:00
-cron.schedule("*/5 6-22 * * *", () => void runOpenThenSisa(), {
+// Abiertos: cada OPEN_INTERVAL_MIN min de 06:00 a 22:59 + la de las 23:00
+const OPEN_INTERVAL = openIntervalMin();
+cron.schedule(`*/${OPEN_INTERVAL} 6-22 * * *`, () => void runOpenThenSisa(), {
   timezone: TZ,
 });
 cron.schedule("0 23 * * *", () => void runOpenThenSisa(), {
@@ -199,7 +224,7 @@ startScraperServer({
 });
 
 logger.info(
-  `scheduler: iniciado (TZ ${TZ}) — open+sisa */5 06:00-23:00, closed PEXA 14:02 y 22:12, closed CECOR 21:00${DRY ? " [DRY]" : ""}${downloadsPaused() ? " [PAUSADO: descargas en pausa, cierre/estatus siguen activos]" : ""}`,
+  `scheduler: iniciado (TZ ${TZ}) — open+sisa cada ${OPEN_INTERVAL} min 06:00-23:00, closed PEXA 14:02 y 22:12, closed CECOR 21:00${DRY ? " [DRY]" : ""}${downloadsPaused() ? " [PAUSADO: descargas en pausa, cierre/estatus siguen activos]" : ""}`,
 );
 logger.info(`scheduler: tsx=${TSX_CLI}`);
 
