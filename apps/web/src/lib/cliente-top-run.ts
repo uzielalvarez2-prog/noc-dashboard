@@ -166,6 +166,21 @@ export async function dispararEstatusClienteTop(opts: {
 
   const items = await obtenerItems(cliente);
 
+  // RED DE SEGURIDAD: un solo cliente TOP no debería tener decenas de IMs
+  // abiertos. Si el filtro devuelve un número absurdo (p.ej. 954), es que NO
+  // está filtrando y traería todo WarRoom — abortar sin consultar HPSM ni
+  // enviar, para no agotar sesiones de HPSM ni mandar un mensaje basura.
+  const TOPE_IMS_CLIENTE = 30;
+  if (items.length > TOPE_IMS_CLIENTE) {
+    return {
+      ok: false,
+      ims: items.length,
+      sinIms: false,
+      iniciado: false,
+      error: `Filtro sospechoso: ${items.length} IMs para un cliente (tope ${TOPE_IMS_CLIENTE}). Se abortó para no agotar HPSM. Revisa el registro del cliente TOP (company/serviceRef/siglasIm).`,
+    };
+  }
+
   // Sin IMs: no hay nada que consultar en HPSM. Si se pidió avisar igual, se
   // manda directo el mensaje "0 IMs" (rápido, sin scraper).
   if (items.length === 0) {
