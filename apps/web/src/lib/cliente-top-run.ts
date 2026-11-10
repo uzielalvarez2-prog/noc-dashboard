@@ -64,39 +64,42 @@ function matcheaCliente(
 }
 
 /**
- * IMs abiertos (no resueltos) del cliente TOP indicado, con su Site Name tomado
- * del snapshot vigente de OpenIncident. Ordena por hora de apertura (más viejo
- * primero), que es como el equipo los revisa.
+ * IMs abiertos del cliente TOP indicado, leídos del snapshot ACTUAL de
+ * OpenIncident (la foto del momento, que se reemplaza en cada carga del CSV).
+ *
+ * OJO: NO se lee de WarRoomIncident. Esa tabla PERSISTE 7 días de histórico, así
+ * que traía todos los incidentes que alguna vez fueron del cliente (daba 954
+ * para SMART FIT en vez de los ~9 abiertos de hoy). OpenIncident solo contiene lo
+ * que está abierto ahora. Se deduplica por incidentId (un IM puede abarcar varios
+ * sitios → varias filas) y se ordena por apertura (más viejo primero).
  */
 async function obtenerItems(cliente: {
   company: string;
   serviceRef: string;
   siglasIm: string;
 }): Promise<ClienteTopItem[]> {
-  const war = await db.warRoomIncident.findMany({
-    where: { dismissed: false, group: "PEXA" },
-    orderBy: { openTime: "asc" },
-  });
-  const abiertos = war
-    .filter((w) => !isResolvedStatus(w.status))
-    .filter((w) => matcheaCliente(w, cliente));
-  if (abiertos.length === 0) return [];
-
-  const ids = abiertos.map((w) => w.incidentId);
   const open = await db.openIncident.findMany({
-    where: { incidentId: { in: ids } },
-    select: { incidentId: true, siteName: true },
+    where: { group: "PEXA" },
+    orderBy: { openTime: "asc" },
+    select: {
+      incidentId: true,
+      company: true,
+      serviceId: true,
+      siteName: true,
+      status: true,
+    },
   });
-  const siteNamePorId = new Map<string, string>();
-  for (const o of open) {
-    if (!siteNamePorId.has(o.incidentId) && o.siteName) siteNamePorId.set(o.incidentId, o.siteName);
-  }
 
-  return abiertos.map((w) => ({
-    incidentId: w.incidentId,
-    ref: w.serviceId,
-    siteName: siteNamePorId.get(w.incidentId) ?? "",
-  }));
+  const vistos = new Set<string>();
+  const items: ClienteTopItem[] = [];
+  for (const o of open) {
+    if (isResolvedStatus(o.status)) continue;
+    if (!matcheaCliente(o, cliente)) continue;
+    if (vistos.has(o.incidentId)) continue; // primera fila del IM (un IM = varios sitios)
+    vistos.add(o.incidentId);
+    items.push({ incidentId: o.incidentId, ref: o.serviceId, siteName: o.siteName });
+  }
+  return items;
 }
 
 /** DIAGNÓSTICO TEMPORAL: qué cliente se resolvió y cuántos IMs matchean. */
@@ -108,20 +111,22 @@ export async function diagnosticarClienteTop(clienteTopId?: string) {
   if ("error" in cliente) {
     return { error: cliente.error, todosClientes, clienteTopIdRecibido: clienteTopId ?? null };
   }
-  const war = await db.warRoomIncident.findMany({
-    where: { dismissed: false, group: "PEXA" },
-    select: { incidentId: true, company: true, serviceId: true, status: true },
+  const open = await db.openIncident.findMany({
+    where: { group: "PEXA" },
+    select: { incidentId: true, company: true, serviceId: true, status: true, siteName: true },
   });
-  const noResueltos = war.filter((w) => !isResolvedStatus(w.status));
-  const matchean = noResueltos.filter((w) => matcheaCliente(w, cliente));
+  const noResueltos = open.filter((o) => !isResolvedStatus(o.status));
+  const matchean = noResueltos.filter((o) => matcheaCliente(o, cliente));
+  const unicos = [...new Map(matchean.map((m) => [m.incidentId, m])).values()];
   return {
     clienteTopIdRecibido: clienteTopId ?? null,
     clienteResuelto: cliente,
-    todosClientes,
-    warRoomPexaTotal: war.length,
-    warRoomNoResueltos: noResueltos.length,
+    totalClientesTop: todosClientes.length,
+    openPexaTotal: open.length,
+    openNoResueltos: noResueltos.length,
     matcheanConCliente: matchean.length,
-    primeros10Match: matchean.slice(0, 10).map((m) => ({ im: m.incidentId, co: m.company, sv: m.serviceId })),
+    imsUnicos: unicos.length,
+    primeros: unicos.slice(0, 15).map((m) => ({ im: m.incidentId, co: m.company, sv: m.serviceId, site: m.siteName })),
   };
 }
 
