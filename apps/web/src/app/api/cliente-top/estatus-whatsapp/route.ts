@@ -39,13 +39,14 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Sin permiso" }, { status: 403 });
   }
 
-  let body: { chatId?: unknown; enviarSiVacio?: unknown } = {};
+  let body: { chatId?: unknown; enviarSiVacio?: unknown; clienteTopId?: unknown } = {};
   try {
     body = (await req.json()) as typeof body;
   } catch {
     /* body opcional */
   }
 
+  const clienteTopId = typeof body.clienteTopId === "string" ? body.clienteTopId.trim() : undefined;
   const chatId =
     (typeof body.chatId === "string" && body.chatId.trim()) ||
     (process.env.CLIENTE_TOP_CHAT_ID ?? "").trim();
@@ -64,6 +65,7 @@ export async function POST(req: NextRequest) {
 
   try {
     const result = await correrEstatusClienteTop({
+      clienteTopId,
       chatId,
       prefijoSitio,
       etiquetaCliente,

@@ -43,17 +43,55 @@ const EN_CURSO: ProgresoIm["estado"][] = ["en_cola", "consultando"];
 
 const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
 
+function norm(s: string | null | undefined): string {
+  return (s ?? "").trim().toLowerCase();
+}
+
+/** Prefijo alfabético del Incident ID (siglas IM), ej. "IMLATB001124" → "imlatb". */
+function incidentPrefix(incidentId: string): string {
+  return norm(incidentId.replace(/\d+$/, ""));
+}
+
 /**
- * IMs abiertos (no resueltos) del cliente TOP, con su Site Name tomado del
- * snapshot vigente de OpenIncident. Ordena por hora de apertura (más viejo
+ * ¿El incidente pertenece a ESTE cliente TOP? Reusa la misma lógica de match que
+ * syncWarRoom (company / serviceRef / siglasIm) pero para un solo cliente, para
+ * no mezclar incidentes de otros clientes TOP (WarRoom guarda TODOS juntos).
+ */
+function matcheaCliente(
+  inc: { incidentId: string; company: string; serviceId: string },
+  cliente: { company: string; serviceRef: string; siglasIm: string },
+): boolean {
+  const co = norm(inc.company);
+  const sv = norm(inc.serviceId);
+  const prefix = incidentPrefix(inc.incidentId);
+  const cCo = norm(cliente.company);
+  const cSv = norm(cliente.serviceRef);
+  const cSi = norm(cliente.siglasIm);
+  const companyMatch = cCo.length > 0 && co === cCo;
+  const serviceMatch = cSv.length > 0 && sv === cSv;
+  // Siglas: contra el prefijo del IM (formato estándar) y contra la company
+  // (algunos clientes se identifican por su acrónimo ahí).
+  const siglasMatch = cSi.length > 0 && (prefix === cSi || co === cSi);
+  return companyMatch || serviceMatch || siglasMatch;
+}
+
+/**
+ * IMs abiertos (no resueltos) del cliente TOP indicado, con su Site Name tomado
+ * del snapshot vigente de OpenIncident. Ordena por hora de apertura (más viejo
  * primero), que es como el equipo los revisa.
  */
-async function obtenerItems(): Promise<ClienteTopItem[]> {
+async function obtenerItems(cliente: {
+  company: string;
+  serviceRef: string;
+  siglasIm: string;
+}): Promise<ClienteTopItem[]> {
   const war = await db.warRoomIncident.findMany({
     where: { dismissed: false, group: "PEXA" },
     orderBy: { openTime: "asc" },
   });
-  const abiertos = war.filter((w) => !isResolvedStatus(w.status));
+  const abiertos = war
+    .filter((w) => !isResolvedStatus(w.status))
+    .filter((w) => matcheaCliente(w, cliente));
   if (abiertos.length === 0) return [];
 
   // Site Name desde OpenIncident (una fila por IM basta; un IM masivo abarca
@@ -107,14 +145,18 @@ async function consultarEstatus(ids: string[]): Promise<Map<string, ImEstatusRes
 }
 
 /**
- * Corre una emisión completa de estatus del Cliente TOP y la envía al grupo.
+ * Corre una emisión completa de estatus de UN Cliente TOP y la envía al grupo.
  *
+ * @param clienteTopId  id del ClienteTop a reportar. Si se omite y hay EXACTAMENTE
+ *                      un cliente TOP, se usa ese (modo 1 cliente). Con varios,
+ *                      es obligatorio (si no, error) para no mezclar incidentes.
  * @param chatId  grupo destino (xxxx@g.us).
  * @param prefijoSitio  nombre del cliente a recortar del Site Name (ej. "SMART FIT").
  * @param etiquetaCliente  etiqueta del encabezado (ej. "PEXA").
  * @param enviarSiVacio  si false y no hay IMs, NO manda nada (devuelve sinIms).
  */
 export async function correrEstatusClienteTop(opts: {
+  clienteTopId?: string;
   chatId: string;
   prefijoSitio: string;
   etiquetaCliente?: string;
@@ -123,7 +165,32 @@ export async function correrEstatusClienteTop(opts: {
   const chatId = opts.chatId.trim();
   if (!chatId) return { ok: false, sinIms: false, ims: 0, error: "chatId no configurado" };
 
-  const items = await obtenerItems();
+  // Resolver el cliente TOP a reportar.
+  const id = (opts.clienteTopId ?? "").trim();
+  let cliente: { company: string; serviceRef: string; siglasIm: string } | null = null;
+  if (id) {
+    cliente = await db.clienteTop.findUnique({
+      where: { id },
+      select: { company: true, serviceRef: true, siglasIm: true },
+    });
+    if (!cliente) return { ok: false, sinIms: false, ims: 0, error: "Cliente TOP no encontrado" };
+  } else {
+    const todos = await db.clienteTop.findMany({
+      select: { company: true, serviceRef: true, siglasIm: true },
+    });
+    if (todos.length === 1) cliente = todos[0];
+    else if (todos.length === 0)
+      return { ok: false, sinIms: false, ims: 0, error: "No hay clientes TOP registrados" };
+    else
+      return {
+        ok: false,
+        sinIms: false,
+        ims: 0,
+        error: "Hay varios clientes TOP: especifica cuál (clienteTopId).",
+      };
+  }
+
+  const items = await obtenerItems(cliente);
 
   if (items.length === 0 && opts.enviarSiVacio === false) {
     return { ok: true, sinIms: true, ims: 0, enviado: false };

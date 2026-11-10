@@ -25,7 +25,7 @@ interface RunResult {
   error?: string;
 }
 
-export function EnviarEstatusButton() {
+export function EnviarEstatusButton({ clienteTopId, clienteNombre }: { clienteTopId?: string; clienteNombre?: string }) {
   const [isAdmin, setIsAdmin] = useState(false);
   const [open, setOpen] = useState(false);
   const [groups, setGroups] = useState<WhatsappGroup[]>([]);
@@ -60,7 +60,7 @@ export function EnviarEstatusButton() {
       const res = await fetch("/api/cliente-top/estatus-whatsapp", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ chatId: destino, enviarSiVacio }),
+        body: JSON.stringify({ chatId: destino, enviarSiVacio, clienteTopId }),
       });
       setResult((await res.json()) as RunResult);
     } catch {
@@ -93,7 +93,7 @@ export function EnviarEstatusButton() {
           >
             <div className="mb-4 flex items-center justify-between">
               <h3 className="text-base font-semibold text-text-primary">
-                Enviar estatus Cliente TOP a WhatsApp
+                Enviar estatus{clienteNombre ? ` · ${clienteNombre}` : " Cliente TOP"} a WhatsApp
               </h3>
               <button
                 type="button"
