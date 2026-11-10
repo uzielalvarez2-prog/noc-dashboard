@@ -104,34 +104,6 @@ async function obtenerItems(cliente: {
   return items;
 }
 
-/** DIAGNÓSTICO TEMPORAL: qué cliente se resolvió y cuántos IMs matchean. */
-export async function diagnosticarClienteTop(clienteTopId?: string) {
-  const todosClientes = await db.clienteTop.findMany({
-    select: { id: true, company: true, serviceRef: true, siglasIm: true, note: true },
-  });
-  const cliente = await resolverCliente(clienteTopId);
-  if ("error" in cliente) {
-    return { error: cliente.error, todosClientes, clienteTopIdRecibido: clienteTopId ?? null };
-  }
-  const open = await db.openIncident.findMany({
-    where: { group: "PEXA" },
-    select: { incidentId: true, company: true, serviceId: true, status: true, siteName: true },
-  });
-  const noResueltos = open.filter((o) => !isResolvedStatus(o.status));
-  const matchean = noResueltos.filter((o) => matcheaCliente(o, cliente));
-  const unicos = [...new Map(matchean.map((m) => [m.incidentId, m])).values()];
-  return {
-    clienteTopIdRecibido: clienteTopId ?? null,
-    clienteResuelto: cliente,
-    totalClientesTop: todosClientes.length,
-    openPexaTotal: open.length,
-    openNoResueltos: noResueltos.length,
-    matcheanConCliente: matchean.length,
-    imsUnicos: unicos.length,
-    primeros: unicos.slice(0, 15).map((m) => ({ im: m.incidentId, co: m.company, sv: m.serviceId, site: m.siteName })),
-  };
-}
-
 /** Resuelve el ClienteTop a reportar (por id, o el único si solo hay uno). */
 async function resolverCliente(
   clienteTopId?: string,
