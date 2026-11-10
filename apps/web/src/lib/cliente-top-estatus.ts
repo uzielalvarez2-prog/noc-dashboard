@@ -1,0 +1,121 @@
+// ─────────────────────────────────────────────────────────────────────────────
+// ESTATUS CLIENTE TOP → WhatsApp
+//
+// Arma el mensaje de estatus de los IMs abiertos de un Cliente TOP para enviarlo
+// a un grupo (ej. "Supervision PEXA"), una corrida en la mañana y otra en la
+// tarde. La consulta del estatus + última nota a HPSM la hace el scraper
+// (lib/imEstatus.ts → consultarIncidente); aquí solo se FORMATEA.
+//
+// Decisiones acordadas con el equipo (2026-11-10):
+//   - Encabezado con 📊, fecha CDMX y conteo de IMs en gestión.
+//   - Por IM: emoji de número + IM en negrita, REF, Site Name, Estatus.
+//   - "Estatus" = ÚLTIMA entrada de la bitácora tal cual (sin saltar las
+//     automáticas de HPSM tipo "Incident Status Change" / reasignaciones).
+//   - Site Name con el nombre del cliente recortado SOLO en el mensaje
+//     (ej. "SMART FIT SENDERA COLIMA" → "SENDERA COLIMA"); en el dashboard el
+//     Site Name se conserva completo.
+// ─────────────────────────────────────────────────────────────────────────────
+
+import type { ImEstatusResult } from "@/lib/imEstatus";
+
+const TIMEZONE = "America/Mexico_City";
+
+/** Un IM del Cliente TOP con los datos que trae el snapshot de abiertos. */
+export interface ClienteTopItem {
+  incidentId: string;
+  /** Referencia del servicio (serviceId / Affected Service). */
+  ref: string;
+  /** Site Name tal cual el CSV (sin recortar). */
+  siteName: string;
+}
+
+/** Fecha legible en español, hora CDMX, para el encabezado del mensaje. */
+export function fechaEncabezado(date: Date): string {
+  return new Intl.DateTimeFormat("es-MX", {
+    timeZone: TIMEZONE,
+    weekday: "long",
+    day: "2-digit",
+    month: "long",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  }).format(date);
+}
+
+function escapeRegExp(s: string): string {
+  return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+/**
+ * Quita el nombre del cliente del inicio del Site Name, sin distinguir
+ * mayúsculas/acentos, y limpia el separador que quede. Si el sitio NO empieza
+ * con el prefijo, o quedaría vacío (el sitio ERA solo el nombre del cliente),
+ * se devuelve el original. Solo afecta al texto del mensaje.
+ */
+export function recortarSitio(siteName: string, prefijoCliente: string): string {
+  const s = (siteName ?? "").trim();
+  const c = (prefijoCliente ?? "").trim();
+  if (!c) return s;
+  const re = new RegExp("^" + escapeRegExp(c) + "\\b[\\s\\-:_]*", "i");
+  const out = s.replace(re, "").trim();
+  return out || s;
+}
+
+const NUMEROS = ["1️⃣", "2️⃣", "3️⃣", "4️⃣", "5️⃣", "6️⃣", "7️⃣", "8️⃣", "9️⃣", "🔟"];
+
+function emojiNumero(i: number): string {
+  return NUMEROS[i] ?? `${i + 1}.`;
+}
+
+/**
+ * Texto de la línea "Estatus:" de un IM a partir del resultado del scraper.
+ * Toma la última nota (actividades[0]); si no hay, cae al status del formulario.
+ */
+export function lineaEstatus(res: ImEstatusResult | undefined): string {
+  if (!res) return "sin datos (no se consultó)";
+  if (res.error) return "no se pudo consultar";
+  if (!res.found) return "no encontrado en HPSM";
+  if (res.cerrado) return "Cerrado";
+  const ultima = res.actividades?.[0]?.descripcion?.trim();
+  if (ultima) return ultima;
+  return res.status?.trim() || "(sin nota)";
+}
+
+export interface BuildMessageOptions {
+  /** Etiqueta del cliente para el encabezado (ej. "SMART FIT" o "PEXA"). */
+  etiquetaCliente?: string;
+  /** Prefijo a recortar del Site Name en el texto (normalmente el nombre del cliente). */
+  prefijoSitio: string;
+  /** Instante del envío (para la fecha del encabezado). Default: ahora. */
+  ahora?: Date;
+}
+
+/**
+ * Arma el mensaje completo de WhatsApp. `items` son los IMs del cliente (en el
+ * orden a mostrar) y `estatus` el mapa incidentId → resultado del scraper.
+ */
+export function buildClienteTopMessage(
+  items: ClienteTopItem[],
+  estatus: Map<string, ImEstatusResult>,
+  opts: BuildMessageOptions,
+): string {
+  const etiqueta = (opts.etiquetaCliente ?? "PEXA").trim();
+  const fecha = fechaEncabezado(opts.ahora ?? new Date());
+
+  const lineas: string[] = [
+    `📊 *ESTATUS CLIENTE TOP · ${etiqueta}*`,
+    fecha,
+    "",
+    `IMs en gestión: *${items.length}*`,
+  ];
+
+  items.forEach((it, i) => {
+    lineas.push("");
+    lineas.push(`${emojiNumero(i)} *${it.incidentId}*`);
+    lineas.push(`REF: ${it.ref}`);
+    lineas.push(`Site Name: ${recortarSitio(it.siteName, opts.prefijoSitio)}`);
+    lineas.push(`Estatus: ${lineaEstatus(estatus.get(it.incidentId))}`);
+  });
+
+  return lineas.join("\n");
+}

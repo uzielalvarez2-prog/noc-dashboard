@@ -7,6 +7,7 @@ import { cn } from "@/lib/utils";
 import { AddClienteModal } from "./cliente-top/AddClienteModal";
 import { ClienteTopDetail } from "./cliente-top/ClienteTopDetail";
 import { ClienteTopList } from "./cliente-top/ClienteTopList";
+import { EnviarEstatusButton } from "./cliente-top/EnviarEstatusButton";
 import {
   matchesQuery,
   norm,
@@ -159,14 +160,17 @@ export function ClienteTopView() {
             </div>
           )}
 
-          <button
-            type="button"
-            onClick={() => setAddOpen(true)}
-            className="ml-auto flex shrink-0 items-center gap-1.5 rounded-md bg-accent px-3 py-2 text-xs font-semibold text-white hover:bg-accent/90"
-          >
-            <Plus className="h-3.5 w-3.5" />
-            Agregar cliente
-          </button>
+          <div className="ml-auto flex shrink-0 items-center gap-2">
+            <EnviarEstatusButton />
+            <button
+              type="button"
+              onClick={() => setAddOpen(true)}
+              className="flex shrink-0 items-center gap-1.5 rounded-md bg-accent px-3 py-2 text-xs font-semibold text-white hover:bg-accent/90"
+            >
+              <Plus className="h-3.5 w-3.5" />
+              Agregar cliente
+            </button>
+          </div>
         </div>
 
         {isLoading ? (
