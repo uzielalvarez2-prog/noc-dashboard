@@ -1,15 +1,16 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSessionFromRequest } from "@/lib/auth-session";
 import { canConsultarEstatusIm } from "@/lib/permissions";
-import { correrEstatusClienteTop } from "@/lib/cliente-top-run";
+import { dispararEstatusClienteTop } from "@/lib/cliente-top-run";
 
 // ─────────────────────────────────────────────────────────────────────────────
-// ESTATUS CLIENTE TOP → WhatsApp (grupo "Supervision PEXA").
+// ESTATUS CLIENTE TOP → WhatsApp (grupo "Supervision PEXA"). PASO 1 (DISPARAR).
 //
-// Dispara una corrida completa: lee los IMs abiertos del cliente TOP (PEXA),
-// consulta su estatus + última nota en HPSM vía scraper, arma el mensaje y lo
-// envía al grupo. Puede tardar varios minutos (el scraper entra IM por IM), así
-// que el runtime se eleva para evitar el timeout del handler.
+// Lee los IMs abiertos del cliente TOP (rápido) y se los manda al scraper, que
+// consulta HPSM y al terminar hace callback a /api/cliente-top/enviar para armar
+// y mandar el mensaje. Este handler responde de inmediato ("ya arrancó") — NO
+// espera la consulta: por eso NO necesita maxDuration largo (el intento anterior
+// con esa espera chocaba con el timeout de Vercel/navegador).
 //
 // Autorización (dos vías):
 //   - Cron del scraper: header x-internal-key === INTERNAL_API_KEY.
@@ -22,8 +23,6 @@ import { correrEstatusClienteTop } from "@/lib/cliente-top-run";
 //                           "SMART FIT"). Default "SMART FIT".
 //   - CLIENTE_TOP_ETIQUETA  etiqueta del encabezado. Default "PEXA".
 // ─────────────────────────────────────────────────────────────────────────────
-
-export const maxDuration = 300; // el scraper puede tardar varios minutos
 
 const DEFAULT_PREFIJO = "SMART FIT";
 const DEFAULT_ETIQUETA = "PEXA";
@@ -64,17 +63,17 @@ export async function POST(req: NextRequest) {
   const enviarSiVacio = body.enviarSiVacio === true;
 
   try {
-    const result = await correrEstatusClienteTop({
+    const result = await dispararEstatusClienteTop({
       clienteTopId,
       chatId,
       prefijoSitio,
       etiquetaCliente,
       enviarSiVacio,
     });
-    const status = result.ok ? 200 : 502;
+    const status = result.ok ? 202 : 502;
     return NextResponse.json(result, { status });
   } catch (err) {
     console.error("[POST /api/cliente-top/estatus-whatsapp]", err);
-    return NextResponse.json({ error: "Error ejecutando la corrida" }, { status: 500 });
+    return NextResponse.json({ error: "Error disparando la corrida" }, { status: 500 });
   }
 }

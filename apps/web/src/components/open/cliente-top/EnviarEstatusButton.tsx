@@ -20,8 +20,7 @@ interface RunResult {
   ok?: boolean;
   sinIms?: boolean;
   ims?: number;
-  mensaje?: string;
-  enviado?: boolean;
+  iniciado?: boolean;
   error?: string;
 }
 
@@ -105,8 +104,9 @@ export function EnviarEstatusButton({ clienteTopId, clienteNombre }: { clienteTo
             </div>
 
             <p className="mb-3 text-xs text-text-muted">
-              Elige el grupo destino. Al enviar se consultará HPSM IM por IM (puede
-              tardar varios minutos) y luego se manda el mensaje.
+              Elige el grupo destino. Al enviar, el scraper consulta HPSM IM por IM
+              en segundo plano (unos minutos) y manda el mensaje al grupo al
+              terminar. Puedes cerrar la ventana: la corrida sigue sola.
             </p>
 
             <GroupPicker value={chatId} onChange={(v) => setChatId(v.slice(-1))} groups={groups} />
@@ -128,11 +128,8 @@ export function EnviarEstatusButton({ clienteTopId, clienteNombre }: { clienteTo
                 className="flex items-center gap-1.5 rounded-md bg-accent px-3 py-2 text-xs font-semibold text-white hover:bg-accent/90 disabled:opacity-50"
               >
                 {enviando ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Send className="h-3.5 w-3.5" />}
-                {enviando ? "Enviando…" : "Enviar ahora"}
+                {enviando ? "Arrancando…" : "Enviar ahora"}
               </button>
-              {enviando && (
-                <span className="text-xs text-text-muted">Consultando HPSM, no cierres…</span>
-              )}
             </div>
 
             {result && (
@@ -148,17 +145,20 @@ export function EnviarEstatusButton({ clienteTopId, clienteNombre }: { clienteTo
                     <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-critical" />
                   )}
                   <div className="text-xs">
-                    <p className={result.ok ? "text-success" : "text-critical"}>
-                      {result.ok
-                        ? result.enviado
-                          ? `Enviado · ${result.ims ?? 0} IM(s).`
-                          : `Sin envío${result.sinIms ? " (no hay IMs abiertos)" : ""}.`
-                        : result.error ?? "Falló el envío."}
-                    </p>
-                    {result.mensaje && (
-                      <pre className="mt-2 max-h-64 overflow-auto whitespace-pre-wrap rounded bg-background/60 p-2 font-mono text-[11px] text-text-primary">
-                        {result.mensaje}
-                      </pre>
+                    {result.ok ? (
+                      result.iniciado ? (
+                        <p className="text-success">
+                          Corrida iniciada · {result.ims ?? 0} IM(s). El scraper está
+                          consultando HPSM (~{Math.max(1, Math.ceil((result.ims ?? 0) * 0.5))} min);
+                          el mensaje llegará al grupo al terminar. Ya puedes cerrar esta ventana.
+                        </p>
+                      ) : result.sinIms ? (
+                        <p className="text-success">No hay IMs abiertos del cliente. Mensaje "0 IMs" enviado.</p>
+                      ) : (
+                        <p className="text-success">Listo.</p>
+                      )
+                    ) : (
+                      <p className="text-critical">{result.error ?? "Falló el disparo."}</p>
                     )}
                   </div>
                 </div>

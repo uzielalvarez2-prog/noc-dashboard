@@ -179,6 +179,74 @@ async function correrImEstatus(deps: ScraperServerDeps, ims: string[]): Promise<
   }
 }
 
+// ── Estatus Cliente TOP → WhatsApp (consulta + callback) ─────────────────────
+// El dashboard (Vercel) no puede mantener una petición abierta los ~4 min que
+// tarda consultar los IMs en HPSM: la función serverless se corta. Por eso el
+// trabajo lento vive aquí (proceso 24/7). El dashboard manda la tarea con los
+// IMs ya resueltos del cliente, este endpoint responde 202 de inmediato,
+// consulta HPSM en segundo plano reusando el MISMO job que /im-estatus, y al
+// terminar hace callback al dashboard con los resultados crudos para que ARME
+// el mensaje y lo ENVÍE al grupo (la lógica de formato/envío vive solo allá).
+
+interface TareaClienteTop {
+  // Datos opacos para el scraper: se devuelven tal cual en el callback para que
+  // el dashboard sepa a qué corrida corresponden y cómo formatear.
+  chatId: string;
+  prefijo: string;
+  etiqueta: string;
+  items: unknown; // [{ incidentId, ref, siteName }]; el scraper no los interpreta
+  enviarSiVacio: boolean;
+}
+
+let clienteTopEnCurso = false;
+
+async function correrClienteTop(
+  deps: ScraperServerDeps,
+  ims: string[],
+  tarea: TareaClienteTop,
+): Promise<void> {
+  clienteTopEnCurso = true;
+  try {
+    // Reusa el job de IM-estatus (serializado con open/sisa/closed vía runJob).
+    let resultados: ImEstatusResult[] = [];
+    if (ims.length > 0) {
+      try {
+        if (existsSync(IM_ESTATUS_FILE)) unlinkSync(IM_ESTATUS_FILE);
+      } catch { /* se sobrescribe igual */ }
+      const corrio = await deps.runImEstatus({
+        IM_LIST: ims.join(","),
+        IM_ESTATUS_OUT: IM_ESTATUS_FILE,
+      });
+      resultados = leerResultadosIm();
+      if (!corrio) {
+        logger.warn("cliente-top: el job de IM-estatus no llegó a correr (scraper ocupado)");
+      }
+    }
+
+    // Callback al dashboard: él arma el mensaje y lo envía al grupo.
+    const url = `${config.dashboardUrl.replace(/\/+$/, "")}/api/cliente-top/enviar`;
+    const res = await fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "x-internal-key": config.internalApiKey },
+      body: JSON.stringify({
+        chatId: tarea.chatId,
+        prefijo: tarea.prefijo,
+        etiqueta: tarea.etiqueta,
+        items: tarea.items,
+        enviarSiVacio: tarea.enviarSiVacio,
+        resultados,
+      }),
+      signal: AbortSignal.timeout(30_000),
+    });
+    const body = await res.text();
+    logger.info(`cliente-top: callback al dashboard ${res.status} ${body.slice(0, 200)}`);
+  } catch (e) {
+    logger.error("cliente-top: fallo en la corrida", { err: String(e) });
+  } finally {
+    clienteTopEnCurso = false;
+  }
+}
+
 // ── Cierre de IMs en HPSM (bajo demanda, solo ADMIN) ─────────────────────────
 // Mismo molde que estatus de IMs: job hijo run-cerrar vía runCerrar, resultados
 // en CERRAR_FILE reescrito tras cada IM, progreso leído aquí. El cliente manda
@@ -363,6 +431,62 @@ export function startScraperServer(deps: ScraperServerDeps): void {
           return;
         }
         void correrImEstatus(deps, ims);
+        json(202, { ok: true, iniciado: true, total: ims.length });
+      })();
+      return;
+    }
+
+    // ── Estatus Cliente TOP → WhatsApp ───────────────────────────────────────
+    if (req.method === "POST" && url === "/cliente-top-estatus") {
+      if (req.headers["x-internal-key"] !== config.internalApiKey) {
+        json(401, { error: "No autorizado" });
+        return;
+      }
+      void (async () => {
+        let body: unknown;
+        try {
+          body = await readJsonBody(req);
+        } catch (e) {
+          json(400, { error: (e as Error).message });
+          return;
+        }
+        const b = (body ?? {}) as {
+          ims?: unknown;
+          chatId?: unknown;
+          prefijo?: unknown;
+          etiqueta?: unknown;
+          items?: unknown;
+          enviarSiVacio?: unknown;
+        };
+        const ims = Array.isArray(b.ims)
+          ? [...new Set(
+              b.ims
+                .filter((s): s is string => typeof s === "string")
+                .map((s) => s.trim().toUpperCase())
+                .filter((s) => IM_REGEX.test(s)),
+            )]
+          : [];
+        if (ims.length > MAX_IMS) {
+          json(400, { error: `Demasiados IMs (máximo ${MAX_IMS})` });
+          return;
+        }
+        const chatId = typeof b.chatId === "string" ? b.chatId.trim() : "";
+        if (!chatId) {
+          json(400, { error: "chatId requerido" });
+          return;
+        }
+        if (clienteTopEnCurso || progresoIm.estado === "en_cola" || progresoIm.estado === "consultando") {
+          json(409, { error: "Ya hay una consulta de IMs en curso" });
+          return;
+        }
+        const tarea: TareaClienteTop = {
+          chatId,
+          prefijo: typeof b.prefijo === "string" ? b.prefijo : "",
+          etiqueta: typeof b.etiqueta === "string" ? b.etiqueta : "PEXA",
+          items: Array.isArray(b.items) ? b.items : [],
+          enviarSiVacio: b.enviarSiVacio === true,
+        };
+        void correrClienteTop(deps, ims, tarea);
         json(202, { ok: true, iniciado: true, total: ims.length });
       })();
       return;

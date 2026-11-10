@@ -197,11 +197,10 @@ cron.schedule("2 14 * * *", () => runClosed("run-closed(PEXA)"), { timezone: TZ 
 cron.schedule("12 22 * * *", () => runClosed("run-closed(PEXA)"), { timezone: TZ });
 
 // ── Estatus Cliente TOP → WhatsApp (grupo "Supervision PEXA"): 09:00 y 20:00 ──
-// NO entra a HPSM desde aquí: solo le pega al dashboard, que orquesta (lee los
-// IMs del cliente TOP, pide al scraper su estatus vía /im-estatus, y envía el
-// mensaje al grupo). Por eso no usa runJob — no compite por el login de HPSM;
-// la consulta pesada la encola el propio dashboard contra el server HTTP de
-// este proceso. Respeta el mismo interruptor de pausa que las descargas.
+// Solo DISPARA: le pega al dashboard, que lee los IMs del cliente TOP y se los
+// manda de vuelta a ESTE scraper (/cliente-top-estatus) para consultarlos en
+// HPSM y, al terminar, mandar el mensaje al grupo. El dashboard responde al
+// instante (202), así que esta llamada es corta. Respeta el interruptor de pausa.
 async function dispararEstatusClienteTop(): Promise<void> {
   if (downloadsPaused()) {
     logger.info("estatus-cliente-top: SCHEDULER_PAUSED — saltado");
@@ -214,10 +213,7 @@ async function dispararEstatusClienteTop(): Promise<void> {
       method: "POST",
       headers: { "Content-Type": "application/json", "x-internal-key": config.internalApiKey },
       body: JSON.stringify({}),
-      // La corrida puede tardar minutos (el dashboard espera al scraper IM por
-      // IM). No bloqueamos tanto: damos un margen amplio pero acotado y, si el
-      // dashboard sigue trabajando, igual terminará su envío por su cuenta.
-      signal: AbortSignal.timeout(5 * 60_000),
+      signal: AbortSignal.timeout(30_000),
     });
     const body = await res.text();
     logger.info(`estatus-cliente-top: dashboard respondió ${res.status} ${body.slice(0, 200)}`);

@@ -1,47 +1,37 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// ESTATUS CLIENTE TOP — orquestación server-side (una corrida completa).
+// ESTATUS CLIENTE TOP — orquestación (arquitectura sin timeout).
 //
-// Reúne piezas que YA existen:
-//   1. WarRoomIncident  → qué IMs del cliente TOP están abiertos (no resueltos).
-//   2. OpenIncident      → Site Name de cada IM (WarRoom no lo guarda).
-//   3. lib/imEstatus      → el scraper consulta HPSM (estatus + última nota).
-//   4. lib/whatsapp       → envía el mensaje al grupo.
-//   5. lib/cliente-top-estatus → arma el texto.
+// El trabajo lento (consultar HPSM IM por IM, ~4 min) NO puede correr en el
+// dashboard: Vercel corta la función y el navegador el fetch. Por eso se reparte:
 //
-// Es autónoma: arranca la consulta al scraper, espera con polling del lado del
-// servidor hasta que termina (o expira), arma el mensaje y lo envía. Pensada
-// para dispararse desde el cron del scraper (09:00 / 20:00) y también a mano
-// desde un botón ADMIN para pruebas.
+//   DISPARAR (rápido, aquí):  lee los IMs abiertos del cliente TOP (WarRoom +
+//     OpenIncident) y se los manda al SCRAPER (/cliente-top-estatus). Responde ya.
+//   CONSULTAR (lento, scraper 24/7): entra a HPSM por cada IM.
+//   ENVIAR (rápido, aquí): el scraper hace callback a /api/cliente-top/enviar con
+//     los resultados; ahí se arma el mensaje y se manda al grupo.
+//
+// Así nada espera 4 min con una conexión abierta, y funciona aunque se cierre la
+// ventana (el scraper remata solo). Mismo patrón que SISA/Manto.
 // ─────────────────────────────────────────────────────────────────────────────
 
 import { db } from "@/lib/db";
 import { isResolvedStatus } from "@/lib/war-room";
-import {
-  iniciarConsultaIms,
-  consultarProgresoIms,
-  MAX_IMS,
-  type ImEstatusResult,
-  type ProgresoIm,
-} from "@/lib/imEstatus";
+import { MAX_IMS, type ImEstatusResult } from "@/lib/imEstatus";
 import { sendWhatsappViaListener } from "@/lib/whatsapp";
 import { buildClienteTopMessage, type ClienteTopItem } from "@/lib/cliente-top-estatus";
 
-export interface ClienteTopRunResult {
+const SCRAPER_URL = process.env.SCRAPER_URL ?? "";
+const INTERNAL_API_KEY = process.env.INTERNAL_API_KEY ?? "";
+
+export interface DispararResult {
   ok: boolean;
-  /** true si no había IMs abiertos del cliente (igual se puede avisar "0"). */
-  sinIms: boolean;
+  /** IMs del cliente que se mandaron a consultar. */
   ims: number;
-  mensaje?: string;
-  enviado?: boolean;
+  sinIms: boolean;
+  /** true si ya se arrancó la consulta en el scraper. */
+  iniciado: boolean;
   error?: string;
 }
-
-const POLL_EVERY_MS = 3_000;
-// Cada IM tarda ~30 s en HPSM; con 50 IMs tope y margen, 20 min es holgado.
-const POLL_TIMEOUT_MS = 20 * 60_000;
-const EN_CURSO: ProgresoIm["estado"][] = ["en_cola", "consultando"];
-
-const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
 
 function norm(s: string | null | undefined): string {
   return (s ?? "").trim().toLowerCase();
@@ -69,8 +59,6 @@ function matcheaCliente(
   const cSi = norm(cliente.siglasIm);
   const companyMatch = cCo.length > 0 && co === cCo;
   const serviceMatch = cSv.length > 0 && sv === cSv;
-  // Siglas: contra el prefijo del IM (formato estándar) y contra la company
-  // (algunos clientes se identifican por su acrónimo ahí).
   const siglasMatch = cSi.length > 0 && (prefix === cSi || co === cSi);
   return companyMatch || serviceMatch || siglasMatch;
 }
@@ -94,8 +82,6 @@ async function obtenerItems(cliente: {
     .filter((w) => matcheaCliente(w, cliente));
   if (abiertos.length === 0) return [];
 
-  // Site Name desde OpenIncident (una fila por IM basta; un IM masivo abarca
-  // varios sitios, pero para este mensaje tomamos el primero visto).
   const ids = abiertos.map((w) => w.incidentId);
   const open = await db.openIncident.findMany({
     where: { incidentId: { in: ids } },
@@ -113,100 +99,110 @@ async function obtenerItems(cliente: {
   }));
 }
 
-/**
- * Lanza la consulta de los IMs al scraper y espera (polling) a que termine.
- * Devuelve el mapa incidentId → resultado. Si el scraper no responde o expira,
- * devuelve lo que haya (parcial): el mensaje igual sale, con "sin datos" en los
- * que falten, para no perder la corrida entera por un IM lento.
- */
-async function consultarEstatus(ids: string[]): Promise<Map<string, ImEstatusResult>> {
-  const porId = new Map<string, ImEstatusResult>();
-  if (ids.length === 0) return porId;
-
-  const inicio = await iniciarConsultaIms(ids.slice(0, MAX_IMS));
-  if (!inicio.ok) {
-    // No se pudo ni arrancar: se devuelve vacío; el mensaje saldrá con "sin datos".
-    console.error("[cliente-top] No se pudo iniciar consulta al scraper:", inicio.error);
-    return porId;
-  }
-
-  const deadline = Date.now() + POLL_TIMEOUT_MS;
-  // Primera espera antes de preguntar: el hijo tarda en crear su archivo.
-  await sleep(POLL_EVERY_MS);
-  while (Date.now() < deadline) {
-    const prog = await consultarProgresoIms();
-    if (prog.ok && prog.data) {
-      for (const r of prog.data.resultados) porId.set(r.im, r);
-      if (!EN_CURSO.includes(prog.data.progreso.estado)) break;
-    }
-    await sleep(POLL_EVERY_MS);
-  }
-  return porId;
-}
-
-/**
- * Corre una emisión completa de estatus de UN Cliente TOP y la envía al grupo.
- *
- * @param clienteTopId  id del ClienteTop a reportar. Si se omite y hay EXACTAMENTE
- *                      un cliente TOP, se usa ese (modo 1 cliente). Con varios,
- *                      es obligatorio (si no, error) para no mezclar incidentes.
- * @param chatId  grupo destino (xxxx@g.us).
- * @param prefijoSitio  nombre del cliente a recortar del Site Name (ej. "SMART FIT").
- * @param etiquetaCliente  etiqueta del encabezado (ej. "PEXA").
- * @param enviarSiVacio  si false y no hay IMs, NO manda nada (devuelve sinIms).
- */
-export async function correrEstatusClienteTop(opts: {
-  clienteTopId?: string;
-  chatId: string;
-  prefijoSitio: string;
-  etiquetaCliente?: string;
-  enviarSiVacio?: boolean;
-}): Promise<ClienteTopRunResult> {
-  const chatId = opts.chatId.trim();
-  if (!chatId) return { ok: false, sinIms: false, ims: 0, error: "chatId no configurado" };
-
-  // Resolver el cliente TOP a reportar.
-  const id = (opts.clienteTopId ?? "").trim();
-  let cliente: { company: string; serviceRef: string; siglasIm: string } | null = null;
+/** Resuelve el ClienteTop a reportar (por id, o el único si solo hay uno). */
+async function resolverCliente(
+  clienteTopId?: string,
+): Promise<{ company: string; serviceRef: string; siglasIm: string } | { error: string }> {
+  const id = (clienteTopId ?? "").trim();
   if (id) {
-    cliente = await db.clienteTop.findUnique({
+    const c = await db.clienteTop.findUnique({
       where: { id },
       select: { company: true, serviceRef: true, siglasIm: true },
     });
-    if (!cliente) return { ok: false, sinIms: false, ims: 0, error: "Cliente TOP no encontrado" };
-  } else {
-    const todos = await db.clienteTop.findMany({
-      select: { company: true, serviceRef: true, siglasIm: true },
-    });
-    if (todos.length === 1) cliente = todos[0];
-    else if (todos.length === 0)
-      return { ok: false, sinIms: false, ims: 0, error: "No hay clientes TOP registrados" };
-    else
-      return {
-        ok: false,
-        sinIms: false,
-        ims: 0,
-        error: "Hay varios clientes TOP: especifica cuál (clienteTopId).",
-      };
+    return c ?? { error: "Cliente TOP no encontrado" };
   }
+  const todos = await db.clienteTop.findMany({
+    select: { company: true, serviceRef: true, siglasIm: true },
+  });
+  if (todos.length === 1) return todos[0];
+  if (todos.length === 0) return { error: "No hay clientes TOP registrados" };
+  return { error: "Hay varios clientes TOP: especifica cuál (clienteTopId)." };
+}
+
+/**
+ * PASO 1 — DISPARAR. Lee los IMs del cliente y se los manda al scraper para que
+ * consulte HPSM y, al terminar, haga callback a /api/cliente-top/enviar. Rápido:
+ * no espera a la consulta. Si no hay IMs y enviarSiVacio es true, NO pasa por el
+ * scraper (no hay nada que consultar): manda directo el mensaje "0 IMs".
+ */
+export async function dispararEstatusClienteTop(opts: {
+  clienteTopId?: string;
+  chatId: string;
+  prefijoSitio: string;
+  etiquetaCliente: string;
+  enviarSiVacio: boolean;
+}): Promise<DispararResult> {
+  const chatId = opts.chatId.trim();
+  if (!chatId) return { ok: false, ims: 0, sinIms: false, iniciado: false, error: "chatId no configurado" };
+
+  const cliente = await resolverCliente(opts.clienteTopId);
+  if ("error" in cliente) return { ok: false, ims: 0, sinIms: false, iniciado: false, error: cliente.error };
 
   const items = await obtenerItems(cliente);
 
-  if (items.length === 0 && opts.enviarSiVacio === false) {
-    return { ok: true, sinIms: true, ims: 0, enviado: false };
+  // Sin IMs: no hay nada que consultar en HPSM. Si se pidió avisar igual, se
+  // manda directo el mensaje "0 IMs" (rápido, sin scraper).
+  if (items.length === 0) {
+    if (!opts.enviarSiVacio) return { ok: true, ims: 0, sinIms: true, iniciado: false };
+    const enviado = await enviarMensajeClienteTop({
+      chatId,
+      prefijo: opts.prefijoSitio,
+      etiqueta: opts.etiquetaCliente,
+      items: [],
+      resultados: [],
+    });
+    return { ok: enviado.ok, ims: 0, sinIms: true, iniciado: false, error: enviado.error };
   }
 
-  const estatus = await consultarEstatus(items.map((i) => i.incidentId));
+  // Con IMs: delegar al scraper (consulta HPSM + callback de envío).
+  if (!SCRAPER_URL || !INTERNAL_API_KEY) {
+    return { ok: false, ims: items.length, sinIms: false, iniciado: false, error: "SCRAPER_URL / INTERNAL_API_KEY no configuradas" };
+  }
+  try {
+    const res = await fetch(`${SCRAPER_URL.replace(/\/+$/, "")}/cliente-top-estatus`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "x-internal-key": INTERNAL_API_KEY },
+      body: JSON.stringify({
+        ims: items.slice(0, MAX_IMS).map((i) => i.incidentId),
+        chatId,
+        prefijo: opts.prefijoSitio,
+        etiqueta: opts.etiquetaCliente,
+        items,
+        enviarSiVacio: opts.enviarSiVacio,
+      }),
+      signal: AbortSignal.timeout(20_000),
+    });
+    if (!res.ok) {
+      const body = (await res.json().catch(() => null)) as { error?: string } | null;
+      return { ok: false, ims: items.length, sinIms: false, iniciado: false, error: body?.error ?? `El scraper respondió ${res.status}` };
+    }
+    return { ok: true, ims: items.length, sinIms: false, iniciado: true };
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : "error de red";
+    return { ok: false, ims: items.length, sinIms: false, iniciado: false, error: `No se pudo contactar el scraper: ${msg}` };
+  }
+}
 
-  const mensaje = buildClienteTopMessage(items, estatus, {
-    etiquetaCliente: opts.etiquetaCliente,
-    prefijoSitio: opts.prefijoSitio,
+/**
+ * PASO 3 — ENVIAR. Arma el mensaje con los resultados que devuelve el scraper y
+ * lo manda al grupo. Lo llama el callback del scraper (/api/cliente-top/enviar),
+ * y también el disparo directo cuando no hay IMs. Rápido.
+ */
+export async function enviarMensajeClienteTop(data: {
+  chatId: string;
+  prefijo: string;
+  etiqueta: string;
+  items: ClienteTopItem[];
+  resultados: ImEstatusResult[];
+}): Promise<{ ok: boolean; mensaje: string; error?: string }> {
+  const estatus = new Map<string, ImEstatusResult>();
+  for (const r of data.resultados) estatus.set(r.im, r);
+
+  const mensaje = buildClienteTopMessage(data.items, estatus, {
+    etiquetaCliente: data.etiqueta,
+    prefijoSitio: data.prefijo,
   });
 
-  const sent = await sendWhatsappViaListener(chatId, mensaje);
-  if (!sent.ok) {
-    return { ok: false, sinIms: items.length === 0, ims: items.length, mensaje, enviado: false, error: sent.error };
-  }
-
-  return { ok: true, sinIms: items.length === 0, ims: items.length, mensaje, enviado: true };
+  const sent = await sendWhatsappViaListener(data.chatId, mensaje);
+  return { ok: sent.ok, mensaje, error: sent.ok ? undefined : sent.error };
 }
