@@ -2,6 +2,7 @@ import "dotenv/config";
 import { createRequire } from "node:module";
 import { spawn } from "node:child_process";
 import cron from "node-cron";
+import { config } from "./config.js";
 import { logger } from "./logger.js";
 import { startScraperServer } from "./server.js";
 
@@ -194,6 +195,38 @@ function runClosed(label: string, envOverride: NodeJS.ProcessEnv = {}): void {
 // Cerrados PEXA: 14:02 y 22:12 (mismos horarios que Task Scheduler; :02/:12 fuera de la rejilla de 5 min)
 cron.schedule("2 14 * * *", () => runClosed("run-closed(PEXA)"), { timezone: TZ });
 cron.schedule("12 22 * * *", () => runClosed("run-closed(PEXA)"), { timezone: TZ });
+
+// ── Estatus Cliente TOP → WhatsApp (grupo "Supervision PEXA"): 09:00 y 20:00 ──
+// NO entra a HPSM desde aquí: solo le pega al dashboard, que orquesta (lee los
+// IMs del cliente TOP, pide al scraper su estatus vía /im-estatus, y envía el
+// mensaje al grupo). Por eso no usa runJob — no compite por el login de HPSM;
+// la consulta pesada la encola el propio dashboard contra el server HTTP de
+// este proceso. Respeta el mismo interruptor de pausa que las descargas.
+async function dispararEstatusClienteTop(): Promise<void> {
+  if (downloadsPaused()) {
+    logger.info("estatus-cliente-top: SCHEDULER_PAUSED — saltado");
+    return;
+  }
+  const url = `${config.dashboardUrl.replace(/\/+$/, "")}/api/cliente-top/estatus-whatsapp`;
+  try {
+    logger.info("estatus-cliente-top: disparando corrida");
+    const res = await fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "x-internal-key": config.internalApiKey },
+      body: JSON.stringify({}),
+      // La corrida puede tardar minutos (el dashboard espera al scraper IM por
+      // IM). No bloqueamos tanto: damos un margen amplio pero acotado y, si el
+      // dashboard sigue trabajando, igual terminará su envío por su cuenta.
+      signal: AbortSignal.timeout(5 * 60_000),
+    });
+    const body = await res.text();
+    logger.info(`estatus-cliente-top: dashboard respondió ${res.status} ${body.slice(0, 200)}`);
+  } catch (err) {
+    logger.error("estatus-cliente-top: fallo al disparar", { err: String(err) });
+  }
+}
+cron.schedule("0 9 * * *", () => void dispararEstatusClienteTop(), { timezone: TZ });
+cron.schedule("0 20 * * *", () => void dispararEstatusClienteTop(), { timezone: TZ });
 // Cerrados CECOR: 21:00 (:00 se sale de la rejilla */5 de open? no — 21:00 sí cae en ella,
 // por eso waitIfBusyMs=5min deja que un run-open en curso termine antes de arrancar).
 // Ventana de consulta acotada a 07:00-21:00 vía HPSM_CLOSED_END_TIME para el hijo.
@@ -224,7 +257,7 @@ startScraperServer({
 });
 
 logger.info(
-  `scheduler: iniciado (TZ ${TZ}) — open+sisa cada ${OPEN_INTERVAL} min 06:00-23:00, closed PEXA 14:02 y 22:12, closed CECOR 21:00${DRY ? " [DRY]" : ""}${downloadsPaused() ? " [PAUSADO: descargas en pausa, cierre/estatus siguen activos]" : ""}`,
+  `scheduler: iniciado (TZ ${TZ}) — open+sisa cada ${OPEN_INTERVAL} min 06:00-23:00, closed PEXA 14:02 y 22:12, closed CECOR 21:00, estatus Cliente TOP 09:00 y 20:00${DRY ? " [DRY]" : ""}${downloadsPaused() ? " [PAUSADO: descargas en pausa, cierre/estatus siguen activos]" : ""}`,
 );
 logger.info(`scheduler: tsx=${TSX_CLI}`);
 
