@@ -15,12 +15,13 @@ function parseItems(raw: unknown): ClienteTopItem[] {
   if (!Array.isArray(raw)) return [];
   const out: ClienteTopItem[] = [];
   for (const it of raw) {
-    const o = (it ?? {}) as { incidentId?: unknown; ref?: unknown; siteName?: unknown };
+    const o = (it ?? {}) as { incidentId?: unknown; ref?: unknown; siteName?: unknown; status?: unknown };
     if (typeof o.incidentId !== "string") continue;
     out.push({
       incidentId: o.incidentId,
       ref: typeof o.ref === "string" ? o.ref : "",
       siteName: typeof o.siteName === "string" ? o.siteName : "",
+      status: typeof o.status === "string" ? o.status : "",
     });
   }
   return out;

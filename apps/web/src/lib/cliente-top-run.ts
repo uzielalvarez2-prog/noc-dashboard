@@ -90,14 +90,16 @@ async function obtenerItems(cliente: {
     },
   });
 
+  // Se incluyen también los RESOLVED: el mensaje los muestra en su propia
+  // sección ("Resueltos por cerrar"). El armado (buildClienteTopMessage) separa
+  // en gestión vs resueltos usando el status.
   const vistos = new Set<string>();
   const items: ClienteTopItem[] = [];
   for (const o of open) {
-    if (isResolvedStatus(o.status)) continue;
     if (!matcheaCliente(o, cliente)) continue;
     if (vistos.has(o.incidentId)) continue; // primera fila del IM (un IM = varios sitios)
     vistos.add(o.incidentId);
-    items.push({ incidentId: o.incidentId, ref: o.serviceId, siteName: o.siteName });
+    items.push({ incidentId: o.incidentId, ref: o.serviceId, siteName: o.siteName, status: o.status });
   }
   return items;
 }

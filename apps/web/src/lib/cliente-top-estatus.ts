@@ -17,6 +17,7 @@
 // ─────────────────────────────────────────────────────────────────────────────
 
 import type { ImEstatusResult } from "@/lib/imEstatus";
+import { isResolvedStatus } from "@/lib/war-room";
 
 const TIMEZONE = "America/Mexico_City";
 
@@ -27,6 +28,8 @@ export interface ClienteTopItem {
   ref: string;
   /** Site Name tal cual el CSV (sin recortar). */
   siteName: string;
+  /** Status del snapshot (OpenIncident), para separar "en gestión" vs "resuelto por cerrar". */
+  status: string;
 }
 
 /** Fecha legible en español, hora CDMX, para el encabezado del mensaje. */
@@ -90,9 +93,26 @@ export interface BuildMessageOptions {
   ahora?: Date;
 }
 
+/** Arma el bloque de un IM (número + IM + REF + Site Name + Estatus). */
+function bloqueIm(
+  it: ClienteTopItem,
+  i: number,
+  estatus: Map<string, ImEstatusResult>,
+  prefijoSitio: string,
+): string[] {
+  return [
+    "",
+    `${emojiNumero(i)} *${it.incidentId}*`,
+    `REF: ${it.ref}`,
+    `Site Name: ${recortarSitio(it.siteName, prefijoSitio)}`,
+    `Estatus: ${lineaEstatus(estatus.get(it.incidentId))}`,
+  ];
+}
+
 /**
- * Arma el mensaje completo de WhatsApp. `items` son los IMs del cliente (en el
- * orden a mostrar) y `estatus` el mapa incidentId → resultado del scraper.
+ * Arma el mensaje completo de WhatsApp, agrupado en "En gestión" (no resueltos)
+ * y "Resueltos (por cerrar)". `items` son los IMs del cliente y `estatus` el
+ * mapa incidentId → resultado del scraper. La numeración reinicia por grupo.
  */
 export function buildClienteTopMessage(
   items: ClienteTopItem[],
@@ -102,20 +122,18 @@ export function buildClienteTopMessage(
   const etiqueta = (opts.etiquetaCliente ?? "PEXA").trim();
   const fecha = fechaEncabezado(opts.ahora ?? new Date());
 
-  const lineas: string[] = [
-    `📊 *ESTATUS CLIENTE TOP · ${etiqueta}*`,
-    fecha,
-    "",
-    `IMs en gestión: *${items.length}*`,
-  ];
+  const enGestion = items.filter((it) => !isResolvedStatus(it.status));
+  const resueltos = items.filter((it) => isResolvedStatus(it.status));
 
-  items.forEach((it, i) => {
-    lineas.push("");
-    lineas.push(`${emojiNumero(i)} *${it.incidentId}*`);
-    lineas.push(`REF: ${it.ref}`);
-    lineas.push(`Site Name: ${recortarSitio(it.siteName, opts.prefijoSitio)}`);
-    lineas.push(`Estatus: ${lineaEstatus(estatus.get(it.incidentId))}`);
-  });
+  const lineas: string[] = [`📊 *ESTATUS CLIENTE TOP · ${etiqueta}*`, fecha, ""];
+
+  lineas.push(`🔴 *En gestión: ${enGestion.length}*`);
+  enGestion.forEach((it, i) => lineas.push(...bloqueIm(it, i, estatus, opts.prefijoSitio)));
+
+  if (resueltos.length > 0) {
+    lineas.push("", `✅ *Resueltos (por cerrar): ${resueltos.length}*`);
+    resueltos.forEach((it, i) => lineas.push(...bloqueIm(it, i, estatus, opts.prefijoSitio)));
+  }
 
   return lineas.join("\n");
 }
