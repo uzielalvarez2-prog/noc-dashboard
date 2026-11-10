@@ -99,6 +99,32 @@ async function obtenerItems(cliente: {
   }));
 }
 
+/** DIAGNÓSTICO TEMPORAL: qué cliente se resolvió y cuántos IMs matchean. */
+export async function diagnosticarClienteTop(clienteTopId?: string) {
+  const todosClientes = await db.clienteTop.findMany({
+    select: { id: true, company: true, serviceRef: true, siglasIm: true, note: true },
+  });
+  const cliente = await resolverCliente(clienteTopId);
+  if ("error" in cliente) {
+    return { error: cliente.error, todosClientes, clienteTopIdRecibido: clienteTopId ?? null };
+  }
+  const war = await db.warRoomIncident.findMany({
+    where: { dismissed: false, group: "PEXA" },
+    select: { incidentId: true, company: true, serviceId: true, status: true },
+  });
+  const noResueltos = war.filter((w) => !isResolvedStatus(w.status));
+  const matchean = noResueltos.filter((w) => matcheaCliente(w, cliente));
+  return {
+    clienteTopIdRecibido: clienteTopId ?? null,
+    clienteResuelto: cliente,
+    todosClientes,
+    warRoomPexaTotal: war.length,
+    warRoomNoResueltos: noResueltos.length,
+    matcheanConCliente: matchean.length,
+    primeros10Match: matchean.slice(0, 10).map((m) => ({ im: m.incidentId, co: m.company, sv: m.serviceId })),
+  };
+}
+
 /** Resuelve el ClienteTop a reportar (por id, o el único si solo hay uno). */
 async function resolverCliente(
   clienteTopId?: string,
