@@ -72,14 +72,40 @@ function emojiNumero(i: number): string {
 
 /**
  * Texto de la línea "Estatus:" de un IM a partir del resultado del scraper.
- * Toma la última nota (actividades[0]); si no hay, cae al status del formulario.
+ * Toma la última nota REAL del ingeniero, saltando las entradas AUTOMÁTICAS de
+ * HPSM (reasignaciones, cambios de estatus, SMBOT, node reset, wizard), que no
+ * aportan información del diagnóstico. Si todas las que trae son automáticas,
+ * cae a la más reciente (mejor algo que nada); si no hay actividades, al status.
  */
+
+// Entradas automáticas de HPSM (no son notas del ingeniero). Se comparan contra
+// la descripción, sin distinguir mayúsculas/acentos.
+const PATRONES_NOTA_AUTOMATICA: RegExp[] = [
+  /^\s*reassignment from .+ to .+/i, // "Reassignment from nrmartin to dgluis"
+  /^\s*individual reassignment from /i, // "Individual reassignment from ..."
+  /^\s*incident status change to /i, // "Incident Status Change to PENDING ..."
+  /probabilidad calculada por smbot/i, // SMBOT
+  /^\s*node reset at /i, // "Node Reset at 10/11/2026 ..."
+  /^\s*wizard used /i, // "Wizard Used Reassign Incidents"
+];
+
+function esNotaAutomatica(desc: string | undefined): boolean {
+  const d = (desc ?? "").trim();
+  if (!d) return true;
+  return PATRONES_NOTA_AUTOMATICA.some((re) => re.test(d));
+}
+
 export function lineaEstatus(res: ImEstatusResult | undefined): string {
   if (!res) return "sin datos (no se consultó)";
   if (res.error) return "no se pudo consultar";
   if (!res.found) return "no encontrado en HPSM";
   if (res.cerrado) return "Cerrado";
-  const ultima = res.actividades?.[0]?.descripcion?.trim();
+  const acts = res.actividades ?? [];
+  // Primera actividad (más reciente) que NO sea automática.
+  const real = acts.find((a) => !esNotaAutomatica(a.descripcion))?.descripcion?.trim();
+  if (real) return real;
+  // Todas automáticas: cae a la más reciente para no quedar vacío.
+  const ultima = acts[0]?.descripcion?.trim();
   if (ultima) return ultima;
   return res.status?.trim() || "(sin nota)";
 }

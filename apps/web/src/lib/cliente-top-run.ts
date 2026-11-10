@@ -171,6 +171,13 @@ export async function dispararEstatusClienteTop(opts: {
   const cliente = await resolverCliente(opts.clienteTopId);
   if ("error" in cliente) return { ok: false, ims: 0, sinIms: false, iniciado: false, error: cliente.error };
 
+  // Etiqueta del encabezado = nombre del cliente (company). Es más claro que la
+  // genérica "PEXA". Si el company viniera vacío, se cae a lo que mandó el caller.
+  const etiquetaEfectiva = cliente.company.trim() || opts.etiquetaCliente;
+  // Prefijo a recortar del Site Name = también el nombre del cliente (así
+  // "SMART FIT SENDERA COLIMA" → "SENDERA COLIMA" sin depender de una env var).
+  const prefijoEfectivo = cliente.company.trim() || opts.prefijoSitio;
+
   const items = await obtenerItems(cliente);
 
   // RED DE SEGURIDAD: un solo cliente TOP no debería tener decenas de IMs
@@ -194,8 +201,8 @@ export async function dispararEstatusClienteTop(opts: {
     if (!opts.enviarSiVacio) return { ok: true, ims: 0, sinIms: true, iniciado: false };
     const enviado = await enviarMensajeClienteTop({
       chatId,
-      prefijo: opts.prefijoSitio,
-      etiqueta: opts.etiquetaCliente,
+      prefijo: prefijoEfectivo,
+      etiqueta: etiquetaEfectiva,
       items: [],
       resultados: [],
     });
@@ -213,8 +220,8 @@ export async function dispararEstatusClienteTop(opts: {
       body: JSON.stringify({
         ims: items.slice(0, MAX_IMS).map((i) => i.incidentId),
         chatId,
-        prefijo: opts.prefijoSitio,
-        etiqueta: opts.etiquetaCliente,
+        prefijo: prefijoEfectivo,
+        etiqueta: etiquetaEfectiva,
         items,
         enviarSiVacio: opts.enviarSiVacio,
       }),
