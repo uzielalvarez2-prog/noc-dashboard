@@ -212,7 +212,9 @@ async function dispararEstatusClienteTop(): Promise<void> {
     const res = await fetch(url, {
       method: "POST",
       headers: { "Content-Type": "application/json", "x-internal-key": config.internalApiKey },
-      body: JSON.stringify({}),
+      // enviarSiVacio: manda el reporte aunque no haya IMs abiertos ("0 en
+      // gestión"), para que Supervisión confirme que la corrida se ejecutó.
+      body: JSON.stringify({ enviarSiVacio: true }),
       signal: AbortSignal.timeout(30_000),
     });
     const body = await res.text();
