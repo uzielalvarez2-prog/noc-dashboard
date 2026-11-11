@@ -18,7 +18,7 @@ import { db } from "@/lib/db";
 import type { ImEstatusResult } from "@/lib/imEstatus";
 import { sendWhatsappViaListener } from "@/lib/whatsapp";
 import { buildClienteTopMessage, type ClienteTopItem } from "@/lib/cliente-top-estatus";
-import { unirIms, type GrupoEnvio } from "@/lib/cliente-top-ims";
+import { unirIms, resumirEnvios, type GrupoEnvio, type EnvioResultado, type ResumenEnvios } from "@/lib/cliente-top-ims";
 
 const SCRAPER_URL = process.env.SCRAPER_URL ?? "";
 const INTERNAL_API_KEY = process.env.INTERNAL_API_KEY ?? "";
@@ -246,20 +246,25 @@ export async function dispararEstatusClienteTop(opts: {
 export async function enviarMensajesClienteTop(
   grupos: GrupoEnvio[],
   resultados: ImEstatusResult[],
-): Promise<{ ok: boolean; enviados: number; fallidos: number }> {
+): Promise<ResumenEnvios> {
   const estatus = new Map<string, ImEstatusResult>();
   for (const r of resultados) estatus.set(r.im, r);
 
-  let enviados = 0;
-  let fallidos = 0;
+  const envios: EnvioResultado[] = [];
   for (const grupo of grupos) {
     const mensaje = buildClienteTopMessage(grupo.items, estatus, {
       etiquetaCliente: grupo.etiqueta,
       prefijoSitio: grupo.prefijo,
     });
     const sent = await sendWhatsappViaListener(grupo.chatId, mensaje);
-    if (sent.ok) enviados++;
-    else fallidos++;
+    if (!sent.ok) {
+      // En la corrida automática nadie mira: deja constancia de QUÉ cliente y
+      // por qué quedó sin su estatus (no solo un conteo).
+      console.error(
+        `[cliente-top] envío fallido · ${grupo.etiqueta} (${grupo.chatId}): ${sent.error ?? "error desconocido"}`,
+      );
+    }
+    envios.push({ chatId: grupo.chatId, etiqueta: grupo.etiqueta, ok: sent.ok, error: sent.error });
   }
-  return { ok: fallidos === 0, enviados, fallidos };
+  return resumirEnvios(envios);
 }
