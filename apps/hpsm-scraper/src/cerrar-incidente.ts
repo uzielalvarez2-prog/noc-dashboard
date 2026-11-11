@@ -1,7 +1,6 @@
 import type { Frame, Page } from "playwright";
-import { config } from "./config.js";
 import { logger } from "./logger.js";
-import { IM_REGEX } from "./hpsm-incident.js";
+import { IM_REGEX, abrirIncidentePorBuscador } from "./hpsm-incident.js";
 
 /**
  * Cierre de un incidente en HPSM aplicando un TEMPLATE (reproduce el flujo
@@ -55,19 +54,7 @@ export interface CierreResult {
   statusPrevio?: string;
 }
 
-const FORM_TIMEOUT_MS = 45_000;
 const WIZARD_TIMEOUT_MS = 30_000;
-
-function deepLink(file: string, im: string): string {
-  const u = new URL("/sm/index.do", config.hpsm.url);
-  u.searchParams.set("lang", "en");
-  u.searchParams.set("ctx", "docEngine");
-  u.searchParams.set("file", file);
-  u.searchParams.set("query", `number="${im}"`);
-  u.searchParams.set("action", "");
-  u.searchParams.set("title", im);
-  return u.href;
-}
 
 async function waitForFrame(
   page: Page,
@@ -219,16 +206,13 @@ export async function cerrarIncidente(
       return { ...base, mensaje: "Template vacío" };
     }
 
-    // Paso 1-3: abrir el incidente.
-    await page.goto(deepLink("probsummary", im), { waitUntil: "domcontentloaded", timeout: 30_000 });
-    const detail = await waitForFrame(
-      page,
-      async (f) =>
-        f.url().includes("detail.do") && (await f.locator('input[name="instance/number"]').count()) > 0,
-      FORM_TIMEOUT_MS,
-    );
-    if (!detail) {
-      return { ...base, resultado: "error", mensaje: "El formulario del incidente no cargó (detail.do)" };
+    // Paso 1-3: abrir el incidente por el buscador (los deep links ctx=docEngine
+    // dejaron de funcionar el 2026-11-11: "Invalid query hash in URL").
+    let detail: Frame;
+    try {
+      detail = await abrirIncidentePorBuscador(page, im);
+    } catch (e) {
+      return { ...base, resultado: "error", mensaje: `No se pudo abrir ${im} por el buscador: ${(e as Error).message}` };
     }
     // Esperar a que instance/number se pueble: en un servidor lento (Railway)
     // el frame existe pero el valor tarda, y leerlo de inmediato daba un falso
@@ -406,14 +390,10 @@ export async function cerrarIncidente(
     await page.waitForTimeout(3_000);
     await page.screenshot({ path: `cerrar-despues-${im}.png`, fullPage: true }).catch(() => {});
 
-    // Verificar que de verdad cerró: reabrir el IM y leer el status. Si no quedó
-    // CLOSED, el botón no era el correcto — se reporta para no dar un falso OK.
-    await page.goto(deepLink("probsummary", im), { waitUntil: "domcontentloaded", timeout: 30_000 }).catch(() => {});
-    await waitForFrame(
-      page,
-      async (f) => f.url().includes("detail.do") && (await f.locator('input[name="instance/number"]').count()) > 0,
-      FORM_TIMEOUT_MS,
-    );
+    // Verificar que de verdad cerró: reabrir el IM por el buscador y leer el
+    // status. Si no quedó CLOSED, el botón no era el correcto — se reporta para
+    // no dar un falso OK.
+    await abrirIncidentePorBuscador(page, im).catch(() => {});
     const statusFinal = await leerStatus(page);
     await cerrarPestanas(page);
 
