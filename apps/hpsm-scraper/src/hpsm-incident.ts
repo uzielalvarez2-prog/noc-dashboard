@@ -75,9 +75,45 @@ async function frameBuscadorAbierto(page: Page): Promise<Frame | undefined> {
   return undefined;
 }
 
+/**
+ * Espera a que TODOS los overlays de carga de HPSM (.ext-el-mask) estén ocultos.
+ * HPSM muestra varios de estos masks mientras carga; si están visibles,
+ * interceptan los clicks ("ext-genNNNN intercepts pointer events"). Tras cerrar
+ * varios IMs seguidos HPSM se pone lento y estos masks aparecen justo antes de
+ * un click, así que hay que re-esperarlos antes de CADA click crítico.
+ */
+async function esperarSinOverlay(page: Page, timeoutMs = 25_000): Promise<void> {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    const visibles = await page
+      .locator(".ext-el-mask:visible")
+      .count()
+      .catch(() => 0);
+    if (visibles === 0) return;
+    await page.waitForTimeout(400);
+  }
+  // No lanzar: se deja seguir y el click robusto reintentará si aún estorba.
+}
+
+/** Click que tolera el overlay de HPSM: espera sin mask y reintenta si lo intercepta. */
+async function clickRobusto(page: Page, locator: ReturnType<Page["locator"]>, intentos = 3): Promise<void> {
+  let ultimo: unknown;
+  for (let i = 0; i < intentos; i++) {
+    await esperarSinOverlay(page);
+    try {
+      await locator.click({ timeout: 8_000 });
+      return;
+    } catch (e) {
+      ultimo = e;
+      await page.waitForTimeout(800);
+    }
+  }
+  throw ultimo instanceof Error ? ultimo : new Error("clickRobusto falló");
+}
+
 /** Navega el menú Incident Management → Search Incidents hasta dejar el QBE listo. */
 async function abrirBuscadorDesdeMenu(page: Page): Promise<Frame> {
-  await page.locator(".ext-el-mask").first().waitFor({ state: "hidden", timeout: 15_000 }).catch(() => {});
+  await esperarSinOverlay(page);
 
   // Clickear "Incident Management" es un TOGGLE: si el submenú ya estaba
   // expandido (p.ej. tras abrir un IM previo), un click lo COLAPSA y oculta
@@ -88,7 +124,7 @@ async function abrirBuscadorDesdeMenu(page: Page): Promise<Frame> {
 
   let visible = await searchInc.isVisible().catch(() => false);
   for (let i = 0; i < 4 && !visible; i++) {
-    await incMgmt.click({ timeout: 15_000 }).catch(() => {});
+    await clickRobusto(page, incMgmt).catch(() => {});
     visible = await searchInc
       .waitFor({ state: "visible", timeout: 6_000 })
       .then(() => true)
@@ -97,7 +133,7 @@ async function abrirBuscadorDesdeMenu(page: Page): Promise<Frame> {
   if (!visible) throw new Error('No se pudo dejar visible "Search Incidents" en el menú');
 
   const nuevoFrame = page.waitForEvent("frameattached", { timeout: BUSCADOR_NAV_TIMEOUT_MS }).catch(() => null);
-  await searchInc.click({ timeout: 10_000 });
+  await clickRobusto(page, searchInc);
   await nuevoFrame;
 
   // Sondear hasta que el campo instance/number del QBE esté visible y editable.

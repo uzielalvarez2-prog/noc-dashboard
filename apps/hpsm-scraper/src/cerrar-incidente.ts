@@ -390,11 +390,17 @@ export async function cerrarIncidente(
     await page.waitForTimeout(3_000);
     await page.screenshot({ path: `cerrar-despues-${im}.png`, fullPage: true }).catch(() => {});
 
-    // Verificar que de verdad cerró: reabrir el IM por el buscador y leer el
-    // status. Si no quedó CLOSED, el botón no era el correcto — se reporta para
-    // no dar un falso OK.
-    await abrirIncidentePorBuscador(page, im).catch(() => {});
-    const statusFinal = await leerStatus(page);
+    // Verificar que de verdad cerró. OPTIMIZACIÓN: tras cerrar, HPSM suele dejar
+    // el detalle en pantalla con Status=Closed, así que primero se intenta leer
+    // AHÍ MISMO (sin reabrir). Solo si ahí NO se ve CLOSED (status vacío, o aún
+    // en estado intermedio) se reabre el IM por el buscador para confirmar de
+    // forma fehaciente. En el caso normal esto ahorra una navegación de menú
+    // completa por IM; en el dudoso, mantiene la verificación robusta.
+    let statusFinal = await leerStatus(page);
+    if (statusFinal.toUpperCase() !== "CLOSED") {
+      await abrirIncidentePorBuscador(page, im).catch(() => {});
+      statusFinal = await leerStatus(page);
+    }
     await cerrarPestanas(page);
 
     const quedoCerrado = statusFinal.toUpperCase() === "CLOSED";
