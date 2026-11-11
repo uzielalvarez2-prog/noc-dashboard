@@ -60,9 +60,17 @@ async function waitForFrame(
 const BUSCADOR_NAV_TIMEOUT_MS = 20_000;
 const BUSCADOR_FORM_TIMEOUT_MS = 60_000;
 
-/** Frame del form de búsqueda (QBE) si está abierto: el que tiene instance/number visible. */
+/**
+ * Frame del form de búsqueda (QBE) si está abierto: el que tiene instance/number
+ * visible y editable. CLAVE: se EXCLUYE detail.do — el detalle de un IM también
+ * tiene un campo instance/number (a veces editable), así que sin este filtro un
+ * detalle residual de un IM previo se confundía con el buscador: se tecleaba el
+ * folio nuevo en el detalle viejo, Search no navegaba, y el detalle viejo se
+ * arrastraba a todos los IMs siguientes.
+ */
 async function frameBuscadorAbierto(page: Page): Promise<Frame | undefined> {
   for (const f of page.frames()) {
+    if (f.url().includes("detail.do")) continue; // nunca el detalle de un IM
     const loc = f.locator('input[name="instance/number"]').first();
     if (
       (await loc.count().catch(() => 0)) > 0 &&
@@ -206,17 +214,33 @@ async function abrirUnaVez(page: Page, im: string, forzarMenu: boolean): Promise
   }
   if (!clickeado) throw new Error('No se encontró el botón "Search" del buscador');
 
-  // 4. Esperar el detalle con el folio pedido (no uno residual de otro IM).
-  const detail = await waitForFrame(
-    page,
-    async (f) => {
-      if (!f.url().includes("detail.do")) return false;
-      const loc = f.locator('input[name="instance/number"]').first();
-      return (await loc.count().catch(() => 0)) > 0;
-    },
-    BUSCADOR_FORM_TIMEOUT_MS,
-  );
-  if (!detail) throw new Error("El buscador no abrió el detalle del incidente (detail.do)");
+  // 4. Esperar el detalle con el folio PEDIDO. CLAVE: no basta con que exista un
+  //    detail.do con un campo instance/number — hay que exigir que su VALOR sea
+  //    el IM solicitado. Si no se exige, un detalle residual de un IM previo que
+  //    falló (p.ej. sin "Apply Template") se queda en pantalla y se devuelve como
+  //    bueno, y a partir de ahí TODOS los IMs siguientes se abren con el folio
+  //    viejo ("HPSM mostró IMVIEJO en lugar de IMNUEVO"). El detalle carga
+  //    diferido, así que se sondea el valor con margen amplio.
+  const imUpper = im.toUpperCase();
+  const deadline = Date.now() + BUSCADOR_FORM_TIMEOUT_MS;
+  let detail: Frame | undefined;
+  while (Date.now() < deadline) {
+    for (const f of page.frames()) {
+      if (!f.url().includes("detail.do")) continue;
+      const numero = (
+        await f.locator('input[name="instance/number"]').first().inputValue().catch(() => "")
+      ).trim();
+      if (numero && numero.toUpperCase() === imUpper) {
+        detail = f;
+        break;
+      }
+    }
+    if (detail) break;
+    await page.waitForTimeout(1_000);
+  }
+  if (!detail) {
+    throw new Error(`El buscador no abrió el detalle de ${im} (detail.do con ese folio)`);
+  }
   return detail;
 }
 

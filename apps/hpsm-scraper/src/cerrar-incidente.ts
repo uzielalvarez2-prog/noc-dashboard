@@ -414,7 +414,15 @@ export async function cerrarIncidente(
         : `${im}: se aplicó template y se apretó "${botonUsado}", pero el status final es "${statusFinal || "?"}" (no CLOSED). Revisa cerrar-despues-${im}.png.`,
     };
   } catch (e) {
-    await cerrarPestanas(page).catch(() => {});
     return { ...base, resultado: "error", mensaje: (e as Error).message };
+  } finally {
+    // RED DE SEGURIDAD: pase lo que pase (éxito, error, o un return temprano por
+    // "Apply Template" no encontrado, etc.), se cierran las pestañas del IM para
+    // que su detalle NO se quede en pantalla y se arrastre al IM siguiente (era
+    // la causa del "HPSM abrió IMVIEJO en lugar de IMNUEVO" en el cierre masivo).
+    // EXCEPCIÓN: en modo "aplicar" se deja el IM abierto a propósito (inspección).
+    if (modo !== "aplicar") {
+      await cerrarPestanas(page).catch(() => {});
+    }
   }
 }
