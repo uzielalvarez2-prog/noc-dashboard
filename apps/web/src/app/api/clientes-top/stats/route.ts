@@ -97,6 +97,8 @@ export async function GET(req: NextRequest) {
         siglasIm: c.siglasIm,
         serviceRef: c.serviceRef,
         note: c.note,
+        notificarChatId: c.notificarChatId,
+        notificarChatName: c.notificarChatName,
         openCount: matches.length,
         activeCount,
         criticalCount: delayedMs.length,

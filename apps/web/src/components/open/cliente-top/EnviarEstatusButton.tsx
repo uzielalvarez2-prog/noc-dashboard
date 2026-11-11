@@ -24,7 +24,16 @@ interface RunResult {
   error?: string;
 }
 
-export function EnviarEstatusButton({ clienteTopId, clienteNombre }: { clienteTopId?: string; clienteNombre?: string }) {
+export function EnviarEstatusButton({
+  clienteTopId,
+  clienteNombre,
+  defaultChatId,
+}: {
+  clienteTopId?: string;
+  clienteNombre?: string;
+  /** Grupo de aviso guardado del cliente; preselecciona el destino al abrir. */
+  defaultChatId?: string | null;
+}) {
   const [isAdmin, setIsAdmin] = useState(false);
   const [open, setOpen] = useState(false);
   const [groups, setGroups] = useState<WhatsappGroup[]>([]);
@@ -73,7 +82,11 @@ export function EnviarEstatusButton({ clienteTopId, clienteNombre }: { clienteTo
     <>
       <button
         type="button"
-        onClick={() => setOpen(true)}
+        onClick={() => {
+          // Preselecciona el grupo guardado del cliente (editable para una prueba).
+          setChatId(defaultChatId ? [defaultChatId] : []);
+          setOpen(true);
+        }}
         className="flex shrink-0 items-center gap-1.5 rounded-md border border-border px-3 py-2 text-xs font-semibold text-text-primary transition-colors hover:border-accent/50 hover:text-accent"
         title="Enviar el estatus de los IMs del cliente TOP a un grupo de WhatsApp"
       >

@@ -195,6 +195,9 @@ interface TareaClienteTop {
   prefijo: string;
   etiqueta: string;
   items: unknown; // [{ incidentId, ref, siteName }]; el scraper no los interpreta
+  // Modo multi-cliente: un GrupoEnvio por cliente destino ({ chatId, etiqueta,
+  // prefijo, items }). Opaco para el scraper: se devuelve tal cual en el callback.
+  grupos: unknown[];
   enviarSiVacio: boolean;
 }
 
@@ -233,6 +236,7 @@ async function correrClienteTop(
         prefijo: tarea.prefijo,
         etiqueta: tarea.etiqueta,
         items: tarea.items,
+        grupos: tarea.grupos,
         enviarSiVacio: tarea.enviarSiVacio,
         resultados,
       }),
@@ -456,6 +460,7 @@ export function startScraperServer(deps: ScraperServerDeps): void {
           prefijo?: unknown;
           etiqueta?: unknown;
           items?: unknown;
+          grupos?: unknown;
           enviarSiVacio?: unknown;
         };
         const ims = Array.isArray(b.ims)
@@ -471,8 +476,11 @@ export function startScraperServer(deps: ScraperServerDeps): void {
           return;
         }
         const chatId = typeof b.chatId === "string" ? b.chatId.trim() : "";
-        if (!chatId) {
-          json(400, { error: "chatId requerido" });
+        const grupos = Array.isArray(b.grupos) ? b.grupos : [];
+        // Modo multi-cliente (grupos) no manda chatId global: cada grupo lleva el
+        // suyo. Solo se exige chatId cuando NO hay grupos (modo single legacy).
+        if (!chatId && grupos.length === 0) {
+          json(400, { error: "chatId o grupos requerido" });
           return;
         }
         if (clienteTopEnCurso || progresoIm.estado === "en_cola" || progresoIm.estado === "consultando") {
@@ -484,6 +492,7 @@ export function startScraperServer(deps: ScraperServerDeps): void {
           prefijo: typeof b.prefijo === "string" ? b.prefijo : "",
           etiqueta: typeof b.etiqueta === "string" ? b.etiqueta : "PEXA",
           items: Array.isArray(b.items) ? b.items : [],
+          grupos,
           enviarSiVacio: b.enviarSiVacio === true,
         };
         void correrClienteTop(deps, ims, tarea);
