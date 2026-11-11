@@ -1,24 +1,24 @@
 "use client";
 
-import type { ReactNode } from "react";
-import { cn, hpsmIncidentUrl } from "@/lib/utils";
+import { useState, type ReactNode } from "react";
+import { cn } from "@/lib/utils";
 
 /**
- * Folio de incidente que abre HPSM al hacer DOBLE CLIC.
+ * Folio de incidente que se COPIA al portapapeles con un clic (o doble clic).
  *
- * Reutiliza SIEMPRE la misma pestaña del navegador (window name "hpsm"): cada
- * doble clic re-navega esa pestaña al nuevo IM en lugar de abrir una nueva. Como
- * es el mismo navegador, comparte la sesión/login de HPSM, así que no vuelve a
- * pedir usuario por cada incidente (si la sesión sigue activa).
+ * Antes el doble clic abría HPSM con un deep link `ctx=docEngine`, pero HPSM
+ * endureció querysecurity el 2026-11-11 y esos links devuelven "Invalid query
+ * hash in URL" (ya no abren el IM; hay que ir por Search Incidents a mano). Por
+ * eso ahora la interacción es COPIAR el folio: un clic o doble clic lo dejan en
+ * el portapapeles para pegarlo donde se necesite (p.ej. el buscador de HPSM).
  *
- * La afordancia visual (cursor, subrayado y color de acento al pasar el mouse)
- * es igual en todas las tablas; el estilo de texto base lo pone cada tabla vía
- * `className` para conservar su color/peso.
+ * Da feedback visual breve ("✓ copiado") y cae a execCommand si el navegador no
+ * expone navigator.clipboard (contextos no seguros).
  */
 export function HpsmIncidentId({
   incidentId,
   className,
-  title = "Doble clic para abrir en HPSM",
+  title = "Clic para copiar el folio",
   children,
 }: {
   incidentId: string;
@@ -26,16 +26,42 @@ export function HpsmIncidentId({
   title?: string;
   children?: ReactNode;
 }) {
+  const [copiado, setCopiado] = useState(false);
+
+  async function copiar() {
+    const texto = incidentId.trim();
+    try {
+      await navigator.clipboard.writeText(texto);
+    } catch {
+      const ta = document.createElement("textarea");
+      ta.value = texto;
+      ta.style.position = "fixed";
+      ta.style.opacity = "0";
+      document.body.appendChild(ta);
+      ta.select();
+      try {
+        document.execCommand("copy");
+      } catch {
+        /* sin portapapeles disponible: no romper la UI */
+      }
+      document.body.removeChild(ta);
+    }
+    setCopiado(true);
+    setTimeout(() => setCopiado(false), 1400);
+  }
+
   return (
     <span
-      onDoubleClick={() => window.open(hpsmIncidentUrl(incidentId), "hpsm")}
-      title={title}
+      onClick={copiar}
+      title={copiado ? "✓ Copiado" : title}
       className={cn(
         "cursor-pointer select-none underline-offset-2 hover:text-accent hover:underline",
+        copiado && "text-accent",
         className
       )}
     >
       {children ?? incidentId}
+      {copiado && <span className="ml-1 text-[10px] text-accent">✓</span>}
     </span>
   );
 }
