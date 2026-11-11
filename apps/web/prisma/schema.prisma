@@ -173,6 +173,8 @@ model ClienteTop {
   company    String
   serviceRef String   @default("")
   note       String?
+  notificarChatId   String? // Grupo WhatsApp destino del aviso automático; null = sin aviso
+  notificarChatName String? // Nombre del grupo (para mostrar en la UI sin resolverlo)
   createdBy  String   @default("")
   createdAt  DateTime @default(now())
 
