@@ -21,6 +21,10 @@ export interface ClienteTopStat {
   siglasIm: string;
   serviceRef: string;
   note: string | null;
+  /** Grupo WhatsApp destino del aviso automático; null = sin aviso. */
+  notificarChatId: string | null;
+  /** Nombre del grupo destino (para mostrar en la UI). */
+  notificarChatName: string | null;
   openCount: number;
   /** IM's aún no resueltos (los RESOLVED siguen en el snapshot hasta el cierre). */
   activeCount: number;
