@@ -62,20 +62,25 @@ const BUSCADOR_FORM_TIMEOUT_MS = 60_000;
 
 /**
  * Frame del form de búsqueda (QBE) si está abierto: el que tiene instance/number
- * visible y editable. CLAVE: se EXCLUYE detail.do — el detalle de un IM también
- * tiene un campo instance/number (a veces editable), así que sin este filtro un
- * detalle residual de un IM previo se confundía con el buscador: se tecleaba el
- * folio nuevo en el detalle viejo, Search no navegaba, y el detalle viejo se
- * arrastraba a todos los IMs siguientes.
+ * visible, editable y VACÍO.
+ *
+ * CLAVE: se distingue del detalle de un IM por el VALOR del campo, no por la URL.
+ * El detalle también tiene instance/number (a veces editable), pero LLENO con un
+ * folio IM...; el QBE de búsqueda está VACÍO. Antes se filtraba por URL
+ * (detail.do), pero HPSM a veces reusa el mismo frame (misma URL) para el QBE y
+ * para el detalle, así que filtrar por URL podía esconder el buscador real y dar
+ * "No se abrió el form de búsqueda". Exigir el campo vacío evita confundir un
+ * detalle residual con el buscador (que era lo que arrastraba el IM viejo al
+ * siguiente) sin ocultar nunca el QBE legítimo.
  */
 async function frameBuscadorAbierto(page: Page): Promise<Frame | undefined> {
   for (const f of page.frames()) {
-    if (f.url().includes("detail.do")) continue; // nunca el detalle de un IM
     const loc = f.locator('input[name="instance/number"]').first();
     if (
       (await loc.count().catch(() => 0)) > 0 &&
       (await loc.isVisible().catch(() => false)) &&
-      (await loc.isEditable().catch(() => false))
+      (await loc.isEditable().catch(() => false)) &&
+      ((await loc.inputValue().catch(() => "")).trim() === "") // VACÍO = buscador, no detalle
     ) {
       return f;
     }
@@ -152,6 +157,19 @@ async function abrirBuscadorDesdeMenu(page: Page): Promise<Frame> {
     if (qbe) return qbe;
     await page.waitForTimeout(1_000);
   }
+  // Diagnóstico al fallar: inventariar los campos instance/number que SÍ hay, con
+  // su estado (visible/editable/valor), para saber por qué no se reconoció el QBE
+  // sin tener que reproducir a ciegas (cada reproducción gasta una sesión HPSM).
+  const diag: string[] = [];
+  for (const f of page.frames()) {
+    const loc = f.locator('input[name="instance/number"]').first();
+    if ((await loc.count().catch(() => 0)) === 0) continue;
+    const vis = await loc.isVisible().catch(() => false);
+    const edit = await loc.isEditable().catch(() => false);
+    const val = (await loc.inputValue().catch(() => "?")).trim();
+    diag.push(`url=${f.url().slice(0, 60)} vis=${vis} edit=${edit} val="${val}"`);
+  }
+  logger.warn(`QBE no reconocido. Campos instance/number vistos: ${diag.length ? diag.join(" || ") : "NINGUNO"}`);
   throw new Error("No se abrió el form de búsqueda (instance/number)");
 }
 
@@ -214,19 +232,18 @@ async function abrirUnaVez(page: Page, im: string, forzarMenu: boolean): Promise
   }
   if (!clickeado) throw new Error('No se encontró el botón "Search" del buscador');
 
-  // 4. Esperar el detalle con el folio PEDIDO. CLAVE: no basta con que exista un
-  //    detail.do con un campo instance/number — hay que exigir que su VALOR sea
-  //    el IM solicitado. Si no se exige, un detalle residual de un IM previo que
-  //    falló (p.ej. sin "Apply Template") se queda en pantalla y se devuelve como
-  //    bueno, y a partir de ahí TODOS los IMs siguientes se abren con el folio
-  //    viejo ("HPSM mostró IMVIEJO en lugar de IMNUEVO"). El detalle carga
-  //    diferido, así que se sondea el valor con margen amplio.
+  // 4. Esperar el detalle con el folio PEDIDO. CLAVE: se exige que algún frame
+  //    tenga instance/number con el VALOR == el IM solicitado. No se filtra por
+  //    URL (detail.do): HPSM a veces reusa el frame y la URL no es confiable; el
+  //    match por folio exacto YA garantiza que es el detalle de este IM. Esto
+  //    evita devolver un detalle residual de un IM previo que falló (lo que antes
+  //    arrastraba "IMVIEJO en lugar de IMNUEVO"). El detalle carga diferido, así
+  //    que se sondea el valor con margen amplio.
   const imUpper = im.toUpperCase();
   const deadline = Date.now() + BUSCADOR_FORM_TIMEOUT_MS;
   let detail: Frame | undefined;
   while (Date.now() < deadline) {
     for (const f of page.frames()) {
-      if (!f.url().includes("detail.do")) continue;
       const numero = (
         await f.locator('input[name="instance/number"]').first().inputValue().catch(() => "")
       ).trim();
@@ -239,7 +256,7 @@ async function abrirUnaVez(page: Page, im: string, forzarMenu: boolean): Promise
     await page.waitForTimeout(1_000);
   }
   if (!detail) {
-    throw new Error(`El buscador no abrió el detalle de ${im} (detail.do con ese folio)`);
+    throw new Error(`El buscador no abrió el detalle de ${im} (ningún frame con ese folio)`);
   }
   return detail;
 }
