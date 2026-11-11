@@ -15,23 +15,28 @@
 // ─────────────────────────────────────────────────────────────────────────────
 
 import { db } from "@/lib/db";
-import { isResolvedStatus } from "@/lib/war-room";
-import { MAX_IMS, type ImEstatusResult } from "@/lib/imEstatus";
+import type { ImEstatusResult } from "@/lib/imEstatus";
 import { sendWhatsappViaListener } from "@/lib/whatsapp";
 import { buildClienteTopMessage, type ClienteTopItem } from "@/lib/cliente-top-estatus";
+import { unirIms, type GrupoEnvio } from "@/lib/cliente-top-ims";
 
 const SCRAPER_URL = process.env.SCRAPER_URL ?? "";
 const INTERNAL_API_KEY = process.env.INTERNAL_API_KEY ?? "";
 
 export interface DispararResult {
   ok: boolean;
-  /** IMs del cliente que se mandaron a consultar. */
+  /** IMs únicos que se mandaron a consultar (unión de todos los clientes). */
   ims: number;
+  /** Clientes destino de esta corrida. */
+  targets: number;
   sinIms: boolean;
   /** true si ya se arrancó la consulta en el scraper. */
   iniciado: boolean;
   error?: string;
 }
+
+/** Tope de IMs por cliente: más que esto es señal de filtro roto (no un cliente). */
+const TOPE_IMS_CLIENTE = 30;
 
 function norm(s: string | null | undefined): string {
   return (s ?? "").trim().toLowerCase();
@@ -125,111 +130,136 @@ async function resolverCliente(
 }
 
 /**
- * PASO 1 — DISPARAR. Lee los IMs del cliente y se los manda al scraper para que
- * consulte HPSM y, al terminar, haga callback a /api/cliente-top/enviar. Rápido:
- * no espera a la consulta. Si no hay IMs y enviarSiVacio es true, NO pasa por el
- * scraper (no hay nada que consultar): manda directo el mensaje "0 IMs".
+ * PASO 1 — DISPARAR. Reúne los clientes destino, junta sus IMs en UNA sola
+ * consulta y se la manda al scraper, que consulta HPSM y al terminar hace
+ * callback a /api/cliente-top/enviar. Rápido: no espera a la consulta.
+ *
+ * Dos modos:
+ *   - MANUAL (`clienteTopId` presente): un cliente, con el `chatId` dado. Si tiene
+ *     más de 30 IMs se ABORTA (señal de filtro roto).
+ *   - CRON (sin `clienteTopId`): todos los clientes con `notificarChatId`, cada uno
+ *     a SU grupo. Un cliente con >30 IMs se EXCLUYE (no aborta a los demás).
+ *
+ * Si no hay IMs que consultar y `enviarSiVacio` es true, NO pasa por el scraper:
+ * manda directo el mensaje "0 en gestión" a cada grupo.
  */
 export async function dispararEstatusClienteTop(opts: {
   clienteTopId?: string;
-  chatId: string;
-  prefijoSitio: string;
-  etiquetaCliente: string;
+  chatId?: string;
   enviarSiVacio: boolean;
 }): Promise<DispararResult> {
-  const chatId = opts.chatId.trim();
-  if (!chatId) return { ok: false, ims: 0, sinIms: false, iniciado: false, error: "chatId no configurado" };
+  const clienteTopId = (opts.clienteTopId ?? "").trim();
+  const targets: GrupoEnvio[] = [];
+  const excluidos: string[] = [];
 
-  const cliente = await resolverCliente(opts.clienteTopId);
-  if ("error" in cliente) return { ok: false, ims: 0, sinIms: false, iniciado: false, error: cliente.error };
+  if (clienteTopId) {
+    // MODO MANUAL: un cliente, con el grupo que mandó el caller.
+    const chatId = (opts.chatId ?? "").trim();
+    if (!chatId)
+      return { ok: false, ims: 0, targets: 0, sinIms: false, iniciado: false, error: "Falta el grupo destino (chatId)" };
+    const cliente = await resolverCliente(clienteTopId);
+    if ("error" in cliente)
+      return { ok: false, ims: 0, targets: 0, sinIms: false, iniciado: false, error: cliente.error };
+    const items = await obtenerItems(cliente);
+    const etiqueta = cliente.company.trim() || "PEXA";
+    if (items.length > TOPE_IMS_CLIENTE) {
+      return {
+        ok: false,
+        ims: items.length,
+        targets: 0,
+        sinIms: false,
+        iniciado: false,
+        error: `Filtro sospechoso: ${items.length} IMs para un cliente (tope ${TOPE_IMS_CLIENTE}). Se abortó para no agotar HPSM. Revisa el registro del cliente TOP (company/serviceRef/siglasIm).`,
+      };
+    }
+    targets.push({ chatId, etiqueta, prefijo: etiqueta, items });
+  } else {
+    // MODO CRON: todos los clientes con grupo de aviso asignado, cada uno al suyo.
+    const marcados = await db.clienteTop.findMany({
+      where: { NOT: { notificarChatId: null } },
+      select: { company: true, serviceRef: true, siglasIm: true, notificarChatId: true },
+    });
+    for (const c of marcados) {
+      const chatId = (c.notificarChatId ?? "").trim();
+      if (!chatId) continue; // cadena vacía = sin aviso
+      const items = await obtenerItems(c);
+      const etiqueta = c.company.trim() || "PEXA";
+      if (items.length > TOPE_IMS_CLIENTE) {
+        excluidos.push(`${c.company}: ${items.length} IMs (>${TOPE_IMS_CLIENTE})`);
+        continue;
+      }
+      targets.push({ chatId, etiqueta, prefijo: etiqueta, items });
+    }
+  }
 
-  // Etiqueta del encabezado = nombre del cliente (company). Es más claro que la
-  // genérica "PEXA". Si el company viniera vacío, se cae a lo que mandó el caller.
-  const etiquetaEfectiva = cliente.company.trim() || opts.etiquetaCliente;
-  // Prefijo a recortar del Site Name = también el nombre del cliente (así
-  // "SMART FIT SENDERA COLIMA" → "SENDERA COLIMA" sin depender de una env var).
-  const prefijoEfectivo = cliente.company.trim() || opts.prefijoSitio;
+  if (excluidos.length > 0)
+    console.warn("[cliente-top] clientes excluidos por tope de IMs:", excluidos.join("; "));
 
-  const items = await obtenerItems(cliente);
+  // Sin clientes destino (nadie marcado, o todos excluidos): nada que hacer.
+  if (targets.length === 0) return { ok: true, ims: 0, targets: 0, sinIms: true, iniciado: false };
 
-  // RED DE SEGURIDAD: un solo cliente TOP no debería tener decenas de IMs
-  // abiertos. Si el filtro devuelve un número absurdo (p.ej. 954), es que NO
-  // está filtrando y traería todo WarRoom — abortar sin consultar HPSM ni
-  // enviar, para no agotar sesiones de HPSM ni mandar un mensaje basura.
-  const TOPE_IMS_CLIENTE = 30;
-  if (items.length > TOPE_IMS_CLIENTE) {
+  const ims = unirIms(targets);
+
+  // Sin IMs que consultar: no se pasa por el scraper. Si se pidió avisar igual,
+  // se manda directo "0 en gestión" a cada grupo.
+  if (ims.length === 0) {
+    if (!opts.enviarSiVacio) return { ok: true, ims: 0, targets: targets.length, sinIms: true, iniciado: false };
+    const enviado = await enviarMensajesClienteTop(targets, []);
     return {
-      ok: false,
-      ims: items.length,
-      sinIms: false,
+      ok: enviado.ok,
+      ims: 0,
+      targets: targets.length,
+      sinIms: true,
       iniciado: false,
-      error: `Filtro sospechoso: ${items.length} IMs para un cliente (tope ${TOPE_IMS_CLIENTE}). Se abortó para no agotar HPSM. Revisa el registro del cliente TOP (company/serviceRef/siglasIm).`,
+      error: enviado.ok ? undefined : `Fallaron ${enviado.fallidos} de ${targets.length} envío(s)`,
     };
   }
 
-  // Sin IMs: no hay nada que consultar en HPSM. Si se pidió avisar igual, se
-  // manda directo el mensaje "0 IMs" (rápido, sin scraper).
-  if (items.length === 0) {
-    if (!opts.enviarSiVacio) return { ok: true, ims: 0, sinIms: true, iniciado: false };
-    const enviado = await enviarMensajeClienteTop({
-      chatId,
-      prefijo: prefijoEfectivo,
-      etiqueta: etiquetaEfectiva,
-      items: [],
-      resultados: [],
-    });
-    return { ok: enviado.ok, ims: 0, sinIms: true, iniciado: false, error: enviado.error };
-  }
-
-  // Con IMs: delegar al scraper (consulta HPSM + callback de envío).
+  // Con IMs: delegar al scraper (consulta HPSM + callback de envío con `grupos`).
   if (!SCRAPER_URL || !INTERNAL_API_KEY) {
-    return { ok: false, ims: items.length, sinIms: false, iniciado: false, error: "SCRAPER_URL / INTERNAL_API_KEY no configuradas" };
+    return { ok: false, ims: ims.length, targets: targets.length, sinIms: false, iniciado: false, error: "SCRAPER_URL / INTERNAL_API_KEY no configuradas" };
   }
   try {
     const res = await fetch(`${SCRAPER_URL.replace(/\/+$/, "")}/cliente-top-estatus`, {
       method: "POST",
       headers: { "Content-Type": "application/json", "x-internal-key": INTERNAL_API_KEY },
-      body: JSON.stringify({
-        ims: items.slice(0, MAX_IMS).map((i) => i.incidentId),
-        chatId,
-        prefijo: prefijoEfectivo,
-        etiqueta: etiquetaEfectiva,
-        items,
-        enviarSiVacio: opts.enviarSiVacio,
-      }),
+      body: JSON.stringify({ ims, grupos: targets, enviarSiVacio: opts.enviarSiVacio }),
       signal: AbortSignal.timeout(20_000),
     });
     if (!res.ok) {
       const body = (await res.json().catch(() => null)) as { error?: string } | null;
-      return { ok: false, ims: items.length, sinIms: false, iniciado: false, error: body?.error ?? `El scraper respondió ${res.status}` };
+      return { ok: false, ims: ims.length, targets: targets.length, sinIms: false, iniciado: false, error: body?.error ?? `El scraper respondió ${res.status}` };
     }
-    return { ok: true, ims: items.length, sinIms: false, iniciado: true };
+    return { ok: true, ims: ims.length, targets: targets.length, sinIms: false, iniciado: true };
   } catch (e) {
     const msg = e instanceof Error ? e.message : "error de red";
-    return { ok: false, ims: items.length, sinIms: false, iniciado: false, error: `No se pudo contactar el scraper: ${msg}` };
+    return { ok: false, ims: ims.length, targets: targets.length, sinIms: false, iniciado: false, error: `No se pudo contactar el scraper: ${msg}` };
   }
 }
 
 /**
- * PASO 3 — ENVIAR. Arma el mensaje con los resultados que devuelve el scraper y
- * lo manda al grupo. Lo llama el callback del scraper (/api/cliente-top/enviar),
- * y también el disparo directo cuando no hay IMs. Rápido.
+ * PASO 3 — ENVIAR. Por cada grupo (cliente) arma su mensaje con los resultados
+ * del scraper y lo manda a SU chatId. Lo llama el callback del scraper
+ * (/api/cliente-top/enviar) y el disparo directo cuando no hay IMs. Un fallo de
+ * envío no detiene a los demás grupos. Rápido.
  */
-export async function enviarMensajeClienteTop(data: {
-  chatId: string;
-  prefijo: string;
-  etiqueta: string;
-  items: ClienteTopItem[];
-  resultados: ImEstatusResult[];
-}): Promise<{ ok: boolean; mensaje: string; error?: string }> {
+export async function enviarMensajesClienteTop(
+  grupos: GrupoEnvio[],
+  resultados: ImEstatusResult[],
+): Promise<{ ok: boolean; enviados: number; fallidos: number }> {
   const estatus = new Map<string, ImEstatusResult>();
-  for (const r of data.resultados) estatus.set(r.im, r);
+  for (const r of resultados) estatus.set(r.im, r);
 
-  const mensaje = buildClienteTopMessage(data.items, estatus, {
-    etiquetaCliente: data.etiqueta,
-    prefijoSitio: data.prefijo,
-  });
-
-  const sent = await sendWhatsappViaListener(data.chatId, mensaje);
-  return { ok: sent.ok, mensaje, error: sent.ok ? undefined : sent.error };
+  let enviados = 0;
+  let fallidos = 0;
+  for (const grupo of grupos) {
+    const mensaje = buildClienteTopMessage(grupo.items, estatus, {
+      etiquetaCliente: grupo.etiqueta,
+      prefijoSitio: grupo.prefijo,
+    });
+    const sent = await sendWhatsappViaListener(grupo.chatId, mensaje);
+    if (sent.ok) enviados++;
+    else fallidos++;
+  }
+  return { ok: fallidos === 0, enviados, fallidos };
 }
