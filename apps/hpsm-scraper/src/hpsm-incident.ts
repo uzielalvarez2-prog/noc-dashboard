@@ -100,10 +100,15 @@ async function abrirBuscadorDesdeMenu(page: Page): Promise<Frame> {
   await searchInc.click({ timeout: 10_000 });
   await nuevoFrame;
 
-  const qbe = await waitForFrame(page, async (f) => !!(await frameBuscadorAbierto(page).then((b) => b === f)), BUSCADOR_FORM_TIMEOUT_MS);
-  const encontrado = qbe ?? (await frameBuscadorAbierto(page));
-  if (!encontrado) throw new Error("No se abrió el form de búsqueda (instance/number)");
-  return encontrado;
+  // Sondear hasta que el campo instance/number del QBE esté visible y editable.
+  // Tras cerrar un IM el DOM tarda en estabilizarse, así que se da margen amplio.
+  const deadline = Date.now() + BUSCADOR_FORM_TIMEOUT_MS;
+  while (Date.now() < deadline) {
+    const qbe = await frameBuscadorAbierto(page);
+    if (qbe) return qbe;
+    await page.waitForTimeout(1_000);
+  }
+  throw new Error("No se abrió el form de búsqueda (instance/number)");
 }
 
 /**
@@ -120,8 +125,31 @@ async function abrirBuscadorDesdeMenu(page: Page): Promise<Frame> {
  * de `instance/number` del detalle lo valida el llamador (vacío = no existe).
  */
 export async function abrirIncidentePorBuscador(page: Page, im: string): Promise<Frame> {
-  // 1. Conseguir el QBE: reusar el abierto, o navegar el menú.
-  let qbe = await frameBuscadorAbierto(page);
+  // Se intenta 2 veces: el 1er intento puede reusar el buscador que quedó de un
+  // IM previo; si falla (típico tras cerrar un IM: el DOM queda en un estado
+  // intermedio que confunde la detección del QBE), el 2º limpia pestañas y
+  // navega el menú DESDE CERO. Así el cierre masivo deja de fallar en IMs
+  // alternados.
+  let ultimoError = "";
+  for (let intento = 1; intento <= 2; intento++) {
+    const forzarMenu = intento > 1;
+    try {
+      return await abrirUnaVez(page, im, forzarMenu);
+    } catch (e) {
+      ultimoError = (e as Error).message;
+      logger.warn(`abrir ${im}: intento ${intento} falló (${ultimoError}); ${intento < 2 ? "reintentando con menú limpio" : "sin más reintentos"}`);
+      // Limpiar el estado antes de reintentar: cerrar pestañas de aplicación.
+      await cerrarPestanas(page).catch(() => {});
+      await page.waitForTimeout(1_500);
+    }
+  }
+  throw new Error(`No se pudo abrir ${im} por el buscador tras 2 intentos: ${ultimoError}`);
+}
+
+/** Un intento de apertura. `forzarMenu` ignora el buscador reusable y navega el menú. */
+async function abrirUnaVez(page: Page, im: string, forzarMenu: boolean): Promise<Frame> {
+  // 1. Conseguir el QBE: reusar el abierto (salvo que se fuerce el menú).
+  let qbe = forzarMenu ? undefined : await frameBuscadorAbierto(page);
   if (!qbe) qbe = await abrirBuscadorDesdeMenu(page);
 
   // 2. Teclear el folio (limpiar primero, por si quedó texto del IM anterior).
@@ -142,10 +170,14 @@ export async function abrirIncidentePorBuscador(page: Page, im: string): Promise
   }
   if (!clickeado) throw new Error('No se encontró el botón "Search" del buscador');
 
-  // 4. Esperar el detalle.
+  // 4. Esperar el detalle con el folio pedido (no uno residual de otro IM).
   const detail = await waitForFrame(
     page,
-    async (f) => f.url().includes("detail.do") && (await f.locator('input[name="instance/number"]').count()) > 0,
+    async (f) => {
+      if (!f.url().includes("detail.do")) return false;
+      const loc = f.locator('input[name="instance/number"]').first();
+      return (await loc.count().catch(() => 0)) > 0;
+    },
     BUSCADOR_FORM_TIMEOUT_MS,
   );
   if (!detail) throw new Error("El buscador no abrió el detalle del incidente (detail.do)");
