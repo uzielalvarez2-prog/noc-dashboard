@@ -24,9 +24,6 @@ import { dispararEstatusClienteTop } from "@/lib/cliente-top-run";
 //   - CLIENTE_TOP_ETIQUETA  etiqueta del encabezado. Default "PEXA".
 // ─────────────────────────────────────────────────────────────────────────────
 
-const DEFAULT_PREFIJO = "SMART FIT";
-const DEFAULT_ETIQUETA = "PEXA";
-
 export async function POST(req: NextRequest) {
   const internalKey = process.env.INTERNAL_API_KEY;
   const isInternal = !!internalKey && req.headers.get("x-internal-key") === internalKey;
@@ -46,28 +43,25 @@ export async function POST(req: NextRequest) {
   }
 
   const clienteTopId = typeof body.clienteTopId === "string" ? body.clienteTopId.trim() : undefined;
-  const chatId =
-    (typeof body.chatId === "string" && body.chatId.trim()) ||
-    (process.env.CLIENTE_TOP_CHAT_ID ?? "").trim();
-  if (!chatId) {
+  const chatId = typeof body.chatId === "string" ? body.chatId.trim() : undefined;
+
+  // Modo MANUAL (un cliente) exige grupo destino. Modo CRON (sin clienteTopId)
+  // no manda chatId: cada cliente marcado tiene su propio grupo en DB.
+  if (clienteTopId && !chatId) {
     return NextResponse.json(
-      { error: "Falta el grupo destino: define CLIENTE_TOP_CHAT_ID o manda chatId en el body." },
+      { error: "Falta el grupo destino para el envío manual (chatId)." },
       { status: 400 }
     );
   }
 
-  const prefijoSitio = (process.env.CLIENTE_TOP_PREFIJO ?? DEFAULT_PREFIJO).trim();
-  const etiquetaCliente = (process.env.CLIENTE_TOP_ETIQUETA ?? DEFAULT_ETIQUETA).trim();
-  // Default: no mandar nada si no hay IMs abiertos (evita ruido "0 IMs" cada
-  // corrida). El body puede forzar el envío para probar.
+  // Default: no mandar nada si no hay IMs abiertos (evita ruido cada corrida).
+  // El cron y el botón pueden forzar el envío con enviarSiVacio.
   const enviarSiVacio = body.enviarSiVacio === true;
 
   try {
     const result = await dispararEstatusClienteTop({
       clienteTopId,
       chatId,
-      prefijoSitio,
-      etiquetaCliente,
       enviarSiVacio,
     });
     const status = result.ok ? 202 : 502;

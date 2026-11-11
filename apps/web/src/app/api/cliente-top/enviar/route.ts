@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import { enviarMensajeClienteTop } from "@/lib/cliente-top-run";
+import { enviarMensajesClienteTop } from "@/lib/cliente-top-run";
+import type { GrupoEnvio } from "@/lib/cliente-top-ims";
 import type { ClienteTopItem } from "@/lib/cliente-top-estatus";
 import type { ImEstatusResult } from "@/lib/imEstatus";
 
@@ -7,8 +8,9 @@ import type { ImEstatusResult } from "@/lib/imEstatus";
 // ESTATUS CLIENTE TOP → WhatsApp. PASO 3 (ENVIAR) — callback del scraper.
 //
 // Lo llama SOLO el scraper (x-internal-key) cuando terminó de consultar HPSM:
-// recibe los items del cliente + los resultados crudos, arma el mensaje y lo
-// manda al grupo. Rápido: sin consultas lentas, sin riesgo de timeout.
+// recibe los `grupos` (un cliente destino por grupo, con su chatId e items) + los
+// resultados crudos, arma el mensaje de cada cliente y lo manda a SU grupo.
+// Rápido: sin consultas lentas, sin riesgo de timeout.
 // ─────────────────────────────────────────────────────────────────────────────
 
 function parseItems(raw: unknown): ClienteTopItem[] {
@@ -22,6 +24,24 @@ function parseItems(raw: unknown): ClienteTopItem[] {
       ref: typeof o.ref === "string" ? o.ref : "",
       siteName: typeof o.siteName === "string" ? o.siteName : "",
       status: typeof o.status === "string" ? o.status : "",
+    });
+  }
+  return out;
+}
+
+/** Valida los grupos del callback: cada uno necesita chatId e items para enviarse. */
+function parseGrupos(raw: unknown): GrupoEnvio[] {
+  if (!Array.isArray(raw)) return [];
+  const out: GrupoEnvio[] = [];
+  for (const it of raw) {
+    const o = (it ?? {}) as { chatId?: unknown; etiqueta?: unknown; prefijo?: unknown; items?: unknown };
+    const chatId = typeof o.chatId === "string" ? o.chatId.trim() : "";
+    if (!chatId) continue;
+    out.push({
+      chatId,
+      etiqueta: typeof o.etiqueta === "string" ? o.etiqueta : "PEXA",
+      prefijo: typeof o.prefijo === "string" ? o.prefijo : "",
+      items: parseItems(o.items),
     });
   }
   return out;
@@ -42,30 +62,20 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "No autorizado" }, { status: 401 });
   }
 
-  let body: {
-    chatId?: unknown;
-    prefijo?: unknown;
-    etiqueta?: unknown;
-    items?: unknown;
-    resultados?: unknown;
-  } = {};
+  let body: { grupos?: unknown; resultados?: unknown } = {};
   try {
     body = (await req.json()) as typeof body;
   } catch {
     return NextResponse.json({ error: "JSON inválido" }, { status: 400 });
   }
 
-  const chatId = typeof body.chatId === "string" ? body.chatId.trim() : "";
-  if (!chatId) return NextResponse.json({ error: "chatId requerido" }, { status: 400 });
+  const grupos = parseGrupos(body.grupos);
+  if (grupos.length === 0) {
+    return NextResponse.json({ error: "grupos requerido: [{ chatId, items }]" }, { status: 400 });
+  }
 
   try {
-    const result = await enviarMensajeClienteTop({
-      chatId,
-      prefijo: typeof body.prefijo === "string" ? body.prefijo : "",
-      etiqueta: typeof body.etiqueta === "string" ? body.etiqueta : "PEXA",
-      items: parseItems(body.items),
-      resultados: parseResultados(body.resultados),
-    });
+    const result = await enviarMensajesClienteTop(grupos, parseResultados(body.resultados));
     return NextResponse.json(result, { status: result.ok ? 200 : 502 });
   } catch (err) {
     console.error("[POST /api/cliente-top/enviar]", err);

@@ -4,6 +4,7 @@ import { useState } from "react";
 import { Loader2, Pencil, Check, X, Trash2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { OpenIncidentTable } from "../OpenIncidentTable";
+import { AvisoAutomaticoControl } from "./AvisoAutomaticoControl";
 import { ClienteTopAgeChart } from "./ClienteTopAgeChart";
 import { SEV, severityOf, formatEdad, SLA_MS, type ClienteTopStat } from "./clienteTopUtils";
 
@@ -135,6 +136,8 @@ export function ClienteTopDetail({
       {cliente.displayName !== cliente.company && (
         <p className="-mt-2 truncate text-xs text-text-muted">{cliente.company}</p>
       )}
+
+      <AvisoAutomaticoControl cliente={cliente} />
 
       <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
         <Kpi label="En gestión" value={cliente.activeCount} tone={cliente.activeCount > 0 ? "text-warning" : undefined} />

@@ -10,7 +10,14 @@ export async function PUT(req: NextRequest, ctx: { params: Promise<{ id: string 
 
   const { id } = await ctx.params;
   try {
-    const body = (await req.json()) as { siglasIm?: string; company?: string; serviceRef?: string; note?: string };
+    const body = (await req.json()) as {
+      siglasIm?: string;
+      company?: string;
+      serviceRef?: string;
+      note?: string;
+      notificarChatId?: string | null;
+      notificarChatName?: string | null;
+    };
     const siglasIm = (body.siglasIm ?? "").trim();
     const company = (body.company ?? "").trim();
     const serviceRef = (body.serviceRef ?? "").trim();
@@ -19,7 +26,20 @@ export async function PUT(req: NextRequest, ctx: { params: Promise<{ id: string 
 
     const cliente = await db.clienteTop.update({
       where: { id },
-      data: { siglasIm, company, serviceRef, note: (body.note ?? "").trim() || null },
+      data: {
+        siglasIm,
+        company,
+        serviceRef,
+        note: (body.note ?? "").trim() || null,
+        // Solo se tocan si vienen en el body, para no borrar el grupo en un
+        // rename (que no manda estos campos).
+        ...("notificarChatId" in body
+          ? { notificarChatId: (body.notificarChatId ?? "").toString().trim() || null }
+          : {}),
+        ...("notificarChatName" in body
+          ? { notificarChatName: (body.notificarChatName ?? "").toString().trim() || null }
+          : {}),
+      },
     });
     return NextResponse.json({ cliente });
   } catch (err) {
