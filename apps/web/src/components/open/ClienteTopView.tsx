@@ -161,7 +161,11 @@ export function ClienteTopView() {
           )}
 
           <div className="ml-auto flex shrink-0 items-center gap-2">
-            <EnviarEstatusButton clienteTopId={active?.id} clienteNombre={active?.displayName} />
+            <EnviarEstatusButton
+              clienteTopId={active?.id}
+              clienteNombre={active?.displayName}
+              defaultChatId={active?.notificarChatId}
+            />
             <button
               type="button"
               onClick={() => setAddOpen(true)}
