@@ -8,7 +8,7 @@ import { sendWhatsappAlert } from "./alert.js";
 
 // La cuenta ualvarez es compartida humano/bot: 2026-07-12 y 07-13 el login falló
 // justo 14:02-14:15 (13 min) los dos días, coincidiendo con uso humano de la cuenta
-// a esa hora. run-closed solo corre 1 vez al día en cada horario (14:02 / 22:12) —
+// a esa hora. run-closed solo corre 1 vez al día en cada horario (14:02 / 22:00) —
 // a diferencia de run-open (cron cada 5 min), si falla aquí no hay otra oportunidad
 // hasta el siguiente horario programado, así que hay que insistir. La política de
 // reintentos (presupuesto de tiempo, límite de sesiones aparte) vive en closed-retry.ts.

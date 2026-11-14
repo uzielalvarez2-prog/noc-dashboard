@@ -11,7 +11,7 @@ import { sendWhatsappAlert } from "./alert.js";
  * Scheduler para correr el scraper en la nube (Railway) sin Task Scheduler.
  * Replica las tareas de Windows:
  *   - run-open:          cada 5 min, 06:00-23:00 CDMX
- *   - run-closed PEXA:   14:02 y 22:12 CDMX (espera hasta 5 min si open está corriendo)
+ *   - run-closed PEXA:   14:02 y 22:00 CDMX (espera hasta 5 min si open está corriendo)
  *   - run-closed CECOR:  21:00 CDMX (ventana de consulta 07:00-21:00 vía env override)
  * Cada corrida es un proceso hijo (aislamiento: un cuelgue no tumba el scheduler)
  * con timeout duro — si excede, se mata y la siguiente corrida del cron recupera.
@@ -204,9 +204,12 @@ function runClosed(label: string, envOverride: NodeJS.ProcessEnv = {}): void {
   void runJob(label, "src/run-closed.ts", CLOSED_TIMEOUT_MS, 5 * 60_000, envOverride);
 }
 
-// Cerrados PEXA: 14:02 y 22:12 (mismos horarios que Task Scheduler; :02/:12 fuera de la rejilla de 5 min)
+// Cerrados PEXA: 14:02 y 22:00. El de las 22:00 antes era 22:12; ahora arranca en
+// punto. A diferencia de :02, las 22:00 SÍ caen en la rejilla de open/sisa, pero
+// runClosed espera hasta 5 min a que terminen (o, si el cierre gana la carrera por
+// unos ms, open/sisa de ese turno se saltan y se retoman en la siguiente rejilla).
 cron.schedule("2 14 * * *", () => runClosed("run-closed(PEXA)"), { timezone: TZ });
-cron.schedule("12 22 * * *", () => runClosed("run-closed(PEXA)"), { timezone: TZ });
+cron.schedule("0 22 * * *", () => runClosed("run-closed(PEXA)"), { timezone: TZ });
 
 // ── Estatus Cliente TOP → WhatsApp (grupo "Supervision PEXA"): 09:00 y 20:00 ──
 // Solo DISPARA: le pega al dashboard, que lee los IMs del cliente TOP y se los
@@ -267,7 +270,7 @@ startScraperServer({
 });
 
 logger.info(
-  `scheduler: iniciado (TZ ${TZ}) — open+sisa cada ${OPEN_INTERVAL} min 06:00-23:00, closed PEXA 14:02 y 22:12, closed CECOR 21:00, estatus Cliente TOP 09:00 y 20:00${DRY ? " [DRY]" : ""}${downloadsPaused() ? " [PAUSADO: descargas en pausa, cierre/estatus siguen activos]" : ""}`,
+  `scheduler: iniciado (TZ ${TZ}) — open+sisa cada ${OPEN_INTERVAL} min 06:00-23:00, closed PEXA 14:02 y 22:00, closed CECOR 21:00, estatus Cliente TOP 09:00 y 20:00${DRY ? " [DRY]" : ""}${downloadsPaused() ? " [PAUSADO: descargas en pausa, cierre/estatus siguen activos]" : ""}`,
 );
 logger.info(`scheduler: tsx=${TSX_CLI}`);
 
