@@ -4,6 +4,19 @@ import { join } from "node:path";
 import { config } from "./config.js";
 import { logger } from "./logger.js";
 
+/**
+ * HPSM rechazó el login por "Maximum active logins". Tipado aparte porque pide
+ * otro manejo que un fallo cualquiera: reintentar enseguida no sirve (la sesión
+ * ocupada tarda minutos en liberarse) y no cuenta como intento fallido de la
+ * descarga, que ni siquiera llegó a buscar.
+ */
+export class HpsmSessionLimitError extends Error {
+  constructor() {
+    super("HPSM: límite de sesiones activas superado — pedir al admin que libere las sesiones");
+    this.name = "HpsmSessionLimitError";
+  }
+}
+
 export interface HpsmSession {
   browser: Browser;
   page: Page;
@@ -88,7 +101,7 @@ export async function openHpsmSession(): Promise<HpsmSession> {
     const limitError = await page.locator("text=Maximum active logins").first().isVisible().catch(() => false);
     if (limitError) {
       await browser.close();
-      throw new Error("HPSM: límite de sesiones activas superado — pedir al admin que libere las sesiones");
+      throw new HpsmSessionLimitError();
     }
     const stillOnLogin = await page.locator("#loginBtn").isVisible().catch(() => false);
     if (stillOnLogin) {

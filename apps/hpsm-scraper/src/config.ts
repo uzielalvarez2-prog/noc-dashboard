@@ -36,6 +36,12 @@ function leerEnv(name: string): string {
   return t;
 }
 
+/** Minutos desde una variable de entorno; si falta o no es un número > 0, usa `def`. */
+function minutosEnv(name: string, def: number): number {
+  const n = Number(leerEnv(name));
+  return Number.isFinite(n) && n > 0 ? n : def;
+}
+
 export const config = {
   hpsm: {
     url: process.env.HPSM_URL ?? "https://sm.cnoc.telmexit.com/sm/index.do?lang=en",
@@ -55,6 +61,23 @@ export const config = {
     group: process.env.HPSM_CLOSED_GROUP ?? "PEXA",
     startTime: process.env.HPSM_CLOSED_START_TIME ?? "07:00",
     endTime: process.env.HPSM_CLOSED_END_TIME ?? "22:10",
+    // Espera máxima (min) de CADA intento por el listado de resultados. La
+    // búsqueda de cerrados de PEXA tarda minutos (12–20 min medidos el 10–14
+    // nov 2026); con la espera anterior de 90 s se abandonaba la búsqueda, la
+    // sesión de HPSM quedaba ocupada y los reintentos chocaban con "límite de
+    // sesiones". Esperar de corrido evita abandonar la consulta a medias.
+    listWaitMin: minutosEnv("HPSM_CLOSED_LIST_WAIT_MIN", 20),
+    // Presupuesto TOTAL (min) de la corrida de cerrados, reintentos incluidos.
+    // Mientras corre, el candado del scheduler deja saltadas las descargas de
+    // abiertos/SISA, así que no conviene alargarlo sin necesidad.
+    budgetMin: minutosEnv("HPSM_CLOSED_BUDGET_MIN", 40),
+  },
+  // Alertas por WhatsApp cuando una corrida automática falla. Van DIRECTO al
+  // wa-listener (/send, mismo x-internal-key): así avisan aunque el dashboard
+  // esté caído. Si falta alguna de las dos, la alerta solo queda en el log.
+  alert: {
+    listenerUrl: leerEnv("WA_LISTENER_URL"),
+    chatId: leerEnv("SCRAPER_ALERT_CHAT_ID"),
   },
   headed: process.env.HEADED === "true",
   dashboardUrl: process.env.DASHBOARD_URL ?? "http://localhost:3000",

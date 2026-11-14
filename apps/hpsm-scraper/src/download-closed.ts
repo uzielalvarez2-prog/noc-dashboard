@@ -33,6 +33,44 @@ async function waitForFrame(
   return undefined;
 }
 
+/**
+ * Espera el frame del listado de resultados de cerrados, de corrido.
+ *
+ * La búsqueda de PEXA puede tardar varios minutos. Abandonarla a los 90 s (como
+ * se hacía) deja la consulta corriendo en HPSM con la sesión ocupada: los
+ * reintentos chocaban con "límite de sesiones" y el éxito llegaba solo cuando la
+ * consulta vieja terminaba (12–20 min después). Esperar aquí evita ese ciclo.
+ *
+ * Cada ~15 s revisa el aviso "Your inactive session will terminate": si saliera
+ * durante una espera larga y nadie lo cerrara, la sesión podría expirar.
+ */
+async function waitForListFrame(page: Page, totalMs: number): Promise<Frame | undefined> {
+  const t0 = Date.now();
+  const deadline = t0 + totalMs;
+  let nextProgressLog = t0 + 60_000;
+  let nextWarnCheck = t0 + 15_000;
+  while (Date.now() < deadline) {
+    const f = page.frames().find((fr) => fr.url().includes("cwc_listdetail"));
+    if (f) return f;
+
+    if (Date.now() >= nextWarnCheck) {
+      nextWarnCheck = Date.now() + 15_000;
+      const warn = await page.locator("text=Your inactive session").isVisible().catch(() => false);
+      if (warn) {
+        logger.info("Aviso de sesión inactiva durante la espera — cerrando con OK");
+        await page.locator(".x-window button").filter({ hasText: "OK" }).first()
+          .click({ force: true, timeout: 5_000 }).catch(() => {});
+      }
+    }
+    if (Date.now() >= nextProgressLog) {
+      nextProgressLog += 60_000;
+      logger.info(`Esperando listado de cerrados... ${Math.round((Date.now() - t0) / 60_000)} min`);
+    }
+    await page.waitForTimeout(1_000);
+  }
+  return undefined;
+}
+
 const CLOSED_COLUMNS = [
   "Incident ID",
   "Open Time",
@@ -133,7 +171,13 @@ async function setColumns(
   return newFrame;
 }
 
-async function main(): Promise<void> {
+export interface DownloadClosedOptions {
+  /** Espera máxima por el listado de resultados (ms). Default: config.closed.listWaitMin. */
+  listWaitMs?: number;
+}
+
+async function main(opts: DownloadClosedOptions = {}): Promise<void> {
+  const listWaitMs = opts.listWaitMs ?? config.closed.listWaitMin * 60_000;
   mkdirSync(config.downloadDir, { recursive: true });
 
   const now = new Date();
@@ -280,15 +324,20 @@ async function main(): Promise<void> {
     }
 
     // ── 5. Esperar frame cwc_listdetail.jsp (resultados reales) ───────────────
-    // HPSM carga los resultados de forma asíncrona en este frame.
+    // HPSM carga los resultados de forma asíncrona en este frame y, para PEXA,
+    // puede tardar minutos (ver waitForListFrame).
     // NO usar waitForLoadState("networkidle") — HPSM hace polling continuo.
-    logger.info("Esperando cwc_listdetail.jsp (hasta 90s)...");
-    const listDetailFrame = await waitForFrame(page, "cwc_listdetail", 90_000);
+    const listWaitMin = Math.round((listWaitMs / 60_000) * 10) / 10;
+    logger.info(`Esperando cwc_listdetail.jsp (hasta ${listWaitMin} min)...`);
+    const tList = Date.now();
+    const listDetailFrame = await waitForListFrame(page, listWaitMs);
     if (!listDetailFrame) {
       await page.screenshot({ path: "debug-closed-step3-nolist.png", fullPage: true });
-      throw new Error("cwc_listdetail.jsp no apareció en 90s — ¿0 resultados?");
+      throw new Error(`cwc_listdetail.jsp no apareció en ${listWaitMin} min — ¿0 resultados?`);
     }
-    logger.info(`Resultados en: ${listDetailFrame.url()}`);
+    logger.info(
+      `Resultados en: ${listDetailFrame.url()} (listado tardó ${Math.round((Date.now() - tList) / 1_000)} s)`,
+    );
     await page.waitForTimeout(2_000); // dejar que el frame termine de renderizar
 
     await page.screenshot({ path: "debug-closed-step3-results.png", fullPage: true });

@@ -5,6 +5,7 @@ import cron from "node-cron";
 import { config } from "./config.js";
 import { logger } from "./logger.js";
 import { startScraperServer } from "./server.js";
+import { sendWhatsappAlert } from "./alert.js";
 
 /**
  * Scheduler para correr el scraper en la nube (Railway) sin Task Scheduler.
@@ -61,7 +62,10 @@ function openIntervalMin(): number {
 }
 
 const OPEN_TIMEOUT_MS = 12 * 60_000; // corrida sana ~2 min; degradada ~10 min
-const CLOSED_TIMEOUT_MS = 30 * 60_000; // el export de cerrados tarda ~13 min normal
+// Tope DURO del proceso de cerrados: run-closed ya se limita solo al presupuesto
+// config.closed.budgetMin (reintentos incluidos); esto es la red de seguridad por
+// si algo se cuelga, así que debe quedar POR ENCIMA de ese presupuesto.
+const CLOSED_TIMEOUT_MS = (config.closed.budgetMin + 8) * 60_000;
 const SISA_TIMEOUT_MS = 12 * 60_000; // mismo margen que open — sesión HPSM completa propia
 const IM_ESTATUS_TIMEOUT_MS = 30 * 60_000; // ~30 s por IM; tope de 50 IMs en server.ts
 const IM_ESTATUS_WAIT_MS = 15 * 60_000; // bajo demanda: espera a que termine open/sisa/closed
@@ -98,6 +102,14 @@ function spawnScript(
     });
     const timer = setTimeout(() => {
       logger.error(`${label}: excedió ${timeoutMs / 60_000} min — matando grupo de procesos`);
+      // run-closed avisa por sí mismo cuando falla, pero si lo matamos aquí no
+      // llega a hacerlo: este es el único camino por el que un cierre muere callado.
+      if (label.startsWith("run-closed")) {
+        void sendWhatsappAlert(
+          `⚠️ NOC Dashboard — ${label} se colgó y fue detenido tras ${timeoutMs / 60_000} min.\n` +
+            `No se cargaron incidentes cerrados en esta corrida.`,
+        );
+      }
       if (child.pid) {
         try {
           process.kill(-child.pid, "SIGKILL");
