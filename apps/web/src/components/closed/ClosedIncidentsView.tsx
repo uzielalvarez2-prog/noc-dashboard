@@ -235,6 +235,7 @@ export function ClosedIncidentsView() {
               rows={stats?.byUser ?? []}
               fileBase={`cerrados-analista-${detailFileSuffix}`}
               limit={25}
+              showFullTable
             />
             <ClosedRankingDonut
               title="Incidentes cerrados por Código"
