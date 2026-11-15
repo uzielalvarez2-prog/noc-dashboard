@@ -37,6 +37,7 @@ export function DonutChart({
   legendMaxHeight = 260,
   bare = false,
   actions,
+  hideImageButton = false,
 }: {
   title: string;
   data: DonutDatum[];
@@ -50,6 +51,9 @@ export function DonutChart({
   /** Botones extra (p. ej. Copiar tabla / Excel) que se muestran en el
    *  encabezado junto al botón Imagen. Solo aplica en modo no-bare. */
   actions?: ReactNode;
+  /** Oculta el botón Imagen propio (cuando la tarjeta contenedora aporta su
+   *  propia exportación a imagen, p. ej. de una tabla en vez de la dona). */
+  hideImageButton?: boolean;
 }) {
   const { theme } = useTheme();
   const [imgCopied, setImgCopied] = useState(false);
@@ -224,7 +228,7 @@ export function DonutChart({
   if (bare) {
     return (
       <div>
-        <div className="mb-2 flex justify-end">{imgBtn}</div>
+        {!hideImageButton && <div className="mb-2 flex justify-end">{imgBtn}</div>}
         {body}
       </div>
     );

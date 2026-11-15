@@ -238,6 +238,7 @@ export function ClosedIncidentsView() {
               fileBase={`cerrados-analista-${detailFileSuffix}`}
               limit={25}
               showFullTable
+              imageTableTitle="Total de cerrados por agente"
             />
             <ClosedRankingDonut
               title="Incidentes cerrados por Código"

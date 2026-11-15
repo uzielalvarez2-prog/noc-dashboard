@@ -1,12 +1,14 @@
 "use client";
 
 import { useState } from "react";
-import { Download, Copy, Check, ChevronDown } from "lucide-react";
+import { Download, Copy, Check, ChevronDown, Camera } from "lucide-react";
 import type { ClosedRankRow } from "@/types/closed";
 import { copyHTMLTable } from "@/lib/openExport";
 import { downloadXLSX } from "@/lib/excelExport";
 import { DonutChart } from "@/components/shared/DonutChart";
 import { toDonutTop } from "@/lib/donutData";
+import { canvasPalette } from "@/lib/chartTheme";
+import { useTheme } from "@/components/layout/ThemeProvider";
 import { cn } from "@/lib/utils";
 
 function escapeHtml(s: string): string {
@@ -44,6 +46,7 @@ export function ClosedRankingDonut({
   fileBase,
   limit = 12,
   showFullTable = false,
+  imageTableTitle,
 }: {
   title: string;
   dimensionLabel: string;
@@ -53,11 +56,119 @@ export function ClosedRankingDonut({
   /** Muestra, bajo la dona, un desplegable "Ver todos" con la tabla completa en
    *  2 columnas (cerrados + %). Para rankings largos como Analistas. */
   showFullTable?: boolean;
+  /** Si se define (solo con showFullTable), el botón "Imagen" copia una imagen
+   *  de la TABLA COMPLETA (todos los analistas) con este título, en vez de la
+   *  dona. Ej. "Total de cerrados por agente". */
+  imageTableTitle?: string;
 }) {
+  const { theme } = useTheme();
   const [copied, setCopied] = useState(false);
+  const [imgCopied, setImgCopied] = useState(false);
   const [showAll, setShowAll] = useState(false);
   const sorted = [...rows].sort((a, b) => b.count - a.count);
   const totalCount = sorted.reduce((s, r) => s + r.count, 0);
+
+  // Copia una IMAGEN de la tabla completa (todos los analistas) al portapapeles,
+  // en 2 columnas y con total general. Pensada para pegar en WhatsApp/correo sin
+  // tener que exportar a Excel. Respeta el tema (claro/oscuro) del dashboard.
+  async function copyTableImage() {
+    const pal = canvasPalette(theme);
+    const SCALE = 2;
+    const PAD = 20;
+    const TITLE_H = 30;
+    const SUB_H = 20;
+    const HEAD_H = 24;
+    const ROW_H = 20;
+    const COL_W = 300; // ancho de cada columna de datos
+    const COL_GAP = 28;
+    const cols = splitColumns(sorted, 2);
+    const rowsPerCol = cols[0]?.length ?? 0;
+    const W = PAD * 2 + COL_W * 2 + COL_GAP;
+    const H = PAD * 2 + TITLE_H + SUB_H + HEAD_H + rowsPerCol * ROW_H;
+
+    const canvas = document.createElement("canvas");
+    canvas.width = W * SCALE;
+    canvas.height = H * SCALE;
+    const ctx = canvas.getContext("2d")!;
+    ctx.scale(SCALE, SCALE);
+    ctx.fillStyle = pal.bg;
+    ctx.fillRect(0, 0, W, H);
+
+    // Título
+    ctx.fillStyle = pal.title;
+    ctx.font = "bold 17px Arial,sans-serif";
+    ctx.textAlign = "left";
+    ctx.fillText(imageTableTitle ?? title, PAD, PAD + 16);
+
+    // Subtítulo: total general y nº de agentes
+    ctx.fillStyle = pal.muted;
+    ctx.font = "12px Arial,sans-serif";
+    ctx.fillText(
+      `Total: ${totalCount.toLocaleString("es-MX")} cerrados · ${sorted.length} ${dimensionLabel.toLowerCase()}s`,
+      PAD,
+      PAD + TITLE_H + 10,
+    );
+
+    const bodyTop = PAD + TITLE_H + SUB_H;
+    // Dibuja una columna de datos en x0.
+    const drawCol = (col: ClosedRankRow[], x0: number, startRank: number) => {
+      const xName = x0 + 30;
+      const xCount = x0 + COL_W - 70;
+      const xPct = x0 + COL_W;
+      // Encabezado de columna
+      ctx.font = "bold 11px Arial,sans-serif";
+      ctx.fillStyle = pal.muted;
+      ctx.textAlign = "left";
+      ctx.fillText("#", x0, bodyTop + 14);
+      ctx.fillText(dimensionLabel, xName, bodyTop + 14);
+      ctx.textAlign = "right";
+      ctx.fillText("Cerrados", xCount, bodyTop + 14);
+      ctx.fillText("%", xPct, bodyTop + 14);
+      // Línea bajo el encabezado
+      ctx.strokeStyle = pal.grid;
+      ctx.beginPath();
+      ctx.moveTo(x0, bodyTop + HEAD_H - 2);
+      ctx.lineTo(x0 + COL_W, bodyTop + HEAD_H - 2);
+      ctx.stroke();
+      // Filas
+      col.forEach((r, i) => {
+        const y = bodyTop + HEAD_H + i * ROW_H + 14;
+        const rank = startRank + i;
+        const pct = totalCount ? Math.round((r.count / totalCount) * 1000) / 10 : 0;
+        ctx.font = "12px Arial,sans-serif";
+        ctx.textAlign = "left";
+        ctx.fillStyle = pal.muted;
+        ctx.fillText(String(rank), x0, y);
+        ctx.fillStyle = pal.text;
+        const name = r.name.length > 26 ? r.name.slice(0, 24) + "…" : r.name;
+        ctx.fillText(name, xName, y);
+        ctx.textAlign = "right";
+        ctx.fillStyle = pal.title;
+        ctx.font = "bold 12px Arial,sans-serif";
+        ctx.fillText(String(r.count), xCount, y);
+        ctx.fillStyle = pal.muted;
+        ctx.font = "12px Arial,sans-serif";
+        ctx.fillText(`${pct}%`, xPct, y);
+      });
+    };
+
+    drawCol(cols[0] ?? [], PAD, 1);
+    if (cols[1]?.length) drawCol(cols[1], PAD + COL_W + COL_GAP, rowsPerCol + 1);
+
+    canvas.toBlob(async (blob) => {
+      if (!blob) return;
+      try {
+        await navigator.clipboard.write([new ClipboardItem({ "image/png": blob })]);
+        setImgCopied(true);
+        setTimeout(() => setImgCopied(false), 1500);
+      } catch {
+        const a = document.createElement("a");
+        a.href = URL.createObjectURL(blob);
+        a.download = `${fileBase}.png`;
+        a.click();
+      }
+    }, "image/png");
+  }
 
   async function onCopy() {
     if (await copyHTMLTable(toHTMLTable(sorted, title, dimensionLabel), toPlain(sorted))) {
@@ -74,6 +185,19 @@ export function ClosedRankingDonut({
       sorted.map((r) => [r.name, r.count]),
     );
   }
+
+  // Con imageTableTitle, el botón Imagen copia la TABLA completa (no la dona).
+  const tableImageBtn = imageTableTitle ? (
+    <button
+      type="button"
+      onClick={copyTableImage}
+      title="Copiar la tabla completa como imagen"
+      className="flex items-center gap-1 rounded-md border border-border bg-surface px-2 py-1 text-xs text-text-muted transition-colors hover:border-accent hover:text-accent"
+    >
+      {imgCopied ? <Check className="h-3.5 w-3.5 text-success" /> : <Camera className="h-3.5 w-3.5" />}
+      {imgCopied ? "Copiada" : "Imagen"}
+    </button>
+  ) : null;
 
   const actions = (
     <>
@@ -92,6 +216,7 @@ export function ClosedRankingDonut({
       >
         <Download className="h-3.5 w-3.5" /> Excel
       </button>
+      {tableImageBtn}
     </>
   );
 
@@ -104,6 +229,8 @@ export function ClosedRankingDonut({
       fileBase={fileBase}
       actions={actions}
       bare={showFullTable}
+      // Si la tarjeta aporta su propio botón Imagen (de la tabla), ocultar el de la dona.
+      hideImageButton={!!imageTableTitle}
     />
   );
 
