@@ -47,6 +47,7 @@ export function ClosedRankingDonut({
   limit = 12,
   showFullTable = false,
   imageTableTitle,
+  imageDateLabel,
 }: {
   title: string;
   dimensionLabel: string;
@@ -60,6 +61,9 @@ export function ClosedRankingDonut({
    *  de la TABLA COMPLETA (todos los analistas) con este título, en vez de la
    *  dona. Ej. "Total de cerrados por agente". */
   imageTableTitle?: string;
+  /** Fecha ya formateada (ej. "17 Nov 2026") que se dibuja en la imagen de la
+   *  tabla, junto al total. Vacío/undefined = no se muestra fecha. */
+  imageDateLabel?: string;
 }) {
   const { theme } = useTheme();
   const [copied, setCopied] = useState(false);
@@ -74,13 +78,13 @@ export function ClosedRankingDonut({
   async function copyTableImage() {
     const pal = canvasPalette(theme);
     const SCALE = 2;
-    const PAD = 20;
-    const TITLE_H = 30;
-    const SUB_H = 20;
-    const HEAD_H = 24;
-    const ROW_H = 20;
-    const COL_W = 300; // ancho de cada columna de datos
-    const COL_GAP = 28;
+    const PAD = 24;
+    const TITLE_H = 38;
+    const SUB_H = 26;
+    const HEAD_H = 30;
+    const ROW_H = 26; // filas más altas para la letra más grande
+    const COL_W = 350; // ancho de cada columna de datos
+    const COL_GAP = 36;
     const cols = splitColumns(sorted, 2);
     const rowsPerCol = cols[0]?.length ?? 0;
     const W = PAD * 2 + COL_W * 2 + COL_GAP;
@@ -96,46 +100,43 @@ export function ClosedRankingDonut({
 
     // Título
     ctx.fillStyle = pal.title;
-    ctx.font = "bold 17px Arial,sans-serif";
+    ctx.font = "bold 22px Arial,sans-serif";
     ctx.textAlign = "left";
-    ctx.fillText(imageTableTitle ?? title, PAD, PAD + 16);
+    ctx.fillText(imageTableTitle ?? title, PAD, PAD + 20);
 
-    // Subtítulo: total general y nº de agentes
-    ctx.fillStyle = pal.muted;
-    ctx.font = "12px Arial,sans-serif";
-    ctx.fillText(
-      `Total: ${totalCount.toLocaleString("es-MX")} cerrados · ${sorted.length} ${dimensionLabel.toLowerCase()}s`,
-      PAD,
-      PAD + TITLE_H + 10,
-    );
+    // Subtítulo: fecha (si hay) · total general y nº de agentes
+    ctx.fillStyle = pal.text;
+    ctx.font = "bold 15px Arial,sans-serif";
+    const resumen = `Total: ${totalCount.toLocaleString("es-MX")} cerrados · ${sorted.length} ${dimensionLabel.toLowerCase()}s`;
+    ctx.fillText(imageDateLabel ? `${imageDateLabel}  ·  ${resumen}` : resumen, PAD, PAD + TITLE_H + 14);
 
     const bodyTop = PAD + TITLE_H + SUB_H;
     // Dibuja una columna de datos en x0.
     const drawCol = (col: ClosedRankRow[], x0: number, startRank: number) => {
-      const xName = x0 + 30;
-      const xCount = x0 + COL_W - 70;
+      const xName = x0 + 34;
+      const xCount = x0 + COL_W - 72;
       const xPct = x0 + COL_W;
       // Encabezado de columna
-      ctx.font = "bold 11px Arial,sans-serif";
+      ctx.font = "bold 14px Arial,sans-serif";
       ctx.fillStyle = pal.muted;
       ctx.textAlign = "left";
-      ctx.fillText("#", x0, bodyTop + 14);
-      ctx.fillText(dimensionLabel, xName, bodyTop + 14);
+      ctx.fillText("#", x0, bodyTop + 16);
+      ctx.fillText(dimensionLabel, xName, bodyTop + 16);
       ctx.textAlign = "right";
-      ctx.fillText("Cerrados", xCount, bodyTop + 14);
-      ctx.fillText("%", xPct, bodyTop + 14);
+      ctx.fillText("Cerrados", xCount, bodyTop + 16);
+      ctx.fillText("%", xPct, bodyTop + 16);
       // Línea bajo el encabezado
       ctx.strokeStyle = pal.grid;
       ctx.beginPath();
       ctx.moveTo(x0, bodyTop + HEAD_H - 2);
       ctx.lineTo(x0 + COL_W, bodyTop + HEAD_H - 2);
       ctx.stroke();
-      // Filas
+      // Filas (todo en negrita, letra más grande)
       col.forEach((r, i) => {
-        const y = bodyTop + HEAD_H + i * ROW_H + 14;
+        const y = bodyTop + HEAD_H + i * ROW_H + 18;
         const rank = startRank + i;
         const pct = totalCount ? Math.round((r.count / totalCount) * 1000) / 10 : 0;
-        ctx.font = "12px Arial,sans-serif";
+        ctx.font = "bold 16px Arial,sans-serif";
         ctx.textAlign = "left";
         ctx.fillStyle = pal.muted;
         ctx.fillText(String(rank), x0, y);
@@ -144,10 +145,8 @@ export function ClosedRankingDonut({
         ctx.fillText(name, xName, y);
         ctx.textAlign = "right";
         ctx.fillStyle = pal.title;
-        ctx.font = "bold 12px Arial,sans-serif";
         ctx.fillText(String(r.count), xCount, y);
         ctx.fillStyle = pal.muted;
-        ctx.font = "12px Arial,sans-serif";
         ctx.fillText(`${pct}%`, xPct, y);
       });
     };

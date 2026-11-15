@@ -94,6 +94,12 @@ function labelDay(ymd: string): string {
   const dt = new Date(Date.UTC(y, m - 1, d));
   return `${DOW[dt.getUTCDay()]} ${String(d).padStart(2, "0")} ${MON[m - 1]}`;
 }
+// Fecha para la imagen de la tabla, formato "17 Nov 2026".
+const MON_CAP = ["Ene", "Feb", "Mar", "Abr", "May", "Jun", "Jul", "Ago", "Sep", "Oct", "Nov", "Dic"];
+function labelDayLong(ymd: string): string {
+  const [y, m, d] = ymd.split("-").map(Number);
+  return `${d} ${MON_CAP[m - 1]} ${y}`;
+}
 
 export function ClosedIncidentsView() {
   // Arranca en PEXA (no "Todos"): CECOR irá en su propio apartado más adelante.
@@ -239,6 +245,9 @@ export function ClosedIncidentsView() {
               limit={25}
               showFullTable
               imageTableTitle="Total de cerrados por agente"
+              imageDateLabel={
+                dailyMode && selectedDay ? labelDayLong(selectedDay) : undefined
+              }
             />
             <ClosedRankingDonut
               title="Incidentes cerrados por Código"
