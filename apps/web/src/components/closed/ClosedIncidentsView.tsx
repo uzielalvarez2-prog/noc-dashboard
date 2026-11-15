@@ -96,7 +96,9 @@ function labelDay(ymd: string): string {
 }
 
 export function ClosedIncidentsView() {
-  const [group, setGroup] = useState<Group>("ALL");
+  // Arranca en PEXA (no "Todos"): CECOR irá en su propio apartado más adelante.
+  // El selector Todos / PEXA / CECOR sigue disponible para cambiar manualmente.
+  const [group, setGroup] = useState<Group>("PEXA");
   const [range, setRange] = useState<DateRange>("today");
   // Modo "Por día": tabla de días + detalle del día elegido. El histórico diario
   // es solo PEXA, así que al entrar se fuerza ese grupo.
