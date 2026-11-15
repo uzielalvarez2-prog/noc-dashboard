@@ -20,6 +20,7 @@ export async function GET(req: NextRequest) {
       from: sp.get("from") ? new Date(sp.get("from")!) : undefined,
       to: sp.get("to") ? new Date(sp.get("to")!) : undefined,
       bucket,
+      jornada: sp.get("jornada") === "1",
     });
     return NextResponse.json(stats);
   } catch (err) {
