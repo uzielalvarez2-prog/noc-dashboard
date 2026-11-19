@@ -21,6 +21,11 @@ export const config = {
   poll: {
     intervalMs: Number(process.env.POLL_INTERVAL_MS ?? "60000"),
     timeoutMs: Number(process.env.HPSM_TIMEOUT_MS ?? "30000"),
+    // Interruptor de emergencia: corta SOLO el sync por API a HPSM (las sesiones
+    // que Seguridad TELMEX observó). Deja vivos los demás ciclos del worker
+    // (monitoreo de IP y WhatsApp programado), que no tocan HPSM. Se lee en cada
+    // ciclo, así que basta ponerlo en Railway y reiniciar — sin tocar código.
+    hpsmSyncDisabled: /^(1|true|yes)$/i.test((process.env.HPSM_SYNC_DISABLED ?? "").trim()),
   },
   schedule: {
     // Zona horaria para evaluar la ventana de pausa (Railway corre en UTC).

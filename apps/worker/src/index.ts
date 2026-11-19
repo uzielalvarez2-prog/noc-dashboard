@@ -10,6 +10,10 @@ import { runScheduledWhatsappCycle } from "./monitoring/scheduled-whatsapp.js";
 const hpsm = new HpsmClient();
 
 async function runCycle(): Promise<void> {
+  if (config.poll.hpsmSyncDisabled) {
+    logger.warn("[schedule] HPSM_SYNC_DISABLED — sync por API a HPSM desactivado (otros ciclos siguen)");
+    return;
+  }
   if (isPaused()) {
     logger.debug("[schedule] Ventana de pausa nocturna — sync omitido (Neon duerme)");
     return;
@@ -35,9 +39,14 @@ async function main(): Promise<void> {
   logger.info(`  Pausa  : ${config.schedule.pauseStart}–${config.schedule.pauseEnd} (${config.schedule.timezone})`);
   logger.info("═══════════════════════════════════════");
 
-  // Verificar conexión a HPSM
-  const hpsmOk = await hpsm.ping();
-  logger.info(`HPSM ping: ${hpsmOk ? "✓ OK" : "✗ sin conexión (se reintentará)"}`);
+  // Verificar conexión a HPSM (salvo que el sync esté desactivado: en ese caso
+  // ni siquiera el ping debe abrir sesión contra HPSM).
+  if (config.poll.hpsmSyncDisabled) {
+    logger.warn("HPSM ping: omitido (HPSM_SYNC_DISABLED) — el worker no abrirá sesiones a HPSM");
+  } else {
+    const hpsmOk = await hpsm.ping();
+    logger.info(`HPSM ping: ${hpsmOk ? "✓ OK" : "✗ sin conexión (se reintentará)"}`);
+  }
 
   // Primer ciclo inmediato
   await runCycle();
