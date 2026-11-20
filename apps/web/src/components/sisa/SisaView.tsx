@@ -40,6 +40,21 @@ async function fetchSisa(): Promise<{ items: SisaItem[] }> {
   return res.json();
 }
 
+// Reporte EDC "bajado" del grupo de WhatsApp (pestaña Abiertos → EDC → Reportes
+// WhatsApp). Solo necesitamos el texto ya llenado por el equipo para, cuando el
+// incidente SISA lo tenga, copiar ESE bloque en vez del formato generado.
+interface EdcReportLite {
+  incidentId: string;
+  rawText: string;
+}
+
+async function fetchEdcReports(): Promise<EdcReportLite[]> {
+  const res = await fetch("/api/edc-reports");
+  if (!res.ok) throw new Error("Error al cargar reportes EDC");
+  const data = (await res.json()) as { reports?: EdcReportLite[] };
+  return data.reports ?? [];
+}
+
 interface RefreshEstatusResult {
   iniciado: boolean;
   total: number;
@@ -132,6 +147,9 @@ export function SisaView() {
   const [selectedCase, setSelectedCase] = useState<string | null>(null);
   const [exporting, setExporting] = useState(false);
   const [copiedId, setCopiedId] = useState<string | null>(null);
+  // Incidentes marcados con el check box para copiar su EDC en lote (a TXT/WhatsApp).
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [copiedSeleccion, setCopiedSeleccion] = useState(false);
   const [erroresCopiados, setErroresCopiados] = useState(false);
   // Ocultar la tablita de folios con error en Manto (p. ej. tras copiarla). Se
   // vuelve a mostrar sola si una nueva corrida arroja folios con error.
@@ -150,6 +168,21 @@ export function SisaView() {
   });
 
   const items = data?.items ?? [];
+
+  // Reportes EDC del grupo de WhatsApp. Misma queryKey que la pestaña de
+  // Abiertos → comparten caché (refetch 60s). Mapa incidentId → texto llenado.
+  const { data: edcData } = useQuery({
+    queryKey: ["edc-reports"],
+    queryFn: fetchEdcReports,
+    refetchInterval: 60_000,
+  });
+  const edcByIncident = useMemo(() => {
+    const m = new Map<string, string>();
+    for (const r of edcData ?? []) {
+      if (r.rawText?.trim()) m.set(r.incidentId.toUpperCase(), r.rawText.trim());
+    }
+    return m;
+  }, [edcData]);
 
   // Al montar, ver si ya hay una corrida en curso (arrancada en otra pestaña o
   // antes de recargar) para retomar el seguimiento.
@@ -252,6 +285,18 @@ export function SisaView() {
 
   const hasFilter = selectedStatus !== null || selectedCase !== null;
 
+  // Estado del check box del encabezado (seleccionar/limpiar todo lo visible).
+  const allVisibleSelected = filtered.length > 0 && filtered.every((it) => selected.has(it.incidentId));
+  const someVisibleSelected = filtered.some((it) => selected.has(it.incidentId));
+  function toggleAllVisible() {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (allVisibleSelected) for (const it of filtered) next.delete(it.incidentId);
+      else for (const it of filtered) next.add(it.incidentId);
+      return next;
+    });
+  }
+
   // Folios que Manto no deja consultar (error 500 / no encontrado) en la última
   // corrida. Se deriva de TODOS los items (no de `filtered`) para que la lista
   // no dependa de los filtros de la tabla. Un mismo folio SISA puede estar en
@@ -310,8 +355,47 @@ export function SisaView() {
     </button>
   );
 
+  // Texto EDC de un incidente: si tiene tarjeta bajada del grupo de WhatsApp se
+  // usa ESE bloque (ya llenado por el equipo); si no, el formato generado.
+  function edcTextFor(it: SisaItem): string {
+    return edcByIncident.get(it.incidentId.toUpperCase()) ?? buildEdcText(it);
+  }
+
+  function toggleSelected(id: string) {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
+
+  // Copia el EDC de todos los marcados en un solo TXT, en el orden visible de la
+  // tabla (los marcados que un filtro ocultara van al final), separados por una
+  // línea en blanco.
+  async function copiarSeleccionEdc() {
+    const visibles = filtered.filter((it) => selected.has(it.incidentId));
+    const vistos = new Set(visibles.map((it) => it.incidentId));
+    const ocultos = items.filter((it) => selected.has(it.incidentId) && !vistos.has(it.incidentId));
+    const picked = [...visibles, ...ocultos];
+    if (picked.length === 0) return;
+    const text = picked.map((it) => edcTextFor(it)).join("\n\n");
+    try {
+      await navigator.clipboard.writeText(text);
+    } catch {
+      const ta = document.createElement("textarea");
+      ta.value = text;
+      document.body.appendChild(ta);
+      ta.select();
+      document.execCommand("copy");
+      document.body.removeChild(ta);
+    }
+    setCopiedSeleccion(true);
+    setTimeout(() => setCopiedSeleccion(false), 1800);
+  }
+
   async function handleCopyEdc(it: SisaItem) {
-    const text = buildEdcText(it);
+    const text = edcTextFor(it);
     try {
       await navigator.clipboard.writeText(text);
     } catch {
@@ -488,12 +572,12 @@ export function SisaView() {
       {/* ── Tabla ────────────────────────────────────────────────────────── */}
       <div className="overflow-hidden rounded-xl border border-border/60 bg-surface/40 backdrop-blur-md">
         <div className="flex flex-wrap items-center gap-2 border-b border-border/60 bg-surface/80 p-2 backdrop-blur-md">
-          <div className="relative min-w-[14rem] flex-1">
+          <div className="relative min-w-[11rem] flex-1 sm:max-w-xs">
             <Search className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-text-muted" />
             <input
               value={q}
               onChange={(e) => setQ(e.target.value)}
-              placeholder="Buscar por incidente, empresa, CASE, SISA, asignado o estatus…"
+              placeholder="Buscar incidente, empresa, CASE, SISA…"
               className="h-9 w-full rounded-md border border-border bg-background/60 pl-9 pr-3 text-sm text-text-primary placeholder:text-text-muted focus:border-accent focus:outline-none"
             />
           </div>
@@ -501,6 +585,25 @@ export function SisaView() {
             {filtered.length}
             {hasFilter ? ` / ${baseQ.length}` : ""} tickets
           </span>
+          <button
+            type="button"
+            onClick={() => void copiarSeleccionEdc()}
+            disabled={selected.size === 0}
+            title="Copiar el formato EDC de los incidentes marcados en un solo TXT (usa la tarjeta de WhatsApp cuando el incidente ya la tiene)"
+            className={cn(
+              "flex items-center gap-1.5 rounded-md border px-2.5 py-2 text-xs font-medium transition-colors disabled:opacity-40",
+              copiedSeleccion
+                ? "border-success/50 bg-success/10 text-success"
+                : isLight
+                  ? "border-violet-400 bg-violet-50 text-violet-800 hover:bg-violet-100"
+                  : "border-violet-500/50 bg-violet-500/10 text-violet-300 hover:bg-violet-500/20"
+            )}
+          >
+            {copiedSeleccion ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
+            <span className="hidden sm:inline">
+              {copiedSeleccion ? "Copiado" : `Copiar formato EDC${selected.size ? ` (${selected.size})` : ""}`}
+            </span>
+          </button>
           <button
             type="button"
             onClick={() => void handleRefreshManto()}
@@ -667,6 +770,21 @@ export function SisaView() {
           <table className="w-full border-collapse text-sm">
             <thead className="sticky top-0 z-10 bg-surface-elevated/80 backdrop-blur-md">
               <tr>
+                <th
+                  title="Marcar incidentes para copiar su EDC"
+                  className="w-8 border-b border-border/60 px-2 py-2 text-center"
+                >
+                  <input
+                    type="checkbox"
+                    aria-label="Seleccionar todos los visibles"
+                    checked={allVisibleSelected}
+                    ref={(el) => {
+                      if (el) el.indeterminate = !allVisibleSelected && someVisibleSelected;
+                    }}
+                    onChange={toggleAllVisible}
+                    className="h-3.5 w-3.5 cursor-pointer accent-violet-500"
+                  />
+                </th>
                 {showCritical && (
                   <th
                     title="Marcar como Crítico"
@@ -709,11 +827,11 @@ export function SisaView() {
             <tbody>
               {isLoading ? (
                 <tr>
-                  <td colSpan={COLUMNS.length + (showCritical ? 1 : 0)} className="py-12 text-center text-sm text-text-muted">Cargando…</td>
+                  <td colSpan={COLUMNS.length + (showCritical ? 1 : 0) + 1} className="py-12 text-center text-sm text-text-muted">Cargando…</td>
                 </tr>
               ) : filtered.length === 0 ? (
                 <tr>
-                  <td colSpan={COLUMNS.length + (showCritical ? 1 : 0)} className="py-12 text-center text-sm text-text-muted">
+                  <td colSpan={COLUMNS.length + (showCritical ? 1 : 0) + 1} className="py-12 text-center text-sm text-text-muted">
                     {q || hasFilter
                       ? "Sin resultados para el filtro actual"
                       : "Sube un CSV de SISA (o no hay coincidencias con incidentes abiertos)"}
@@ -723,8 +841,20 @@ export function SisaView() {
                 filtered.map((it) => (
                   <tr
                     key={it.incidentId}
-                    className="border-b border-border/40 transition-colors hover:bg-surface-elevated/40"
+                    className={cn(
+                      "border-b border-border/40 transition-colors hover:bg-surface-elevated/40",
+                      selected.has(it.incidentId) && "bg-violet-500/[0.06]"
+                    )}
                   >
+                    <td className="px-2 py-2 text-center">
+                      <input
+                        type="checkbox"
+                        aria-label={`Seleccionar ${it.incidentId}`}
+                        checked={selected.has(it.incidentId)}
+                        onChange={() => toggleSelected(it.incidentId)}
+                        className="h-3.5 w-3.5 cursor-pointer accent-violet-500"
+                      />
+                    </td>
                     {showCritical && (
                       <td className="px-2 py-2 text-center">
                         <CriticalToggleButton incidentId={it.incidentId} />
