@@ -391,6 +391,9 @@ export function SisaView() {
       document.body.removeChild(ta);
     }
     setCopiedSeleccion(true);
+    // Tras copiar, limpiar la selección para volver a la vista normal de SISA
+    // (el botón vuelve a 0) sin tener que destildar fila por fila.
+    setSelected(new Set());
     setTimeout(() => setCopiedSeleccion(false), 1800);
   }
 
@@ -604,6 +607,17 @@ export function SisaView() {
               {copiedSeleccion ? "Copiado" : `Copiar formato EDC${selected.size ? ` (${selected.size})` : ""}`}
             </span>
           </button>
+          {selected.size > 0 && (
+            <button
+              type="button"
+              onClick={() => setSelected(new Set())}
+              title="Limpiar la selección"
+              className="flex items-center gap-1 rounded-md border border-border bg-surface px-2 py-2 text-xs font-medium text-text-muted hover:text-text-primary"
+            >
+              <X className="h-3.5 w-3.5" />
+              <span className="hidden sm:inline">Limpiar</span>
+            </button>
+          )}
           <button
             type="button"
             onClick={() => void handleRefreshManto()}
