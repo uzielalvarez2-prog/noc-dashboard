@@ -285,6 +285,14 @@ export function SisaView() {
 
   const hasFilter = selectedStatus !== null || selectedCase !== null;
 
+  // Cuántos de los visibles ya tienen tarjeta EDC en el grupo de WhatsApp
+  // (fila verde). Sirve para la leyenda de la barra y para un botón de atajo
+  // que marca justo los que FALTAN por subir.
+  const yaEnWhatsappCount = useMemo(
+    () => filtered.filter((it) => edcByIncident.has(it.incidentId.toUpperCase())).length,
+    [filtered, edcByIncident]
+  );
+
   // Estado del check box del encabezado (seleccionar/limpiar todo lo visible).
   const allVisibleSelected = filtered.length > 0 && filtered.every((it) => selected.has(it.incidentId));
   const someVisibleSelected = filtered.some((it) => selected.has(it.incidentId));
@@ -293,6 +301,18 @@ export function SisaView() {
       const next = new Set(prev);
       if (allVisibleSelected) for (const it of filtered) next.delete(it.incidentId);
       else for (const it of filtered) next.add(it.incidentId);
+      return next;
+    });
+  }
+
+  // Atajo: marca SOLO los visibles que todavía NO tienen tarjeta EDC en
+  // WhatsApp (los que no están en verde). Así copias de un golpe justo lo que
+  // falta por subir, sin cazar fila por fila los que se te podrían escapar.
+  const faltantesVisibles = filtered.filter((it) => !edcByIncident.has(it.incidentId.toUpperCase()));
+  function marcarFaltantes() {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      for (const it of faltantesVisibles) next.add(it.incidentId);
       return next;
     });
   }
@@ -588,6 +608,32 @@ export function SisaView() {
             {filtered.length}
             {hasFilter ? ` / ${baseQ.length}` : ""} tickets
           </span>
+          {yaEnWhatsappCount > 0 && (
+            <span
+              title="Incidentes resaltados en verde: ya tienen tarjeta EDC en el grupo de WhatsApp"
+              className={cn(
+                "hidden items-center gap-1.5 whitespace-nowrap rounded-md border px-2 py-1 text-[11px] font-medium sm:flex",
+                isLight ? "border-emerald-300 bg-emerald-50 text-emerald-700" : "border-emerald-500/40 bg-emerald-500/10 text-emerald-300"
+              )}
+            >
+              <span className={cn("h-2 w-2 rounded-full", isLight ? "bg-emerald-500" : "bg-emerald-400")} />
+              {yaEnWhatsappCount} en WhatsApp
+            </span>
+          )}
+          {yaEnWhatsappCount > 0 && faltantesVisibles.length > 0 && (
+            <button
+              type="button"
+              onClick={marcarFaltantes}
+              title="Marcar los incidentes que todavía NO están en WhatsApp (los que no salen en verde), para copiar de un golpe lo que falta por subir"
+              className={cn(
+                "flex items-center gap-1.5 rounded-md border px-2.5 py-2 text-xs font-medium transition-colors",
+                isLight ? "border-amber-400 bg-amber-50 text-amber-800 hover:bg-amber-100" : "border-amber-500/50 bg-amber-500/10 text-amber-300 hover:bg-amber-500/20"
+              )}
+            >
+              <Check className="h-3.5 w-3.5" />
+              <span className="hidden sm:inline">Marcar faltantes ({faltantesVisibles.length})</span>
+            </button>
+          )}
           <button
             type="button"
             onClick={() => void copiarSeleccionEdc()}
@@ -852,12 +898,24 @@ export function SisaView() {
                   </td>
                 </tr>
               ) : (
-                filtered.map((it) => (
+                filtered.map((it) => {
+                  // ¿Este IM ya tiene tarjeta EDC bajada del grupo de WhatsApp?
+                  // Si sí, se resalta la fila en verde — así se nota que ESE
+                  // incidente ya se subió a WhatsApp aunque no lo hayas marcado.
+                  const yaEnWhatsapp = edcByIncident.has(it.incidentId.toUpperCase());
+                  return (
                   <tr
                     key={it.incidentId}
                     className={cn(
                       "border-b border-border/40 transition-colors hover:bg-surface-elevated/40",
-                      selected.has(it.incidentId) && "bg-violet-500/[0.06]"
+                      // El verde del EDC-en-WhatsApp manda sobre el fondo normal;
+                      // si además está marcado, el ring violeta del checkbox sigue
+                      // visible, así que no chocan.
+                      yaEnWhatsapp &&
+                        (isLight ? "bg-emerald-50 hover:bg-emerald-100" : "bg-emerald-500/[0.08] hover:bg-emerald-500/[0.14]"),
+                      selected.has(it.incidentId) && !yaEnWhatsapp && "bg-violet-500/[0.06]",
+                      selected.has(it.incidentId) && yaEnWhatsapp &&
+                        (isLight ? "ring-1 ring-inset ring-violet-400" : "ring-1 ring-inset ring-violet-500/60")
                     )}
                   >
                     <td className="px-2 py-2 text-center">
@@ -903,12 +961,18 @@ export function SisaView() {
                       <button
                         type="button"
                         onClick={() => void handleCopyEdc(it)}
-                        title="Copiar formato EDC al portapapeles"
+                        title={
+                          yaEnWhatsapp
+                            ? "Este IM YA tiene tarjeta EDC en el grupo de WhatsApp. Copiar ESE bloque al portapapeles."
+                            : "Copiar formato EDC al portapapeles"
+                        }
                         className={cn(
                           "flex items-center gap-1 rounded-md border px-2 py-1 text-xs font-medium transition-colors",
                           copiedId === it.incidentId
                             ? "border-success/50 bg-success/10 text-success"
-                            : "border-violet-500/50 bg-violet-500/10 text-violet-300 hover:bg-violet-500/20"
+                            : yaEnWhatsapp
+                              ? "border-emerald-500/50 bg-emerald-500/10 text-emerald-300 hover:bg-emerald-500/20"
+                              : "border-violet-500/50 bg-violet-500/10 text-violet-300 hover:bg-violet-500/20"
                         )}
                       >
                         {copiedId === it.incidentId ? (
@@ -918,12 +982,14 @@ export function SisaView() {
                         ) : (
                           <>
                             <Copy className="h-3.5 w-3.5" /> EDC
+                            {yaEnWhatsapp && <Check className="h-3 w-3" />}
                           </>
                         )}
                       </button>
                     </td>
                   </tr>
-                ))
+                  );
+                })
               )}
             </tbody>
           </table>
