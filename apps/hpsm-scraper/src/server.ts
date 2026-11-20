@@ -5,6 +5,7 @@ import { config } from "./config.js";
 import { logger } from "./logger.js";
 import { consultarEstatusFolios, PortalFueraDeGestionError, type MantoEstatusResult } from "./manto.js";
 import { IM_REGEX, type ImEstatusResult } from "./hpsm-incident.js";
+import { renderCerrarPage } from "./cerrar-page.js";
 
 // Servidor HTTP mínimo del scraper, para el flujo INVERSO: el dashboard pide
 // consultar el estatus de folios SISA en el portal Manto. Mismo molde que
@@ -338,6 +339,25 @@ async function correrCierre(
   }
 }
 
+/**
+ * ¿La conexión viene de la PROPIA máquina? La página de cierre (/cerrar) sirve
+ * la INTERNAL_API_KEY incrustada en el HTML para que su JS llame a los endpoints
+ * protegidos del scraper, así que SOLO debe entregarse a localhost: desde fuera
+ * expondría la key. En Railway/producción esto bloquea /cerrar (deseable: ahí el
+ * cierre va por el dashboard), y en la PC local siempre es 127.0.0.1 / ::1.
+ */
+function esConexionLocal(req: IncomingMessage): boolean {
+  const addr = req.socket.remoteAddress ?? "";
+  return (
+    addr === "127.0.0.1" ||
+    addr === "::1" ||
+    addr === "::ffff:127.0.0.1" ||
+    // Permitir forzar la página en entornos donde el socket no reporta loopback
+    // (algunos túneles de dev), bajo responsabilidad explícita del operador.
+    process.env.CERRAR_PAGE_ALLOW_REMOTE === "1"
+  );
+}
+
 function readJsonBody(req: IncomingMessage): Promise<unknown> {
   return new Promise((resolve, reject) => {
     let size = 0;
@@ -373,6 +393,19 @@ export function startScraperServer(deps: ScraperServerDeps): void {
     // Health check público: Railway/monitoring pueden pegarle sin la key.
     if (req.method === "GET" && (url === "/health" || url === "/")) {
       json(200, { ok: true, refreshEnCurso: progreso.enCurso });
+      return;
+    }
+
+    // Página local de cierre de incidentes. Solo a localhost (sirve la key
+    // incrustada). Reusa los endpoints /cerrar-incidentes y su /progreso.
+    if (req.method === "GET" && (url === "/cerrar" || url === "/cerrar/")) {
+      if (!esConexionLocal(req)) {
+        res.writeHead(403, { "Content-Type": "text/plain; charset=utf-8" });
+        res.end("La página de cierre solo está disponible desde esta PC (localhost).");
+        return;
+      }
+      res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
+      res.end(renderCerrarPage(config.internalApiKey));
       return;
     }
 
