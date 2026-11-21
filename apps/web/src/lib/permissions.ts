@@ -57,8 +57,9 @@ export function canManageAgentContacts(role: string | undefined): boolean {
 }
 
 /**
- * Consulta de estatus + bitácora de una lista de IMs directo en HPSM (página
- * /estatus-im). ADMIN estricto: cada consulta ocupa el login único del scraper.
+ * Consulta de estatus + bitácora de IMs directo en HPSM. Hoy solo la usa el
+ * envío de estatus de Cliente TOP a WhatsApp (la página /estatus-im se retiró).
+ * ADMIN estricto: cada consulta ocupa el login único del scraper.
  */
 export function canConsultarEstatusIm(role: string | undefined): boolean {
   return role === "ADMIN";

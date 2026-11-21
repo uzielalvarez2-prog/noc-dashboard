@@ -4,7 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
 import { cn } from "@/lib/utils";
-import { canAccessSettings, canAccessMonitoring, canAccessAsistencia, canConsultarEstatusIm, canCerrarIncidentes, canVerCaseSanJuan, isRolCase } from "@/lib/permissions";
+import { canAccessSettings, canAccessMonitoring, canAccessAsistencia, canCerrarIncidentes, canVerCaseSanJuan, isRolCase } from "@/lib/permissions";
 import {
   LayoutDashboard,
   AlertTriangle,
@@ -19,7 +19,6 @@ import {
   BookOpen,
   MessageCircle,
   Radar,
-  ListChecks,
   NotebookPen,
   AlertOctagon,
   BellRing,
@@ -39,7 +38,6 @@ const NAV_ITEMS = [
   { href: "/monitoreo-ip", label: "Monitoreo IP", icon: Radar, monitoringOnly: true },
   { href: "/servicios-vigilados", label: "Servicios en posible baja", icon: AlertOctagon, monitoringOnly: true },
   { href: "/reglas-notificacion", label: "Alertas de apertura", icon: BellRing, monitoringOnly: true },
-  { href: "/estatus-im", label: "Estatus IMs", icon: ListChecks, imEstatusOnly: true },
   { href: "/cerrar-incidentes", label: "Cerrar incidentes", icon: CheckCircle2, cerrarIncidentesOnly: true },
   { href: "/case-san-juan", label: "CASE San Juan - PEXA", icon: NotebookPen, caseSanJuanOnly: true },
   { href: "/asistencia", label: "Asistencia", icon: CalendarCheck, asistenciaOnly: true },
@@ -71,7 +69,6 @@ export function Sidebar({ collapsed, onToggle }: SidebarProps) {
       (!item.settingsOnly || canAccessSettings(role)) &&
       (!("monitoringOnly" in item) || !item.monitoringOnly || canAccessMonitoring(role)) &&
       (!("asistenciaOnly" in item) || !item.asistenciaOnly || canAccessAsistencia(role)) &&
-      (!("imEstatusOnly" in item) || !item.imEstatusOnly || canConsultarEstatusIm(role)) &&
       (!("cerrarIncidentesOnly" in item) || !item.cerrarIncidentesOnly || canCerrarIncidentes(role))
   );
 
