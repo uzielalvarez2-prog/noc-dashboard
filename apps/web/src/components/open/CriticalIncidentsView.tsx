@@ -2,7 +2,7 @@
 
 import { Fragment, useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Flame, Search, X, RefreshCw, FileText, Copy, Check, Save } from "lucide-react";
+import { Flame, Search, X, RefreshCw, FileText, Copy, Check, Save, ArrowDownUp } from "lucide-react";
 import { cn, formatHpsm } from "@/lib/utils";
 import { HpsmIncidentId } from "@/components/shared/HpsmIncidentId";
 
@@ -183,6 +183,8 @@ export function CriticalIncidentsView() {
   const [editingEdc, setEditingEdc] = useState<string | null>(null);
   // Feedback visual del botón "Copiar todos los EDC".
   const [copiedAll, setCopiedAll] = useState(false);
+  // Orden por fecha de apertura: "asc" = más antiguo arriba (default), "desc" = más reciente arriba.
+  const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
 
   const { data, isFetching, refetch } = useQuery<CriticalResponse>({
     queryKey: ["critical"],
@@ -218,17 +220,31 @@ export function CriticalIncidentsView() {
 
   const shown = useMemo(() => {
     const needle = searchQuery.trim().toLowerCase();
-    if (!needle) return items;
-    return items.filter((it) =>
-      [
-        it.incidentId, it.openTime, it.status, it.company, it.serviceId,
-        it.state, it.district, it.siteName ?? "", it.assignee ?? "",
-      ]
-        .join(" ")
-        .toLowerCase()
-        .includes(needle)
-    );
-  }, [items, searchQuery]);
+    const filtered = !needle
+      ? items
+      : items.filter((it) =>
+          [
+            it.incidentId, it.openTime, it.status, it.company, it.serviceId,
+            it.state, it.district, it.siteName ?? "", it.assignee ?? "",
+          ]
+            .join(" ")
+            .toLowerCase()
+            .includes(needle)
+        );
+    // Ordena por fecha de apertura (openTime es ISO → Date comparable).
+    // Los sin fecha quedan siempre al final. asc = más antiguo primero.
+    const ms = (t: string | null) => (t ? new Date(t).getTime() : NaN);
+    return [...filtered].sort((a, b) => {
+      const ta = ms(a.openTime);
+      const tb = ms(b.openTime);
+      const aNan = Number.isNaN(ta);
+      const bNan = Number.isNaN(tb);
+      if (aNan && bNan) return 0;
+      if (aNan) return 1; // a sin fecha → al final
+      if (bNan) return -1; // b sin fecha → al final
+      return sortDir === "asc" ? ta - tb : tb - ta;
+    });
+  }, [items, searchQuery, sortDir]);
 
   // Textos EDC con contenido, en el orden mostrado (respeta el filtro de búsqueda).
   const edcTextsToCopy = useMemo(
@@ -278,6 +294,19 @@ export function CriticalIncidentsView() {
             className="h-9 w-full rounded-md border border-border bg-background/60 pl-9 pr-3 text-sm text-text-primary placeholder:text-text-muted focus:border-accent focus:outline-none"
           />
         </div>
+        <button
+          type="button"
+          onClick={() => setSortDir((d) => (d === "asc" ? "desc" : "asc"))}
+          title={
+            sortDir === "asc"
+              ? "Orden por apertura: más antiguo primero. Clic para invertir (más reciente primero)."
+              : "Orden por apertura: más reciente primero. Clic para invertir (más antiguo primero)."
+          }
+          className="flex items-center gap-1.5 rounded-md border border-border bg-surface px-2.5 py-1.5 text-xs font-medium text-text-muted transition-colors hover:text-text-primary"
+        >
+          <ArrowDownUp className="h-3.5 w-3.5" />
+          {sortDir === "asc" ? "Antiguo → reciente" : "Reciente → antiguo"}
+        </button>
         <button
           type="button"
           onClick={copyAllEdc}
