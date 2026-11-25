@@ -613,10 +613,10 @@ export function SisaView() {
               title="Incidentes resaltados en verde: ya tienen tarjeta EDC en el grupo de WhatsApp"
               className={cn(
                 "hidden items-center gap-1.5 whitespace-nowrap rounded-md border px-2 py-1 text-[11px] font-medium sm:flex",
-                isLight ? "border-emerald-300 bg-emerald-50 text-emerald-700" : "border-emerald-500/40 bg-emerald-500/10 text-emerald-300"
+                isLight ? "border-emerald-400 bg-emerald-200 text-emerald-800" : "border-emerald-500/60 bg-emerald-500/25 text-emerald-200"
               )}
             >
-              <span className={cn("h-2 w-2 rounded-full", isLight ? "bg-emerald-500" : "bg-emerald-400")} />
+              <span className={cn("h-2 w-2 rounded-full", isLight ? "bg-emerald-600" : "bg-emerald-400")} />
               {yaEnWhatsappCount} en WhatsApp
             </span>
           )}
@@ -912,7 +912,7 @@ export function SisaView() {
                       // si además está marcado, el ring violeta del checkbox sigue
                       // visible, así que no chocan.
                       yaEnWhatsapp &&
-                        (isLight ? "bg-emerald-50 hover:bg-emerald-100" : "bg-emerald-500/[0.08] hover:bg-emerald-500/[0.14]"),
+                        (isLight ? "bg-emerald-200 hover:bg-emerald-300" : "bg-emerald-500/[0.25] hover:bg-emerald-500/[0.35]"),
                       selected.has(it.incidentId) && !yaEnWhatsapp && "bg-violet-500/[0.06]",
                       selected.has(it.incidentId) && yaEnWhatsapp &&
                         (isLight ? "ring-1 ring-inset ring-violet-400" : "ring-1 ring-inset ring-violet-500/60")
