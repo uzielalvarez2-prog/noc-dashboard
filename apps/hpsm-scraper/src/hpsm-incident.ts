@@ -142,6 +142,27 @@ async function esperarSinOverlay(page: Page, timeoutMs = 25_000): Promise<void> 
   // No lanzar: se deja seguir y el click robusto reintentará si aún estorba.
 }
 
+/**
+ * Quita de enmedio los overlays de carga de HPSM (.ext-el-mask) que quedan
+ * "pegados" tras muchos cierres seguidos. HPSM a veces deja un mask que NO
+ * cuenta como `:visible` para Playwright (dimensiones/opacidad raras) pero que
+ * SÍ intercepta el puntero ("ext-genNNNN intercepts pointer events"), por lo
+ * que esperarSinOverlay lo cree ausente y el click falla igual. Esto los oculta
+ * por JS en TODOS los frames. No rompe nada: el mask reaparece solo si HPSM
+ * vuelve a cargar algo.
+ */
+async function matarOverlays(page: Page): Promise<void> {
+  for (const f of page.frames()) {
+    await f
+      .evaluate(() => {
+        for (const el of Array.from(document.querySelectorAll(".ext-el-mask"))) {
+          (el as HTMLElement).style.display = "none";
+        }
+      })
+      .catch(() => {});
+  }
+}
+
 /** Click que tolera el overlay de HPSM: espera sin mask y reintenta si lo intercepta. */
 async function clickRobusto(page: Page, locator: ReturnType<Page["locator"]>, intentos = 3): Promise<void> {
   let ultimo: unknown;
@@ -152,8 +173,21 @@ async function clickRobusto(page: Page, locator: ReturnType<Page["locator"]>, in
       return;
     } catch (e) {
       ultimo = e;
-      await page.waitForTimeout(800);
+      // Overlay pegado: ocultarlo por JS y reintentar un click normal.
+      await matarOverlays(page);
+      await page.waitForTimeout(400);
     }
+  }
+  // Último recurso: click por evaluate(), que dispara el evento directo en el
+  // elemento e IGNORA cualquier overlay que intercepte el puntero. Es como se
+  // clickean los demás botones de este módulo. Resuelve el "intercepts pointer
+  // events" que atascaba tandas largas (visto 2026-11-26 tras ~30 cierres).
+  try {
+    await matarOverlays(page);
+    await locator.evaluate((el) => (el as HTMLElement).click());
+    return;
+  } catch (e2) {
+    ultimo = e2;
   }
   throw ultimo instanceof Error ? ultimo : new Error("clickRobusto falló");
 }
