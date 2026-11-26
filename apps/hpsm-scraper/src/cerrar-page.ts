@@ -123,7 +123,7 @@ export function renderCerrarPage(internalKey: string): string {
   <h1>Cerrar incidentes · HPSM local</h1>
   <p class="sub">
     Pega una lista de incidentes, elige el template y el modo. El scraper abre <b>una sola sesión</b>
-    de HPSM en esta PC y los procesa en fila (~30 s por IM). Empieza en modo <b>Verificar</b> (no toca
+    de HPSM en esta PC y los procesa en fila (~8 s por IM). Empieza en modo <b>Verificar</b> (no toca
     nada) para confirmar que todo está en orden; cambia a <b>Cerrar de verdad</b> solo cuando estés seguro.
     Si hay una descarga del scraper corriendo, el cierre espera su turno.
   </p>
@@ -187,9 +187,15 @@ export function renderCerrarPage(internalKey: string): string {
   var resultsEl = $("results"), resTitle = $("res-title"), clearEl = $("clear"), copyEl = $("copy");
 
   var MAX = 50;
+  // Estimación de tiempo. Medido 2026-11-26 (CERRAR_PERF=1, página /cerrar):
+  // ~8 s por IM en fila + ~8 s de login al arrancar la sesión. Es una guía, no
+  // una promesa: HPSM lento o IMs ya cerrados mueven el número.
+  var SEG_POR_IM = 8;
+  var SEG_LOGIN = 8;
   var confirmando = false;   // segunda confirmación para "cerrar"
   var polling = null;        // timer de progreso
   var limpio = false;        // ocultar resultados viejos tras "Limpiar"
+  var corriendo = false;     // hay una corrida en curso (manda setBusy sobre el botón)
   var ultimosResultados = [];
 
   // Poblar selector de templates.
@@ -212,10 +218,25 @@ export function renderCerrarPage(internalKey: string): string {
   function refrescarContador() {
     var ims = imsActuales();
     var extra = ims.length > MAX ? " (máximo " + MAX + ")" : "";
-    countEl.textContent = ims.length + " IMs detectados" + extra;
+    // Estimado previo: login + n×IM. Solo si hay IMs y no se pasó del máximo.
+    var est = "";
+    if (ims.length > 0 && ims.length <= MAX) {
+      est = " · ≈ " + fmtDuracion(SEG_LOGIN + ims.length * SEG_POR_IM) + " estimados";
+    }
+    countEl.textContent = ims.length + " IMs detectados" + extra + est;
     countEl.className = ims.length > MAX ? "" : "muted";
     countEl.style.color = ims.length > MAX ? "var(--critical)" : "";
     actualizarBoton();
+  }
+
+  // Hay IMs válidos (1..MAX) y un template elegido: condición para que el botón
+  // de acción esté habilitado. Se calcula en un solo lugar para que CUALQUIER
+  // cambio (pegar IMs, elegir template, cambiar modo) lo reevalúe — antes solo
+  // setBusy tocaba goEl.disabled, así que pegar IMs tras un sondeo inicial con la
+  // caja vacía dejaba el botón muerto hasta un F5.
+  function puedeIniciar() {
+    var n = imsActuales().length;
+    return n > 0 && n <= MAX && !!tplEl.value;
   }
 
   function actualizarBoton() {
@@ -225,6 +246,9 @@ export function renderCerrarPage(internalKey: string): string {
       : MODO_LABEL[modo];
     goIcon.textContent = modo === "cerrar" ? (confirmando ? "⚠" : "🔒") : "▶";
     goEl.className = modo === "cerrar" ? (confirmando ? "danger" : "") : "";
+    // Recalcular habilitación salvo que haya una corrida en curso (en ese caso
+    // manda setBusy, que deja el botón deshabilitado y con la etiqueta "Procesando…").
+    if (!corriendo) goEl.disabled = !puedeIniciar();
   }
 
   function fetchJson(path, opts) {
@@ -273,6 +297,15 @@ export function renderCerrarPage(internalKey: string): string {
       .replace(/"/g, "&quot;");
   }
 
+  // "1m 20s" / "45s" a partir de segundos. Redondea a múltiplos de 5 s para no
+  // dar falsa precisión en el estimado.
+  function fmtDuracion(seg) {
+    seg = Math.max(0, Math.round(seg / 5) * 5);
+    var m = Math.floor(seg / 60), s = seg % 60;
+    if (m > 0) return m + "m" + (s > 0 ? " " + s + "s" : "");
+    return s + "s";
+  }
+
   var EN_CURSO = { en_cola: 1, cerrando: 1 };
 
   function pintarProgreso(progreso, resultados) {
@@ -281,7 +314,10 @@ export function renderCerrarPage(internalKey: string): string {
     if (progreso.estado === "en_cola") {
       mostrar(statusEl, "En cola: esperando a que el scraper termine su corrida de HPSM…");
     } else if (progreso.estado === "cerrando") {
-      mostrar(statusEl, "Procesando… " + n + " de " + progreso.total);
+      // Estimado restante: IMs que faltan × SEG_POR_IM (el login ya pasó).
+      var faltan = Math.max(0, (progreso.total || 0) - n);
+      var resta = faltan > 0 ? " · resta ≈ " + fmtDuracion(faltan * SEG_POR_IM) : "";
+      mostrar(statusEl, "Procesando… " + n + " de " + progreso.total + resta);
     } else if (progreso.estado === "terminado" || progreso.estado === "error") {
       mostrar(statusEl, progreso.mensaje || "");
     }
@@ -300,7 +336,8 @@ export function renderCerrarPage(internalKey: string): string {
   }
 
   function setBusy(busy) {
-    goEl.disabled = busy || imsActuales().length === 0 || imsActuales().length > MAX || !tplEl.value;
+    corriendo = busy;
+    goEl.disabled = busy || !puedeIniciar();
     if (busy) { goLabel.textContent = "Procesando…"; goIcon.innerHTML = '<span class="spin">↻</span>'; }
     else { actualizarBoton(); }
   }
@@ -338,7 +375,7 @@ export function renderCerrarPage(internalKey: string): string {
 
   [imsEl].forEach(function (el) { el.addEventListener("input", function () { confirmando = false; mostrar(confirmEl, ""); refrescarContador(); }); });
   modoEl.addEventListener("change", function () { confirmando = false; mostrar(confirmEl, ""); actualizarBoton(); });
-  tplEl.addEventListener("change", function () { confirmando = false; mostrar(confirmEl, ""); });
+  tplEl.addEventListener("change", function () { confirmando = false; mostrar(confirmEl, ""); actualizarBoton(); });
 
   clearEl.addEventListener("click", function () {
     imsEl.value = ""; limpio = true; mostrar(errorEl, ""); mostrar(confirmEl, ""); mostrar(statusEl, "");

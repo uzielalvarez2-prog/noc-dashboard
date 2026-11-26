@@ -1,5 +1,11 @@
 import type { Frame, Page } from "playwright";
 import { logger } from "./logger.js";
+import { PERF_ON } from "./perf.js";
+
+/** Loguea "[perf] <etiqueta>: <ms>" solo si CERRAR_PERF=1. No lanza. */
+function perfSub(etiqueta: string, desde: number): void {
+  if (PERF_ON) logger.info(`[perf]   ${etiqueta}=${((Date.now() - desde) / 1000).toFixed(1)}s`);
+}
 
 /**
  * Consulta de un incidente individual en HPSM por su número (IM). Se usan los
@@ -73,14 +79,42 @@ const BUSCADOR_FORM_TIMEOUT_MS = 60_000;
  * detalle residual con el buscador (que era lo que arrastraba el IM viejo al
  * siguiente) sin ocultar nunca el QBE legítimo.
  */
+/**
+ * Timeout corto para los sondeos que barren TODOS los frames buscando
+ * instance/number. CLAVE de rendimiento: por defecto Playwright auto-espera el
+ * defaultTimeout (30 s) en un frame que NO tiene el input, así que cada frame
+ * ajeno costaba 30 s y el barrido de 3-6 frames consumía 90-180 s (medido con
+ * CERRAR_PERF=1, 2026-11-26). Con un timeout explícito corto, un frame sin el
+ * campo se descarta en ~0.4 s en vez de 30 s. El `.catch(() => …)` de cada
+ * llamada absorbe el TimeoutError, así que no cambia la lógica, solo la deja de
+ * esperar de más.
+ */
+const SONDEO_FRAME_TIMEOUT_MS = 400;
+
+/**
+ * Lee el valor de instance/number de un frame SIN pagar el peaje del
+ * defaultTimeout. Si el frame no tiene el campo (la gran mayoría), `count()`
+ * con timeout corto devuelve 0 rápido y ni siquiera se intenta inputValue().
+ * Devuelve "" cuando no hay campo o no tiene valor aún.
+ */
+async function leerInstanceNumber(f: Frame): Promise<string> {
+  const loc = f.locator('input[name="instance/number"]').first();
+  // count() es instantáneo (no auto-espera): descarta el frame sin el campo sin
+  // costo. Solo si existe se intenta inputValue() con timeout corto.
+  if ((await loc.count().catch(() => 0)) === 0) return "";
+  return (await loc.inputValue({ timeout: SONDEO_FRAME_TIMEOUT_MS }).catch(() => "")).trim();
+}
+
 async function frameBuscadorAbierto(page: Page): Promise<Frame | undefined> {
   for (const f of page.frames()) {
     const loc = f.locator('input[name="instance/number"]').first();
+    if ((await loc.count().catch(() => 0)) === 0) {
+      continue; // sin el campo: no es ni buscador ni detalle, siguiente frame (barato, instantáneo)
+    }
     if (
-      (await loc.count().catch(() => 0)) > 0 &&
-      (await loc.isVisible().catch(() => false)) &&
-      (await loc.isEditable().catch(() => false)) &&
-      ((await loc.inputValue().catch(() => "")).trim() === "") // VACÍO = buscador, no detalle
+      (await loc.isVisible({ timeout: SONDEO_FRAME_TIMEOUT_MS }).catch(() => false)) &&
+      (await loc.isEditable({ timeout: SONDEO_FRAME_TIMEOUT_MS }).catch(() => false)) &&
+      ((await loc.inputValue({ timeout: SONDEO_FRAME_TIMEOUT_MS }).catch(() => "")).trim() === "") // VACÍO = buscador, no detalle
     ) {
       return f;
     }
@@ -164,9 +198,9 @@ async function abrirBuscadorDesdeMenu(page: Page): Promise<Frame> {
   for (const f of page.frames()) {
     const loc = f.locator('input[name="instance/number"]').first();
     if ((await loc.count().catch(() => 0)) === 0) continue;
-    const vis = await loc.isVisible().catch(() => false);
-    const edit = await loc.isEditable().catch(() => false);
-    const val = (await loc.inputValue().catch(() => "?")).trim();
+    const vis = await loc.isVisible({ timeout: SONDEO_FRAME_TIMEOUT_MS }).catch(() => false);
+    const edit = await loc.isEditable({ timeout: SONDEO_FRAME_TIMEOUT_MS }).catch(() => false);
+    const val = (await loc.inputValue({ timeout: SONDEO_FRAME_TIMEOUT_MS }).catch(() => "?")).trim();
     diag.push(`url=${f.url().slice(0, 60)} vis=${vis} edit=${edit} val="${val}"`);
   }
   logger.warn(`QBE no reconocido. Campos instance/number vistos: ${diag.length ? diag.join(" || ") : "NINGUNO"}`);
@@ -211,8 +245,11 @@ export async function abrirIncidentePorBuscador(page: Page, im: string): Promise
 /** Un intento de apertura. `forzarMenu` ignora el buscador reusable y navega el menú. */
 async function abrirUnaVez(page: Page, im: string, forzarMenu: boolean): Promise<Frame> {
   // 1. Conseguir el QBE: reusar el abierto (salvo que se fuerce el menú).
+  const t0 = Date.now();
   let qbe = forzarMenu ? undefined : await frameBuscadorAbierto(page);
+  const reusado = !!qbe;
   if (!qbe) qbe = await abrirBuscadorDesdeMenu(page);
+  perfSub(reusado ? "qbe-reusado" : "qbe-por-menu", t0);
 
   // 2. Teclear el folio (limpiar primero, por si quedó texto del IM anterior).
   const campo = qbe.locator('input[name="instance/number"]').first();
@@ -220,6 +257,7 @@ async function abrirUnaVez(page: Page, im: string, forzarMenu: boolean): Promise
   await campo.fill(im, { force: true, timeout: 5_000 });
 
   // 3. Disparar Search (botón exacto, en el frame del QBE o en el chrome index.do).
+  const tSearch = Date.now();
   let clickeado = false;
   const frames = [qbe, ...page.frames().filter((f) => f !== qbe)];
   for (const f of frames) {
@@ -242,18 +280,28 @@ async function abrirUnaVez(page: Page, im: string, forzarMenu: boolean): Promise
   const imUpper = im.toUpperCase();
   const deadline = Date.now() + BUSCADOR_FORM_TIMEOUT_MS;
   let detail: Frame | undefined;
+  let vueltas = 0;
+  // Diagnóstico de perf: registra qué valores de instance/number se ven en cada
+  // vuelta, para entender por qué el detalle tarda en reconocerse (¿lista de
+  // resultados? ¿campo vacío que tarda en poblarse?). Solo con CERRAR_PERF=1.
+  let ultimoDiag = "";
   while (Date.now() < deadline) {
+    vueltas++;
+    const vistos: string[] = [];
     for (const f of page.frames()) {
-      const numero = (
-        await f.locator('input[name="instance/number"]').first().inputValue().catch(() => "")
-      ).trim();
+      const numero = await leerInstanceNumber(f);
+      if (PERF_ON && numero) vistos.push(numero);
       if (numero && numero.toUpperCase() === imUpper) {
         detail = f;
         break;
       }
     }
     if (detail) break;
+    if (PERF_ON) ultimoDiag = vistos.length ? vistos.join(",") : "(ningún instance/number con valor)";
     await page.waitForTimeout(1_000);
+  }
+  if (PERF_ON) {
+    perfSub(`search-a-detalle[vueltas=${vueltas}${detail ? "" : " AGOTADO último visto: " + ultimoDiag}]`, tSearch);
   }
   if (!detail) {
     throw new Error(`El buscador no abrió el detalle de ${im} (ningún frame con ese folio)`);
@@ -275,7 +323,13 @@ async function leerEstatus(
   let numero = "";
   const numDeadline = Date.now() + 12_000;
   while (Date.now() < numDeadline) {
-    numero = (await detail.locator('input[name="instance/number"]').first().inputValue().catch(() => "")).trim();
+    numero = (
+      await detail
+        .locator('input[name="instance/number"]')
+        .first()
+        .inputValue({ timeout: SONDEO_FRAME_TIMEOUT_MS })
+        .catch(() => "")
+    ).trim();
     if (numero) break;
     await page.waitForTimeout(1_000);
   }
@@ -377,15 +431,31 @@ async function leerActividades(detail: Frame): Promise<ImActividad[]> {
  * el 5º IM. Se cierran con su × (solo las closable; To Do Queue no lo es).
  */
 async function cerrarPestanas(page: Page): Promise<void> {
+  // Ver nota de rendimiento en la gemela de cerrar-incidente.ts: la versión
+  // anterior (6 iteraciones × 5 s) se comía ~60 s cuando una pestaña no cerraba
+  // al primer click. Ahora: tope global de 8 s, espera por pestaña de 1.5 s a
+  // que el conteo BAJE, y abandono tras 2 pasadas sin progreso.
   const main = page.mainFrame();
   const closes = main.locator("li.x-tab-strip-closable a.x-tab-strip-close");
-  for (let i = 0; i < 6; i++) {
+  const topeGlobal = Date.now() + 8_000;
+  let sinProgreso = 0;
+  while (Date.now() < topeGlobal) {
     const n = await closes.count().catch(() => 0);
     if (n === 0) return;
     await closes.last().evaluate((el) => (el as HTMLElement).click()).catch(() => {});
-    const deadline = Date.now() + 5_000;
-    while (Date.now() < deadline && (await closes.count().catch(() => 0)) >= n) {
-      await page.waitForTimeout(300);
+    const espera = Date.now() + 1_500;
+    let bajo = false;
+    while (Date.now() < espera) {
+      if ((await closes.count().catch(() => n)) < n) {
+        bajo = true;
+        break;
+      }
+      await page.waitForTimeout(200);
+    }
+    if (bajo) {
+      sinProgreso = 0;
+    } else if (++sinProgreso >= 2) {
+      break;
     }
   }
   const quedan = await closes.count().catch(() => 0);

@@ -1,6 +1,7 @@
 import type { Frame, Page } from "playwright";
 import { logger } from "./logger.js";
 import { IM_REGEX, abrirIncidentePorBuscador } from "./hpsm-incident.js";
+import { nuevaMedicion } from "./perf.js";
 
 /**
  * Cierre de un incidente en HPSM aplicando un TEMPLATE (reproduce el flujo
@@ -140,17 +141,45 @@ async function clickPopupYes(page: Page, timeoutMs = 8_000): Promise<boolean> {
   return false;
 }
 
-/** Cierra las pestañas de aplicación de HPSM (igual que hpsm-incident.ts). */
+/**
+ * Cierra las pestañas de aplicación de HPSM (igual que hpsm-incident.ts).
+ *
+ * RENDIMIENTO (medido 2026-11-26, CERRAR_PERF=1): la versión anterior esperaba
+ * 5 s por pestaña y, si una no cerraba al primer click, repetía 6 veces → se
+ * comía ~60 s (el 97% del tiempo de un cierre). Causa: tras un Cancel HPSM a
+ * veces deja una pestaña residual que ese click no quita, y el `while` agotaba
+ * los 5 s completos porque el conteo nunca bajaba.
+ *
+ * Ahora: tope GLOBAL de 8 s para toda la función; por pestaña se espera máx
+ * 1.5 s a que el conteo BAJE respecto al anterior (progreso real, no `>= n`);
+ * si no baja tras un reintento de click, se abandona esa pestaña en vez de
+ * repetir 6×5 s. Una pestaña que no cierra con dos clicks no va a cerrar
+ * esperando más.
+ */
 async function cerrarPestanas(page: Page): Promise<void> {
   const main = page.mainFrame();
   const closes = main.locator("li.x-tab-strip-closable a.x-tab-strip-close");
-  for (let i = 0; i < 6; i++) {
+  const topeGlobal = Date.now() + 8_000;
+  let sinProgreso = 0;
+  while (Date.now() < topeGlobal) {
     const n = await closes.count().catch(() => 0);
     if (n === 0) return;
     await closes.last().evaluate((el) => (el as HTMLElement).click()).catch(() => {});
-    const deadline = Date.now() + 5_000;
-    while (Date.now() < deadline && (await closes.count().catch(() => 0)) >= n) {
-      await page.waitForTimeout(300);
+    // Esperar máx 1.5 s a que BAJE el conteo (pestaña efectivamente cerrada).
+    const espera = Date.now() + 1_500;
+    let bajo = false;
+    while (Date.now() < espera) {
+      if ((await closes.count().catch(() => n)) < n) {
+        bajo = true;
+        break;
+      }
+      await page.waitForTimeout(200);
+    }
+    if (bajo) {
+      sinProgreso = 0;
+    } else if (++sinProgreso >= 2) {
+      // Dos pasadas sin que baje el conteo: pestaña atascada. No insistir 60 s.
+      break;
     }
   }
 }
@@ -160,12 +189,30 @@ async function cerrarPestanas(page: Page): Promise<void> {
  * instance/problem.status; en uno CERRADO ese input no existe (form de solo
  * lectura) y el valor vive en el input cuyo <label> es "Status:" — igual que
  * documenta hpsm-incident.ts. "" si no se pudo leer.
+ *
+ * SONDEA hasta 6 s porque el campo se puebla diferido. Antes se leía UNA vez;
+ * funcionaba solo porque abrir el IM tardaba 90 s y para entonces el status ya
+ * estaba cargado. Al bajar la apertura a <1 s (fix 2026-11-26) se destapó la
+ * carrera: se leía el status antes de que HPSM lo poblara y devolvía "" (visto
+ * como `status: ?`), lo que además impedía detectar IMs ya CLOSED. Sale apenas
+ * lo lee; el tope solo aplica cuando de verdad tarda.
  */
 async function leerStatus(page: Page): Promise<string> {
+  const deadline = Date.now() + 6_000;
+  while (Date.now() < deadline) {
+    const v = await leerStatusUnaVez(page);
+    if (v) return v;
+    await page.waitForTimeout(300);
+  }
+  return "";
+}
+
+/** Un intento de lectura del status (sin esperar). "" si aún no está poblado. */
+async function leerStatusUnaVez(page: Page): Promise<string> {
   for (const f of page.frames()) {
     const inp = f.locator('input[name="instance/problem.status"]').first();
     if (await inp.count().catch(() => 0)) {
-      const v = await inp.inputValue().catch(() => "");
+      const v = await inp.inputValue({ timeout: 400 }).catch(() => "");
       if (v) return v.trim();
     }
   }
@@ -198,6 +245,7 @@ export async function cerrarIncidente(
   modo: ModoCierre,
 ): Promise<CierreResult> {
   const base: CierreResult = { im, template, modo, ok: false, resultado: "error", mensaje: "" };
+  const perf = nuevaMedicion(`cerrar ${im}`);
   try {
     if (!IM_REGEX.test(im)) {
       return { ...base, mensaje: `IM con formato inválido: ${im}` };
@@ -208,6 +256,7 @@ export async function cerrarIncidente(
 
     // Paso 1-3: abrir el incidente por el buscador (los deep links ctx=docEngine
     // dejaron de funcionar el 2026-11-11: "Invalid query hash in URL").
+    perf.marca("abrir");
     let detail: Frame;
     try {
       detail = await abrirIncidentePorBuscador(page, im);
@@ -234,11 +283,13 @@ export async function cerrarIncidente(
     if (numero.toUpperCase() !== im) {
       return { ...base, resultado: "error", mensaje: `HPSM abrió ${numero} en lugar de ${im}` };
     }
+    perf.marca("leer-status");
     const statusPrevio = await leerStatus(page);
 
     // Si ya está cerrado, no hay toolbar de edición (form de solo lectura):
     // reportarlo y saltar en vez de fallar buscando "Apply Template".
     if (statusPrevio.toUpperCase() === "CLOSED") {
+      perf.marca("cerrar-pestanas-ya-closed");
       await cerrarPestanas(page);
       return {
         ...base,
@@ -250,12 +301,14 @@ export async function cerrarIncidente(
     }
 
     // Paso 4: Apply Template.
+    perf.marca("apply-template");
     const abierto = await clickBotonToolbar(page, "Apply Template");
     if (!abierto) {
       return { ...base, statusPrevio, resultado: "error", mensaje: "No se encontró el botón 'Apply Template'" };
     }
 
     // Paso 5: wizard "Select Incident Template" — tabla de links <a>.
+    perf.marca("wizard-esperar");
     const wizard = await waitForFrame(
       page,
       async (f) => (await f.locator('a:text-is("' + template.trim() + '")').count()) > 0
@@ -268,6 +321,7 @@ export async function cerrarIncidente(
     }
 
     // Buscar el link exacto del template pedido.
+    perf.marca("wizard-buscar-link");
     const link = wizard.locator(`a:text-is("${template.trim()}")`).first();
     const existe = (await link.count().catch(() => 0)) > 0 && (await link.isVisible().catch(() => false));
 
@@ -285,7 +339,9 @@ export async function cerrarIncidente(
 
     // ── MODO VERIFICAR: todo OK, pero NO aplicar. Cancel y salir. ──
     if (modo === "verificar") {
+      perf.marca("wizard-cancel");
       await clickBotonToolbar(page, "Cancel");
+      perf.marca("wizard-cerrar-pestanas");
       await cerrarPestanas(page);
       return {
         ...base,
@@ -297,6 +353,7 @@ export async function cerrarIncidente(
     }
 
     // Paso 5 real: aplicar el template (click en el link).
+    perf.marca("aplicar-template");
     await link.evaluate((el) => (el as HTMLElement).click());
     await page.waitForTimeout(3_000);
 
@@ -335,6 +392,7 @@ export async function cerrarIncidente(
     // ── MODO CERRAR: paso 6, Close (X) que guarda/cierra. IRREVERSIBLE. ──
     // Evidencia ANTES de cerrar: screenshot del incidente con el template ya
     // aplicado. Queda como prueba de qué se cerró, por si algo sale raro.
+    perf.marca("cerrar");
     await page.screenshot({ path: `cerrar-antes-${im}.png`, fullPage: true }).catch(() => {});
 
     // Hay DOS escenarios de cierre según el incidente/template (ambos dejan
@@ -396,8 +454,10 @@ export async function cerrarIncidente(
     // en estado intermedio) se reabre el IM por el buscador para confirmar de
     // forma fehaciente. En el caso normal esto ahorra una navegación de menú
     // completa por IM; en el dudoso, mantiene la verificación robusta.
+    perf.marca("verificar");
     let statusFinal = await leerStatus(page);
     if (statusFinal.toUpperCase() !== "CLOSED") {
+      logger.info(`cerrar-incidente ${im}: status en pantalla "${statusFinal || "?"}" ≠ CLOSED → reabriendo para verificar`);
       await abrirIncidentePorBuscador(page, im).catch(() => {});
       statusFinal = await leerStatus(page);
     }
@@ -424,5 +484,7 @@ export async function cerrarIncidente(
     if (modo !== "aplicar") {
       await cerrarPestanas(page).catch(() => {});
     }
+    perf.marca("cerrar-pestanas");
+    perf.fin();
   }
 }
